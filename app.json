@@ -1,18 +1,20 @@
 {
   "expo": {
-    "name": "labmatrix_mobile",
-    "slug": "labmatrix_mobile",
+    "name": "LabMatrix Market",
+    "slug": "labmatrix-market",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "labmatrixmobile",
+    "scheme": "labmatrixmarket",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "supportsTablet": true,
+      "bundleIdentifier": "com.labmatrix.market"
     },
     "android": {
+      "package": "com.labmatrix.market",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0284c7",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -20,7 +22,7 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "server",
+      "bundler": "metro",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -28,15 +30,22 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#0284c7",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 80
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow LabMatrix Market to access your photo library to select photos of laboratory instruments and spare parts.",
+          "cameraPermission": "Allow LabMatrix Market to take photos of laboratory instruments and spare parts to list them on the marketplace."
         }
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
     }
   }
 }
