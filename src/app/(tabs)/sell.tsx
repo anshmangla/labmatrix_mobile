@@ -43,7 +43,7 @@ export default function SellScreen() {
   const isDark = colorScheme === "dark";
   const { isAuthenticated } = useAuth();
 
-  const [itemType, setItemType] = useState<"EQUIPMENT" | "SPARE_PART">("EQUIPMENT");
+  const [itemType, setItemType] = useState<"MACHINE" | "NEW_INSTRUMENT" | "SPARE_PART">("MACHINE");
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [condition, setCondition] = useState("USED");
@@ -191,11 +191,19 @@ export default function SellScreen() {
       <Text style={[styles.sectionLabel, isDark && styles.sectionLabelDark]}>Item Classification</Text>
       <View style={styles.segmentContainer}>
         <TouchableOpacity
-          style={[styles.segmentButton, itemType === "EQUIPMENT" && styles.segmentButtonActive]}
-          onPress={() => setItemType("EQUIPMENT")}
+          style={[styles.segmentButton, itemType === "MACHINE" && styles.segmentButtonActive]}
+          onPress={() => setItemType("MACHINE")}
         >
-          <Text style={[styles.segmentText, itemType === "EQUIPMENT" && styles.segmentTextActive]}>
-            Laboratory Equipment
+          <Text style={[styles.segmentText, itemType === "MACHINE" && styles.segmentTextActive]}>
+            Pre-Owned
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.segmentButton, itemType === "NEW_INSTRUMENT" && styles.segmentButtonActive]}
+          onPress={() => setItemType("NEW_INSTRUMENT")}
+        >
+          <Text style={[styles.segmentText, itemType === "NEW_INSTRUMENT" && styles.segmentTextActive]}>
+            Brand New
           </Text>
         </TouchableOpacity>
         <TouchableOpacity

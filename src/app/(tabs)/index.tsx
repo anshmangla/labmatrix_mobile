@@ -10,16 +10,18 @@ import {
   ActivityIndicator,
   StyleSheet,
   useColorScheme,
+  ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { Search, SlidersHorizontal, MapPin, Tag } from "lucide-react-native";
+import { Search, MapPin, Tag, AlertCircle, RefreshCw } from "lucide-react-native";
 import { api } from "@/lib/api";
 import { Listing } from "@/types/api";
 
 const ITEM_TYPES = [
   { label: "All Items", value: "ALL" },
-  { label: "Equipment", value: "EQUIPMENT" },
+  { label: "Pre-Owned", value: "MACHINE" },
+  { label: "Brand New", value: "NEW_INSTRUMENT" },
   { label: "Spare Parts", value: "SPARE_PART" },
 ];
 
@@ -35,6 +37,8 @@ export default function MarketplaceScreen() {
     data,
     isLoading,
     isRefetching,
+    isError,
+    error,
     refetch,
   } = useQuery({
     queryKey: ["listings", selectedType, searchQuery],
@@ -48,6 +52,17 @@ export default function MarketplaceScreen() {
     },
   });
 
+  const getItemTypeBadge = (itemType: string) => {
+    switch (itemType) {
+      case "NEW_INSTRUMENT":
+        return { label: "Brand New", bg: "#dcfce7", text: "#15803d" };
+      case "SPARE_PART":
+        return { label: "Spare Part", bg: "#fef3c7", text: "#b45309" };
+      default:
+        return { label: "Pre-Owned", bg: "#e0f2fe", text: "#0369a1" };
+    }
+  };
+
   const renderListingCard = ({ item }: { item: Listing }) => {
     const hasPhoto = item.photos && item.photos.length > 0;
     const priceText =
@@ -58,6 +73,8 @@ export default function MarketplaceScreen() {
         : item.minPrice
         ? `₹${item.minPrice.toLocaleString()}`
         : "Contact for Price";
+
+    const badge = getItemTypeBadge(item.itemType);
 
     return (
       <TouchableOpacity
@@ -75,9 +92,9 @@ export default function MarketplaceScreen() {
 
         <View style={styles.cardBody}>
           <View style={styles.badgeRow}>
-            <View style={styles.typeBadge}>
-              <Text style={styles.typeBadgeText}>
-                {item.itemType === "SPARE_PART" ? "Spare Part" : "Equipment"}
+            <View style={[styles.typeBadge, { backgroundColor: badge.bg }]}>
+              <Text style={[styles.typeBadgeText, { color: badge.text }]}>
+                {badge.label}
               </Text>
             </View>
             <View style={styles.conditionBadge}>
@@ -127,32 +144,51 @@ export default function MarketplaceScreen() {
       </View>
 
       {/* Filter Tabs */}
-      <View style={styles.filterRow}>
-        {ITEM_TYPES.map((t) => {
-          const isSelected = selectedType === t.value;
-          return (
-            <TouchableOpacity
-              key={t.value}
-              style={[
-                styles.filterChip,
-                isDark && styles.filterChipDark,
-                isSelected && styles.filterChipSelected,
-              ]}
-              onPress={() => setSelectedType(t.value)}
-            >
-              <Text
+      <View style={styles.filterRowWrapper}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {ITEM_TYPES.map((t) => {
+            const isSelected = selectedType === t.value;
+            return (
+              <TouchableOpacity
+                key={t.value}
                 style={[
-                  styles.filterChipText,
-                  isDark && styles.filterChipTextDark,
-                  isSelected && styles.filterChipTextSelected,
+                  styles.filterChip,
+                  isDark && styles.filterChipDark,
+                  isSelected && styles.filterChipSelected,
                 ]}
+                onPress={() => setSelectedType(t.value)}
               >
-                {t.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    isDark && styles.filterChipTextDark,
+                    isSelected && styles.filterChipTextSelected,
+                  ]}
+                >
+                  {t.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
+
+      {/* Error State */}
+      {isError && (
+        <View style={styles.errorBanner}>
+          <AlertCircle size={20} color="#dc2626" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.errorTitle}>Connection Error</Text>
+            <Text style={styles.errorMessage}>
+              Could not reach {(api.defaults.baseURL || "backend")}. Ensure internet access or verify local server.
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()}>
+            <RefreshCw size={14} color="#0284c7" />
+            <Text style={styles.retryBtnText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Listing Feed */}
       {isLoading ? (
@@ -178,15 +214,17 @@ export default function MarketplaceScreen() {
             />
           }
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Tag size={40} color="#94a3b8" />
-              <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>
-                No listings found
-              </Text>
-              <Text style={styles.emptySubtitle}>
-                Try adjusting your search query or filters.
-              </Text>
-            </View>
+            !isError ? (
+              <View style={styles.emptyContainer}>
+                <Tag size={40} color="#94a3b8" />
+                <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>
+                  No listings found
+                </Text>
+                <Text style={styles.emptySubtitle}>
+                  Try adjusting your search query or filters.
+                </Text>
+              </View>
+            ) : undefined
           }
         />
       )}
@@ -234,6 +272,11 @@ const styles = StyleSheet.create({
   searchInputDark: {
     color: "#f8fafc",
   },
+  filterRowWrapper: {
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
   filterRow: {
     flexDirection: "row",
     paddingHorizontal: 16,
@@ -262,6 +305,39 @@ const styles = StyleSheet.create({
   },
   filterChipTextSelected: {
     color: "#ffffff",
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fee2e2",
+    padding: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 10,
+    gap: 10,
+  },
+  errorTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#991b1b",
+  },
+  errorMessage: {
+    fontSize: 12,
+    color: "#b91c1c",
+  },
+  retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  retryBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0284c7",
   },
   listContent: {
     padding: 16,
@@ -301,13 +377,11 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   typeBadge: {
-    backgroundColor: "#e0f2fe",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
   },
   typeBadgeText: {
-    color: "#0369a1",
     fontSize: 11,
     fontWeight: "700",
   },

@@ -123,7 +123,11 @@ export default function ListingDetailScreen() {
           <View style={styles.badgeRow}>
             <View style={styles.typeBadge}>
               <Text style={styles.typeBadgeText}>
-                {data.itemType === "SPARE_PART" ? "Spare Part" : "Equipment"}
+                {data.itemType === "SPARE_PART"
+                  ? "Spare Part"
+                  : data.itemType === "NEW_INSTRUMENT"
+                  ? "Brand New"
+                  : "Pre-Owned"}
               </Text>
             </View>
             <View style={styles.conditionBadge}>
