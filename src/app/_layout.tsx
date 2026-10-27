@@ -41,6 +41,14 @@ export default function RootLayout() {
               }}
             />
             <Stack.Screen
+              name="notifications"
+              options={{
+                headerShown: true,
+                title: "Notifications",
+                headerBackTitle: "Back",
+              }}
+            />
+            <Stack.Screen
               name="(auth)/login"
               options={{
                 presentation: "modal",
@@ -54,6 +62,14 @@ export default function RootLayout() {
                 presentation: "modal",
                 headerShown: true,
                 title: "Create Account",
+              }}
+            />
+            <Stack.Screen
+              name="(auth)/forgot-password"
+              options={{
+                presentation: "modal",
+                headerShown: true,
+                title: "Reset Password",
               }}
             />
           </Stack>

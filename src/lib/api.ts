@@ -2,18 +2,13 @@ import axios from "axios";
 import { Platform } from "react-native";
 import { getAuthToken, removeAuthToken, removeCachedUser } from "./storage";
 
-// During local development on a physical phone/emulator:
-// iOS Simulator uses localhost.
-// Android Emulator uses 10.0.2.2.
-// Physical device uses your computer's LAN IP (or production domain when deployed).
+// Live production backend on Vercel: https://surplus.labmatrixindia.com
+// Can be overridden via EXPO_PUBLIC_API_URL for local development (e.g., http://192.168.1.X:3000)
 const getBaseUrl = (): string => {
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
   }
-  if (Platform.OS === "android") {
-    return "http://10.0.2.2:3000";
-  }
-  return "http://localhost:3000";
+  return "https://surplus.labmatrixindia.com";
 };
 
 export const api = axios.create({

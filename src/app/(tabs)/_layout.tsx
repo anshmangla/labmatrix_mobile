@@ -1,8 +1,9 @@
-import { Tabs } from "expo-router";
-import { useColorScheme } from "react-native";
-import { Store, ClipboardList, PlusCircle, MessageSquare, User } from "lucide-react-native";
+import { Tabs, useRouter } from "expo-router";
+import { useColorScheme, TouchableOpacity, View } from "react-native";
+import { Store, ClipboardList, PlusCircle, MessageSquare, User, Bell } from "lucide-react-native";
 
 export default function TabLayout() {
+  const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
 
@@ -38,6 +39,14 @@ export default function TabLayout() {
           title: "Marketplace",
           headerTitle: "LabMatrix Market",
           tabBarIcon: ({ color, size }) => <Store color={color} size={size || 22} />,
+          headerRight: () => (
+            <TouchableOpacity
+              style={{ marginRight: 16, padding: 4 }}
+              onPress={() => router.push("/notifications" as any)}
+            >
+              <Bell size={22} color={isDark ? "#f8fafc" : "#0f172a"} />
+            </TouchableOpacity>
+          ),
         }}
       />
       <Tabs.Screen
