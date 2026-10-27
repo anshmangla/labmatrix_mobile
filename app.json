@@ -42,7 +42,8 @@
           "photosPermission": "Allow LabMatrix Market to access your photo library to select photos of laboratory instruments and spare parts.",
           "cameraPermission": "Allow LabMatrix Market to take photos of laboratory instruments and spare parts to list them on the marketplace."
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

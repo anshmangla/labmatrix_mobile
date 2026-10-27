@@ -1,16 +1,18 @@
-import { Tabs, useRouter } from "expo-router";
-import { useColorScheme, TouchableOpacity, View } from "react-native";
-import { Store, ClipboardList, PlusCircle, MessageSquare, User, Bell } from "lucide-react-native";
+import React from "react";
+import { Tabs } from "expo-router";
+import { useColorScheme, View, StyleSheet, Platform } from "react-native";
+import { Store, ClipboardList, Plus, MessageSquare, User } from "lucide-react-native";
+import { LabMatrixTokens } from "@/constants/theme";
 
 export default function TabLayout() {
-  const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
 
-  const activeColor = "#0284c7"; // LabMatrix Primary Blue
-  const inactiveColor = isDark ? "#94a3b8" : "#64748b";
-  const bgColor = isDark ? "#0f172a" : "#ffffff";
-  const borderColor = isDark ? "#1e293b" : "#e2e8f0";
+  const { colors } = LabMatrixTokens;
+  const activeColor = colors.primaryContainer; // #033a7d
+  const inactiveColor = isDark ? "#94a3b8" : colors.textMuted; // #64748b
+  const bgColor = isDark ? colors.brandBlue950 : colors.surface; // #ffffff
+  const borderColor = isDark ? "#1e293b" : colors.border; // #e2e8f0
 
   return (
     <Tabs
@@ -20,33 +22,32 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: bgColor,
           borderTopColor: borderColor,
-          height: 60,
-          paddingBottom: 8,
+          height: Platform.OS === "ios" ? 84 : 64,
+          paddingBottom: Platform.OS === "ios" ? 22 : 8,
           paddingTop: 6,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: "600",
         },
         headerStyle: {
           backgroundColor: bgColor,
+          borderBottomColor: borderColor,
+          borderBottomWidth: StyleSheet.hairlineWidth,
         },
         headerTitleStyle: {
-          fontWeight: "600",
-          color: isDark ? "#f8fafc" : "#0f172a",
+          fontWeight: "700",
+          fontSize: 18,
+          color: isDark ? "#f8fafc" : colors.primaryContainer,
         },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
+          headerShown: false,
           title: "Marketplace",
-          headerTitle: "LabMatrix Market",
           tabBarIcon: ({ color, size }) => <Store color={color} size={size || 22} />,
-          headerRight: () => (
-            <TouchableOpacity
-              style={{ marginRight: 16, padding: 4 }}
-              onPress={() => router.push("/notifications" as any)}
-            >
-              <Bell size={22} color={isDark ? "#f8fafc" : "#0f172a"} />
-            </TouchableOpacity>
-          ),
         }}
       />
       <Tabs.Screen
@@ -62,7 +63,16 @@ export default function TabLayout() {
         options={{
           title: "Sell",
           headerTitle: "List Instrument / Part",
-          tabBarIcon: ({ color, size }) => <PlusCircle color={color} size={size || 24} />,
+          tabBarLabelStyle: {
+            fontSize: 11,
+            fontWeight: "700",
+            color: isDark ? "#fbc634" : "#775a00",
+          },
+          tabBarIcon: () => (
+            <View style={styles.sellButtonContainer}>
+              <Plus size={22} color="#0f172a" strokeWidth={2.8} />
+            </View>
+          ),
         }}
       />
       <Tabs.Screen
@@ -84,3 +94,20 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  sellButtonContainer: {
+    width: 44,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: LabMatrixTokens.colors.goldAccent,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 2,
+    shadowColor: LabMatrixTokens.colors.goldAccent,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+});
