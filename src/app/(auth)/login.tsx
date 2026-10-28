@@ -11,15 +11,20 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Image,
+  SafeAreaView,
+  StatusBar,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Lock, Mail, Store } from "lucide-react-native";
+import { Lock, Mail, ArrowRight, ShieldCheck, ArrowLeft } from "lucide-react-native";
 import { useAuth } from "@/context/auth-context";
+import { LabMatrixTokens } from "@/constants/theme";
 
 export default function LoginScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
+  const { colors } = LabMatrixTokens;
   const { login } = useAuth();
 
   const [email, setEmail] = useState("");
@@ -28,7 +33,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
-      Alert.alert("Validation", "Please enter both email and password.");
+      Alert.alert("Validation", "Please enter both email address and password.");
       return;
     }
 
@@ -43,195 +48,326 @@ export default function LoginScreen() {
         router.replace("/(tabs)");
       }
     } else {
-      Alert.alert("Login Failed", res.error || "Invalid credentials.");
+      Alert.alert("Sign In Failed", res.error || "Invalid credentials. Please verify your email and password.");
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, isDark && styles.containerDark]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.brandHeader}>
-          <View style={styles.logoBadge}>
-            <Store size={36} color="#0284c7" />
+    <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+
+      {/* Top Header */}
+      <View style={[styles.topBar, isDark && styles.topBarDark]}>
+        <TouchableOpacity
+          style={styles.backButton}
+          activeOpacity={0.7}
+          onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace("/(tabs)");
+          }}
+        >
+          <ArrowLeft size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+        </TouchableOpacity>
+
+        <Image
+          source={require("@/assets/images/logo.png")}
+          style={styles.logoImg}
+          resizeMode="contain"
+        />
+
+        <View style={{ width: 36 }} />
+      </View>
+
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Welcome Card */}
+          <View style={styles.headerBlock}>
+            <Text style={[styles.pageTitle, isDark && styles.pageTitleDark]}>
+              Welcome Back
+            </Text>
+            <Text style={styles.pageSubtitle}>
+              Sign in to manage analytical instruments, deal inquiries, and sourcing requests.
+            </Text>
+
+            <View style={styles.assurancePill}>
+              <ShieldCheck size={13} color="#033a7d" />
+              <Text style={styles.assurancePillText}>Verified Clinical Portal • Direct Lab Escrow</Text>
+            </View>
           </View>
-          <Text style={[styles.brandTitle, isDark && styles.brandTitleDark]}>LabMatrix Market</Text>
-          <Text style={styles.brandSubtitle}>Sign in to your laboratory marketplace account</Text>
-        </View>
 
-        <View style={styles.form}>
-          <Text style={[styles.label, isDark && styles.labelDark]}>Email Address</Text>
-          <View style={[styles.inputWrapper, isDark && styles.inputWrapperDark]}>
-            <Mail size={18} color="#64748b" />
-            <TextInput
-              style={[styles.input, isDark && styles.inputDark]}
-              placeholder="researcher@lab.org"
-              placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={email}
-              onChangeText={setEmail}
-            />
-          </View>
+          {/* Form Card */}
+          <View style={[styles.formCard, isDark && styles.formCardDark]}>
+            {/* Email Field */}
+            <View style={styles.inputGroup}>
+              <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                Facility / Researcher Email *
+              </Text>
+              <View style={[styles.inputBox, isDark && styles.inputBoxDark]}>
+                <Mail size={18} color="#64748b" style={{ marginLeft: 12 }} />
+                <TextInput
+                  style={[styles.inputField, isDark && styles.inputFieldDark]}
+                  placeholder="scientist@laboratory.org"
+                  placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  value={email}
+                  onChangeText={setEmail}
+                />
+              </View>
+            </View>
 
-          <Text style={[styles.label, isDark && styles.labelDark]}>Password</Text>
-          <View style={[styles.inputWrapper, isDark && styles.inputWrapperDark]}>
-            <Lock size={18} color="#64748b" />
-            <TextInput
-              style={[styles.input, isDark && styles.inputDark]}
-              placeholder="••••••••"
-              placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-            />
-          </View>
+            {/* Password Field */}
+            <View style={styles.inputGroup}>
+              <View style={styles.passwordLabelRow}>
+                <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                  Account Password *
+                </Text>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => router.push("/(auth)/forgot-password" as any)}
+                >
+                  <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={[styles.inputBox, isDark && styles.inputBoxDark]}>
+                <Lock size={18} color="#64748b" style={{ marginLeft: 12 }} />
+                <TextInput
+                  style={[styles.inputField, isDark && styles.inputFieldDark]}
+                  placeholder="••••••••••••"
+                  placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
+                  secureTextEntry
+                  value={password}
+                  onChangeText={setPassword}
+                />
+              </View>
+            </View>
 
-          <TouchableOpacity
-            style={styles.forgotBtn}
-            onPress={() => router.push("/(auth)/forgot-password" as any)}
-          >
-            <Text style={styles.forgotText}>Forgot password?</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.submitBtn, isLoading && styles.submitBtnDisabled]}
-            onPress={handleLogin}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.submitBtnText}>Sign In</Text>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.footerRow}>
-            <Text style={styles.footerText}>Don't have an account?</Text>
-            <TouchableOpacity onPress={() => router.replace("/(auth)/register")}>
-              <Text style={styles.linkText}>Create Account</Text>
+            {/* Submit Action */}
+            <TouchableOpacity
+              style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
+              activeOpacity={0.85}
+              disabled={isLoading}
+              onPress={handleLogin}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <>
+                  <Text style={styles.submitButtonText}>Sign In to LabMatrix</Text>
+                  <ArrowRight size={16} color="#ffffff" />
+                </>
+              )}
             </TouchableOpacity>
           </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+          {/* Registration Redirect */}
+          <View style={styles.registerBlock}>
+            <Text style={styles.registerPrompt}>Don't have a verified facility account?</Text>
+            <TouchableOpacity
+              style={styles.registerButton}
+              activeOpacity={0.8}
+              onPress={() => router.push("/(auth)/register" as any)}
+            >
+              <Text style={styles.registerButtonText}>Register Laboratory Account</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Help Contact */}
+          <View style={styles.supportFootnote}>
+            <Text style={styles.supportFootnoteText}>
+              Need immediate help? Call Support Desk at{" "}
+              <Text style={{ fontWeight: "700", color: "#033a7d" }}>+91 73030 40804</Text>
+            </Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
+    backgroundColor: "#f8fafc",
+  },
+  safeAreaDark: {
+    backgroundColor: "#010f22",
+  },
+  topBar: {
+    height: 58,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
     backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
   },
-  containerDark: {
-    backgroundColor: "#090d16",
+  topBarDark: {
+    backgroundColor: "#011936",
+    borderBottomColor: "#1e293b",
   },
-  content: {
-    padding: 24,
-    justifyContent: "center",
-    flexGrow: 1,
-  },
-  brandHeader: {
-    alignItems: "center",
-    marginBottom: 32,
-  },
-  logoBadge: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#e0f2fe",
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#eff5fb",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
   },
-  brandTitle: {
-    fontSize: 22,
+  logoImg: {
+    width: 140,
+    height: 32,
+  },
+  scrollContent: {
+    padding: 20,
+    gap: 20,
+    paddingBottom: 40,
+  },
+  headerBlock: {
+    gap: 6,
+    paddingTop: 8,
+  },
+  pageTitle: {
+    fontSize: 24,
     fontWeight: "800",
     color: "#0f172a",
+    letterSpacing: -0.4,
   },
-  brandTitleDark: {
+  pageTitleDark: {
     color: "#f8fafc",
   },
-  brandSubtitle: {
+  pageSubtitle: {
     fontSize: 14,
     color: "#64748b",
-    marginTop: 4,
-    textAlign: "center",
+    lineHeight: 20,
   },
-  form: {
-    gap: 12,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#334155",
+  assurancePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#eff5fb",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    alignSelf: "flex-start",
     marginTop: 6,
   },
-  labelDark: {
-    color: "#cbd5e1",
+  assurancePillText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#033a7d",
   },
-  inputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f8fafc",
+  formCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    padding: 18,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    height: 48,
-    gap: 10,
+    borderColor: "#e2e8f0",
+    gap: 16,
   },
-  inputWrapperDark: {
-    backgroundColor: "#1e293b",
-    borderColor: "#334155",
+  formCardDark: {
+    backgroundColor: "#03142e",
+    borderColor: "#1e293b",
   },
-  input: {
-    flex: 1,
-    fontSize: 15,
+  inputGroup: {
+    gap: 6,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: "700",
     color: "#0f172a",
   },
-  inputDark: {
+  fieldLabelDark: {
     color: "#f8fafc",
   },
-  forgotBtn: {
-    alignSelf: "flex-end",
-    paddingVertical: 2,
+  passwordLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  forgotText: {
-    fontSize: 13,
-    color: "#0284c7",
+  forgotPasswordText: {
+    fontSize: 12,
+    color: "#033a7d",
     fontWeight: "600",
   },
-  submitBtn: {
-    backgroundColor: "#0284c7",
+  inputBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    backgroundColor: "#ffffff",
+  },
+  inputBoxDark: {
+    backgroundColor: "#020d1c",
+    borderColor: "#334155",
+  },
+  inputField: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: "#0f172a",
+  },
+  inputFieldDark: {
+    color: "#f8fafc",
+  },
+  submitButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#033a7d",
     paddingVertical: 14,
     borderRadius: 10,
-    alignItems: "center",
-    marginTop: 14,
+    marginTop: 4,
   },
-  submitBtnDisabled: {
+  submitButtonDisabled: {
     opacity: 0.6,
   },
-  submitBtnText: {
-    color: "#ffffff",
+  submitButtonText: {
+    fontSize: 15,
     fontWeight: "700",
-    fontSize: 16,
+    color: "#ffffff",
   },
-  footerRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 6,
-    marginTop: 16,
+  registerBlock: {
+    alignItems: "center",
+    gap: 8,
+    paddingTop: 6,
   },
-  footerText: {
-    fontSize: 14,
+  registerPrompt: {
+    fontSize: 13,
     color: "#64748b",
   },
-  linkText: {
-    fontSize: 14,
+  registerButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: "#eff5fb",
+    borderWidth: 1,
+    borderColor: "#dbeaf7",
+  },
+  registerButtonText: {
+    fontSize: 13,
     fontWeight: "700",
-    color: "#0284c7",
+    color: "#033a7d",
+  },
+  supportFootnote: {
+    alignItems: "center",
+    paddingTop: 10,
+  },
+  supportFootnoteText: {
+    fontSize: 12,
+    color: "#64748b",
+    textAlign: "center",
   },
 });

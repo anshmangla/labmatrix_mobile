@@ -11,15 +11,20 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Image,
+  SafeAreaView,
+  StatusBar,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Mail, Lock, KeyRound, ArrowLeft } from "lucide-react-native";
+import { Mail, Lock, KeyRound, ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react-native";
 import { api } from "@/lib/api";
+import { LabMatrixTokens } from "@/constants/theme";
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
+  const { colors } = LabMatrixTokens;
 
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
@@ -29,7 +34,7 @@ export default function ForgotPasswordScreen() {
 
   const handleRequestOtp = async () => {
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      Alert.alert("Validation", "Please enter a valid email address.");
+      Alert.alert("Validation", "Please enter a valid registered email address.");
       return;
     }
 
@@ -81,186 +86,294 @@ export default function ForgotPasswordScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, isDark && styles.containerDark]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView contentContainerStyle={styles.content}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+    <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+
+      {/* Top Header */}
+      <View style={[styles.topBar, isDark && styles.topBarDark]}>
+        <TouchableOpacity
+          style={styles.backButton}
+          activeOpacity={0.7}
+          onPress={() => router.back()}
+        >
           <ArrowLeft size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-          <Text style={[styles.backBtnText, isDark && styles.backBtnTextDark]}>Back to Sign In</Text>
         </TouchableOpacity>
 
-        <Text style={[styles.title, isDark && styles.titleDark]}>Reset Password</Text>
-        <Text style={styles.subtitle}>
-          Enter your registered email address to receive a 6-digit password reset code.
-        </Text>
+        <Image
+          source={require("@/assets/images/logo.png")}
+          style={styles.logoImg}
+          resizeMode="contain"
+        />
 
-        <View style={styles.form}>
-          <Text style={[styles.label, isDark && styles.labelDark]}>Email Address</Text>
-          <View style={[styles.inputWrapper, isDark && styles.inputWrapperDark]}>
-            <Mail size={18} color="#64748b" />
-            <TextInput
-              style={[styles.input, isDark && styles.inputDark]}
-              placeholder="researcher@lab.org"
-              placeholderTextColor="#94a3b8"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={email}
-              onChangeText={setEmail}
-              editable={!otpSent}
-            />
+        <View style={{ width: 36 }} />
+      </View>
+
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.headerBlock}>
+            <Text style={[styles.pageTitle, isDark && styles.pageTitleDark]}>
+              Reset Account Password
+            </Text>
+            <Text style={styles.pageSubtitle}>
+              Enter your registered facility email address to receive a secure 6-digit reset code.
+            </Text>
           </View>
 
-          {!otpSent ? (
-            <TouchableOpacity
-              style={[styles.submitBtn, isLoading && styles.submitBtnDisabled]}
-              onPress={handleRequestOtp}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#ffffff" />
-              ) : (
-                <Text style={styles.submitBtnText}>Send Reset Code</Text>
-              )}
-            </TouchableOpacity>
-          ) : (
-            <>
-              <Text style={[styles.label, isDark && styles.labelDark]}>6-Digit Verification Code</Text>
-              <View style={[styles.inputWrapper, isDark && styles.inputWrapperDark]}>
-                <KeyRound size={18} color="#0284c7" />
+          <View style={[styles.formCard, isDark && styles.formCardDark]}>
+            <View style={styles.inputGroup}>
+              <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                Registered Email Address *
+              </Text>
+              <View style={[styles.inputBox, isDark && styles.inputBoxDark]}>
+                <Mail size={18} color="#64748b" style={{ marginLeft: 12 }} />
                 <TextInput
-                  style={[styles.input, isDark && styles.inputDark]}
-                  placeholder="123456"
-                  placeholderTextColor="#94a3b8"
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  value={otp}
-                  onChangeText={setOtp}
+                  style={[styles.inputField, isDark && styles.inputFieldDark]}
+                  placeholder="scientist@laboratory.org"
+                  placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={email}
+                  onChangeText={setEmail}
+                  editable={!otpSent}
                 />
               </View>
+            </View>
 
-              <Text style={[styles.label, isDark && styles.labelDark]}>New Password (Min. 6 chars)</Text>
-              <View style={[styles.inputWrapper, isDark && styles.inputWrapperDark]}>
-                <Lock size={18} color="#64748b" />
-                <TextInput
-                  style={[styles.input, isDark && styles.inputDark]}
-                  placeholder="••••••••"
-                  placeholderTextColor="#94a3b8"
-                  secureTextEntry
-                  value={newPassword}
-                  onChangeText={setNewPassword}
-                />
-              </View>
-
+            {!otpSent ? (
               <TouchableOpacity
-                style={[styles.submitBtn, isLoading && styles.submitBtnDisabled]}
-                onPress={handleResetPassword}
+                style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
+                onPress={handleRequestOtp}
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  <ActivityIndicator color="#ffffff" />
+                  <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
-                  <Text style={styles.submitBtnText}>Update Password & Sign In</Text>
+                  <>
+                    <Text style={styles.submitButtonText}>Send Password Reset Code</Text>
+                    <ArrowRight size={16} color="#ffffff" />
+                  </>
                 )}
               </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            ) : (
+              <View style={{ gap: 14 }}>
+                <View style={styles.codeSentAlert}>
+                  <CheckCircle2 size={14} color="#15803d" />
+                  <Text style={styles.codeSentAlertText}>
+                    Reset code sent to {email}. Check your inbox.
+                  </Text>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                    6-Digit Verification Code *
+                  </Text>
+                  <View style={[styles.inputBox, isDark && styles.inputBoxDark]}>
+                    <KeyRound size={18} color="#033a7d" style={{ marginLeft: 12 }} />
+                    <TextInput
+                      style={[styles.inputField, isDark && styles.inputFieldDark]}
+                      placeholder="123456"
+                      placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      value={otp}
+                      onChangeText={setOtp}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                    New Password (min. 6 characters) *
+                  </Text>
+                  <View style={[styles.inputBox, isDark && styles.inputBoxDark]}>
+                    <Lock size={18} color="#64748b" style={{ marginLeft: 12 }} />
+                    <TextInput
+                      style={[styles.inputField, isDark && styles.inputFieldDark]}
+                      placeholder="••••••••••••"
+                      placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
+                      secureTextEntry
+                      value={newPassword}
+                      onChangeText={setNewPassword}
+                    />
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
+                  onPress={handleResetPassword}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <>
+                      <Text style={styles.submitButtonText}>Update Password & Sign In</Text>
+                      <ArrowRight size={16} color="#ffffff" />
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleRequestOtp}
+                  disabled={isLoading}
+                  style={{ alignSelf: "center", marginTop: 4 }}
+                >
+                  <Text style={styles.resendCodeText}>Resend code</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
+    backgroundColor: "#f8fafc",
+  },
+  safeAreaDark: {
+    backgroundColor: "#010f22",
+  },
+  topBar: {
+    height: 58,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  topBarDark: {
+    backgroundColor: "#011936",
+    borderBottomColor: "#1e293b",
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#eff5fb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  logoImg: {
+    width: 140,
+    height: 32,
+  },
+  scrollContent: {
+    padding: 20,
+    gap: 18,
+    paddingBottom: 40,
+  },
+  headerBlock: {
+    gap: 6,
+    paddingTop: 8,
+  },
+  pageTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#0f172a",
+    letterSpacing: -0.3,
+  },
+  pageTitleDark: {
+    color: "#f8fafc",
+  },
+  pageSubtitle: {
+    fontSize: 13,
+    color: "#64748b",
+    lineHeight: 18,
+  },
+  formCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    gap: 16,
+  },
+  formCardDark: {
+    backgroundColor: "#03142e",
+    borderColor: "#1e293b",
+  },
+  inputGroup: {
+    gap: 6,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  fieldLabelDark: {
+    color: "#f8fafc",
+  },
+  inputBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
     backgroundColor: "#ffffff",
   },
-  containerDark: {
-    backgroundColor: "#090d16",
+  inputBoxDark: {
+    backgroundColor: "#020d1c",
+    borderColor: "#334155",
   },
-  content: {
-    padding: 24,
-    flexGrow: 1,
+  inputField: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: "#0f172a",
   },
-  backBtn: {
+  inputFieldDark: {
+    color: "#f8fafc",
+  },
+  submitButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#033a7d",
+    paddingVertical: 14,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
+  submitButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  codeSentAlert: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginBottom: 24,
+    backgroundColor: "#f0fdf4",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
   },
-  backBtnText: {
-    fontSize: 14,
+  codeSentAlertText: {
+    fontSize: 11,
+    color: "#15803d",
     fontWeight: "600",
-    color: "#0f172a",
-  },
-  backBtnTextDark: {
-    color: "#f8fafc",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#0f172a",
-    marginBottom: 6,
-  },
-  titleDark: {
-    color: "#f8fafc",
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#64748b",
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  form: {
-    gap: 12,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#334155",
-    marginTop: 6,
-  },
-  labelDark: {
-    color: "#cbd5e1",
-  },
-  inputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f8fafc",
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    height: 48,
-    gap: 10,
-  },
-  inputWrapperDark: {
-    backgroundColor: "#1e293b",
-    borderColor: "#334155",
-  },
-  input: {
     flex: 1,
-    fontSize: 15,
-    color: "#0f172a",
   },
-  inputDark: {
-    color: "#f8fafc",
-  },
-  submitBtn: {
-    backgroundColor: "#0284c7",
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: "center",
-    marginTop: 14,
-  },
-  submitBtnDisabled: {
-    opacity: 0.6,
-  },
-  submitBtnText: {
-    color: "#ffffff",
-    fontWeight: "700",
-    fontSize: 16,
+  resendCodeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#033a7d",
   },
 });
