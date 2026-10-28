@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import Svg, { Path } from "react-native-svg";
-import { Lock, Mail, ArrowRight, ShieldCheck, ArrowLeft, Eye, EyeOff } from "lucide-react-native";
+import { Lock, Mail, ArrowRight, ShieldCheck, ArrowLeft, Eye, EyeOff, AlertCircle, X } from "lucide-react-native";
 import { useAuth } from "@/context/auth-context";
 import { LabMatrixTokens } from "@/constants/theme";
 
@@ -56,13 +56,15 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
-      Alert.alert("Validation", "Please enter both email address and password.");
+      setAuthError("Please enter both your email address and password.");
       return;
     }
 
+    setAuthError(null);
     setIsLoading(true);
     const res = await login(email.trim(), password);
     setIsLoading(false);
@@ -74,11 +76,14 @@ export default function LoginScreen() {
         router.replace("/(tabs)");
       }
     } else {
-      Alert.alert("Sign In Failed", res.error || "Invalid credentials. Please verify your email and password.");
+      setAuthError(
+        res.error || "Incorrect email or password. Please verify your credentials and try again."
+      );
     }
   };
 
   const handleGoogleSignIn = async () => {
+    setAuthError(null);
     setIsGoogleLoading(true);
     const res = await loginWithGoogle();
     setIsGoogleLoading(false);
@@ -91,7 +96,7 @@ export default function LoginScreen() {
       }
     } else {
       if (res.error && !res.error.includes("cancelled")) {
-        Alert.alert("Google Sign In", res.error);
+        setAuthError(res.error);
       }
     }
   };
@@ -189,7 +194,10 @@ export default function LoginScreen() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    if (authError) setAuthError(null);
+                  }}
                 />
               </View>
             </View>
@@ -207,7 +215,13 @@ export default function LoginScreen() {
                   <Text style={styles.forgotPasswordText}>Forgot password?</Text>
                 </TouchableOpacity>
               </View>
-              <View style={[styles.inputBox, isDark && styles.inputBoxDark]}>
+              <View
+                style={[
+                  styles.inputBox,
+                  isDark && styles.inputBoxDark,
+                  authError && styles.inputBoxError,
+                ]}
+              >
                 <Lock size={18} color="#64748b" style={{ marginLeft: 12 }} />
                 <TextInput
                   style={[styles.inputField, isDark && styles.inputFieldDark]}
@@ -217,7 +231,10 @@ export default function LoginScreen() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    if (authError) setAuthError(null);
+                  }}
                 />
                 <TouchableOpacity
                   activeOpacity={0.7}
@@ -232,6 +249,39 @@ export default function LoginScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* Subtle Inline Error Warning Banner */}
+            {authError && (
+              <View
+                style={[
+                  styles.inlineWarningBanner,
+                  isDark && styles.inlineWarningBannerDark,
+                ]}
+              >
+                <AlertCircle
+                  size={18}
+                  color="#ba1a1a"
+                  style={{ marginTop: 2, flexShrink: 0 }}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.inlineWarningTitle,
+                      isDark && styles.inlineWarningTitleDark,
+                    ]}
+                  >
+                    Incorrect Password or Email
+                  </Text>
+                  <Text style={styles.inlineWarningText}>{authError}</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setAuthError(null)}
+                  style={styles.dismissErrorBtn}
+                >
+                  <X size={14} color="#ba1a1a" />
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Submit Action */}
             <TouchableOpacity
@@ -440,6 +490,42 @@ const styles = StyleSheet.create({
   inputBoxDark: {
     backgroundColor: "#020d1c",
     borderColor: "#334155",
+  },
+  inputBoxError: {
+    borderColor: "#f87171",
+    backgroundColor: "#fffbfa",
+  },
+  inlineWarningBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#fef2f2",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    borderRadius: 10,
+    padding: 12,
+    gap: 10,
+    marginTop: 2,
+  },
+  inlineWarningBannerDark: {
+    backgroundColor: "#2a1215",
+    borderColor: "#5c1d24",
+  },
+  inlineWarningTitle: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: "#991b1b",
+    marginBottom: 2,
+  },
+  inlineWarningTitleDark: {
+    color: "#fca5a5",
+  },
+  inlineWarningText: {
+    fontSize: 12,
+    color: "#b91c1c",
+    lineHeight: 16,
+  },
+  dismissErrorBtn: {
+    padding: 2,
   },
   inputField: {
     flex: 1,

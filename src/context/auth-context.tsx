@@ -97,17 +97,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { success: true };
     } catch (error: any) {
-      console.error("Login API Error:", error.response?.status, error.response?.data, error.message);
+      // Avoid console.error which triggers full-screen LogBox in development
+      console.warn("Login failed with status:", error.response?.status);
+      if (error.response?.status === 401) {
+        return {
+          success: false,
+          error: "Incorrect email or password. Please verify your credentials and try again.",
+        };
+      }
+      if (error.response?.status === 429) {
+        return {
+          success: false,
+          error: "Too many login attempts. Please wait a few minutes before trying again.",
+        };
+      }
       if (error.response?.data?.error) {
         return { success: false, error: error.response.data.error };
       }
       if (error.message === "Network Error" || !error.response) {
         return {
           success: false,
-          error: "Network error: Unable to reach server at surplus.labmatrixindia.com. Please check your internet connection.",
+          error: "Network error: Unable to reach server. Please check your internet connection.",
         };
       }
-      return { success: false, error: "Login failed. Please check your credentials." };
+      return { success: false, error: "Incorrect credentials. Please verify your details." };
     }
   };
 
