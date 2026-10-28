@@ -13,6 +13,7 @@ import {
   Platform,
   SafeAreaView,
   StatusBar,
+  Modal,
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
@@ -23,15 +24,22 @@ import {
   Phone,
   Building2,
   ArrowRight,
+  ArrowLeft,
   Clock,
   CheckCircle2,
-  AlertCircle,
   Bell,
   User,
   Search,
   Sparkles,
   Wrench,
   Microscope,
+  MapPin,
+  ChevronDown,
+  Plus,
+  Minus,
+  Camera,
+  ShieldCheck,
+  Check,
 } from "lucide-react-native";
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
@@ -95,6 +103,10 @@ export default function SellScreen() {
   const [quantity, setQuantity] = useState("1");
   const [description, setDescription] = useState("");
 
+  // Modals for Category & Condition Dropdowns
+  const [isCategoryModalVisible, setIsCategoryModalVisible] = useState(false);
+  const [isConditionModalVisible, setIsConditionModalVisible] = useState(false);
+
   // Photos
   const [photos, setPhotos] = useState<string[]>([]);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
@@ -135,6 +147,18 @@ export default function SellScreen() {
       : itemType === "NEW_INSTRUMENT"
       ? NEW_INSTRUMENT_CONDITIONS
       : MACHINE_CONDITIONS;
+
+  const handleQuantityMinus = () => {
+    const q = parseInt(quantity, 10) || 1;
+    if (q > 1) {
+      setQuantity(String(q - 1));
+    }
+  };
+
+  const handleQuantityPlus = () => {
+    const q = parseInt(quantity, 10) || 1;
+    setQuantity(String(q + 1));
+  };
 
   const pickImage = async () => {
     try {
@@ -212,7 +236,7 @@ export default function SellScreen() {
       Alert.alert("Validation Error", "Please provide your expected price range (Min and Max price).");
       return;
     }
-    if (parseFloat(minPrice) > parseFloat(maxPrice)) {
+    if (parseFloat(minPrice.replace(/[^0-9.]/g, "")) > parseFloat(maxPrice.replace(/[^0-9.]/g, ""))) {
       Alert.alert("Validation Error", "Minimum price cannot be greater than maximum price.");
       return;
     }
@@ -232,8 +256,8 @@ export default function SellScreen() {
         itemType,
         condition,
         location: location.trim() || "India",
-        minPrice: parseFloat(minPrice),
-        maxPrice: parseFloat(maxPrice),
+        minPrice: parseFloat(minPrice.replace(/[^0-9.]/g, "")),
+        maxPrice: parseFloat(maxPrice.replace(/[^0-9.]/g, "")),
         quantity: Math.max(1, parseInt(quantity, 10) || 1),
         description: description.trim(),
         photos,
@@ -380,18 +404,18 @@ export default function SellScreen() {
     );
   }
 
-  const publishButtonLabel =
+  const section1Title =
     itemType === "SPARE_PART"
-      ? "Publish Spare Part Listing →"
+      ? "1. Spare Part Specifications"
       : itemType === "NEW_INSTRUMENT"
-      ? "Publish Instrument Listing →"
-      : "Publish Machine Listing →";
+      ? "1. New Instrument Specifications"
+      : "1. Machine Specifications";
 
   return (
     <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-      {/* 1. Top Branding Header Bar */}
+      {/* 1. Top Branding Header Bar with Search, Bell, Profile */}
       <View style={[styles.topBar, isDark && styles.topBarDark]}>
         <View style={styles.logoRow}>
           <Image
@@ -405,9 +429,18 @@ export default function SellScreen() {
           <TouchableOpacity
             style={styles.iconBtn}
             activeOpacity={0.7}
+            onPress={() => router.push("/(tabs)")}
+          >
+            <Search size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.iconBtn}
+            activeOpacity={0.7}
             onPress={() => router.push("/notifications" as any)}
           >
             <Bell size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+            <View style={styles.redBadgeDot} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -421,7 +454,16 @@ export default function SellScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Page Title & Privacy Note */}
+        {/* Back Link & Title */}
+        <TouchableOpacity
+          style={styles.backLinkRow}
+          activeOpacity={0.7}
+          onPress={() => router.push("/(tabs)")}
+        >
+          <ArrowLeft size={16} color="#033a7d" />
+          <Text style={styles.backLinkText}>Back to All Listings</Text>
+        </TouchableOpacity>
+
         <View style={styles.pageHeader}>
           <Text style={[styles.pageTitle, isDark && styles.pageTitleDark]}>
             List Equipment or Spare Parts
@@ -431,336 +473,507 @@ export default function SellScreen() {
           </Text>
         </View>
 
-        {/* Card 0: Item Type Selector Cards */}
-        <View style={[styles.sectionCard, isDark && styles.sectionCardDark]}>
-          <Text style={[styles.sectionHeading, isDark && styles.sectionHeadingDark]}>
-            What are you listing for sale? *
+        {/* What are you listing for sale? Selector Cards */}
+        <View style={styles.itemTypeSection}>
+          <Text style={[styles.sectionHeadingTitle, isDark && styles.sectionHeadingTitleDark]}>
+            What are you listing for sale? <Text style={{ color: "#ba1a1a" }}>*</Text>
           </Text>
 
-          <View style={styles.itemTypeCardsRow}>
-            {/* Machine */}
+          <View style={styles.itemTypeCardsCol}>
+            {/* Card 1: Pre-Owned Machine */}
             <TouchableOpacity
               style={[
                 styles.itemTypeCard,
                 itemType === "MACHINE" && styles.itemTypeCardActive,
+                isDark && styles.itemTypeCardDark,
               ]}
               activeOpacity={0.85}
               onPress={() => handleItemTypeChange("MACHINE")}
             >
-              <View style={[styles.typeIconBox, itemType === "MACHINE" && styles.typeIconBoxActive]}>
-                <Microscope size={20} color={itemType === "MACHINE" ? "#ffffff" : "#033a7d"} />
+              <View style={[styles.typeIconBox, { backgroundColor: "#011936" }]}>
+                <Microscope size={22} color="#ffffff" />
               </View>
-              <Text style={styles.typeCardTitle}>Pre-Owned Machine</Text>
-              <Text style={styles.typeCardSub}>Refurbished / Used instruments</Text>
+              <View style={styles.typeTextCol}>
+                <Text style={[styles.typeCardTitle, isDark && styles.typeCardTitleDark]}>
+                  Pre-Owned Machine
+                </Text>
+                <Text style={styles.typeCardSub}>Refurbished / Used instruments</Text>
+              </View>
+              {itemType === "MACHINE" && (
+                <CheckCircle2 size={22} color="#033a7d" />
+              )}
             </TouchableOpacity>
 
-            {/* Brand New */}
+            {/* Card 2: Brand New Instrument */}
             <TouchableOpacity
               style={[
                 styles.itemTypeCard,
                 itemType === "NEW_INSTRUMENT" && styles.itemTypeCardActive,
+                isDark && styles.itemTypeCardDark,
               ]}
               activeOpacity={0.85}
               onPress={() => handleItemTypeChange("NEW_INSTRUMENT")}
             >
-              <View
-                style={[
-                  styles.typeIconBox,
-                  itemType === "NEW_INSTRUMENT" && { backgroundColor: "#15803d" },
-                ]}
-              >
-                <Sparkles size={20} color={itemType === "NEW_INSTRUMENT" ? "#ffffff" : "#15803d"} />
+              <View style={[styles.typeIconBox, { backgroundColor: "#eff5fb" }]}>
+                <Sparkles size={22} color="#1d4ed8" />
               </View>
-              <Text style={styles.typeCardTitle}>Brand New Instrument</Text>
-              <Text style={styles.typeCardSub}>Factory sealed with OEM warranty</Text>
+              <View style={styles.typeTextCol}>
+                <Text style={[styles.typeCardTitle, isDark && styles.typeCardTitleDark]}>
+                  Brand New Instrument
+                </Text>
+                <Text style={styles.typeCardSub}>Factory sealed with OEM warranty</Text>
+              </View>
+              {itemType === "NEW_INSTRUMENT" && (
+                <CheckCircle2 size={22} color="#033a7d" />
+              )}
             </TouchableOpacity>
 
-            {/* Spare Part */}
+            {/* Card 3: Spare Part / Consumable */}
             <TouchableOpacity
               style={[
                 styles.itemTypeCard,
                 itemType === "SPARE_PART" && styles.itemTypeCardActive,
+                isDark && styles.itemTypeCardDark,
               ]}
               activeOpacity={0.85}
               onPress={() => handleItemTypeChange("SPARE_PART")}
             >
-              <View style={[styles.typeIconBox, itemType === "SPARE_PART" && styles.typeIconBoxActive]}>
-                <Wrench size={20} color={itemType === "SPARE_PART" ? "#ffffff" : "#033a7d"} />
+              <View style={[styles.typeIconBox, { backgroundColor: "#eff5fb" }]}>
+                <Wrench size={22} color="#334155" />
               </View>
-              <Text style={styles.typeCardTitle}>Spare Part / Consumable</Text>
-              <Text style={styles.typeCardSub}>Lamps, columns, modules, valves...</Text>
+              <View style={styles.typeTextCol}>
+                <Text style={[styles.typeCardTitle, isDark && styles.typeCardTitleDark]}>
+                  Spare Part / Consumable
+                </Text>
+                <Text style={styles.typeCardSub}>Lamps, columns, modules, valves...</Text>
+              </View>
+              {itemType === "SPARE_PART" && (
+                <CheckCircle2 size={22} color="#033a7d" />
+              )}
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Card 1: Specifications */}
+        {/* Section 1: Specifications Card */}
         <View style={[styles.sectionCard, isDark && styles.sectionCardDark]}>
-          <Text style={[styles.sectionHeading, isDark && styles.sectionHeadingDark]}>
-            {itemType === "SPARE_PART"
-              ? "1. Spare Part Specifications"
-              : itemType === "NEW_INSTRUMENT"
-              ? "1. New Instrument Specifications"
-              : "1. Machine Specifications"}
-          </Text>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionBarIndicator} />
+            <Text style={[styles.sectionHeading, isDark && styles.sectionHeadingDark]}>
+              {section1Title}
+            </Text>
+          </View>
 
-          {/* Title */}
-          <Text style={styles.inputLabel}>
-            {itemType === "SPARE_PART"
-              ? "Part / Consumable Title & Name *"
-              : "Equipment Title & Model *"}
-          </Text>
-          <TextInput
-            style={[styles.input, isDark && styles.inputDark]}
-            placeholder={
-              itemType === "SPARE_PART"
-                ? "e.g. Agilent 1260 DAD Deuterium Lamp (OEM Sealed) or Waters 2695 Pump Seal Kit"
-                : "e.g. Waters Acquity UPLC System with PDA Detector & Sample Manager"
-            }
-            placeholderTextColor="#94a3b8"
-            value={title}
-            onChangeText={setTitle}
-          />
+          {/* Equipment Title & Model */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>
+              {itemType === "SPARE_PART"
+                ? "Part / Consumable Title & Name"
+                : "Equipment Title & Model"}{" "}
+              <Text style={{ color: "#ba1a1a" }}>*</Text>
+            </Text>
+            <TextInput
+              style={[styles.input, isDark && styles.inputDark]}
+              placeholder="Waters Acquity UPLC System with PDA Detector"
+              placeholderTextColor="#94a3b8"
+              value={title}
+              onChangeText={setTitle}
+            />
+          </View>
 
           {/* Spare Part Specific Fields */}
           {itemType === "SPARE_PART" && (
             <>
-              <Text style={styles.inputLabel}>Compatible Instrument / OEM Model</Text>
-              <TextInput
-                style={[styles.input, isDark && styles.inputDark]}
-                placeholder="e.g. Agilent 1100 / 1200 / 1260 Series, Waters Alliance"
-                placeholderTextColor="#94a3b8"
-                value={compatibleWith}
-                onChangeText={setCompatibleWith}
-              />
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Compatible Instrument / OEM Model</Text>
+                <TextInput
+                  style={[styles.input, isDark && styles.inputDark]}
+                  placeholder="e.g. Agilent 1100 / 1200 / 1260 Series, Waters Alliance"
+                  placeholderTextColor="#94a3b8"
+                  value={compatibleWith}
+                  onChangeText={setCompatibleWith}
+                />
+              </View>
 
-              <Text style={styles.inputLabel}>Part Number / Catalog Number (Optional)</Text>
-              <TextInput
-                style={[styles.input, isDark && styles.inputDark]}
-                placeholder="e.g. G1315-60012, 5063-6589"
-                placeholderTextColor="#94a3b8"
-                value={partNumber}
-                onChangeText={setPartNumber}
-              />
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Part Number / Catalog Number (Optional)</Text>
+                <TextInput
+                  style={[styles.input, isDark && styles.inputDark]}
+                  placeholder="e.g. G1315-60012, 5063-6589"
+                  placeholderTextColor="#94a3b8"
+                  value={partNumber}
+                  onChangeText={setPartNumber}
+                />
+              </View>
             </>
           )}
 
-          {/* Category */}
-          <Text style={styles.inputLabel}>Category *</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              {CATEGORIES.map((cat) => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[styles.catPill, category === cat && styles.catPillActive]}
-                  onPress={() => setCategory(cat)}
-                >
-                  <Text style={[styles.catPillText, category === cat && styles.catPillTextActive]}>
-                    {cat}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
-
-          {/* Condition */}
-          <Text style={styles.inputLabel}>Condition *</Text>
-          <View style={styles.conditionsRow}>
-            {currentConditions.map((cond) => {
-              const isSelected = condition === cond;
-              return (
-                <TouchableOpacity
-                  key={cond}
-                  style={[styles.condChip, isSelected && styles.condChipActive]}
-                  onPress={() => setCondition(cond)}
-                >
-                  <Text style={[styles.condChipText, isSelected && styles.condChipTextActive]}>
-                    {cond}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* Location & Quantity */}
+          {/* 2-Column Row: Category & Condition Dropdown Pickers */}
           <View style={styles.twoColRow}>
-            <View style={{ flex: 2 }}>
-              <Text style={styles.inputLabel}>Current Location (City / State) *</Text>
-              <TextInput
-                style={[styles.input, isDark && styles.inputDark]}
-                placeholder="e.g. Hyderabad, Telangana"
-                placeholderTextColor="#94a3b8"
-                value={location}
-                onChangeText={setLocation}
-              />
+            <View style={styles.col}>
+              <Text style={styles.inputLabel}>
+                Category <Text style={{ color: "#ba1a1a" }}>*</Text>
+              </Text>
+              <TouchableOpacity
+                style={[styles.dropdownPickerBox, isDark && styles.dropdownPickerBoxDark]}
+                activeOpacity={0.8}
+                onPress={() => setIsCategoryModalVisible(true)}
+              >
+                <Text style={[styles.dropdownPickerText, isDark && styles.dropdownPickerTextDark]} numberOfLines={1}>
+                  {category}
+                </Text>
+                <ChevronDown size={16} color="#64748b" />
+              </TouchableOpacity>
             </View>
 
-            <View style={{ flex: 1 }}>
-              <Text style={styles.inputLabel}>Quantity *</Text>
-              <TextInput
-                style={[styles.input, isDark && styles.inputDark]}
-                placeholder="1"
-                placeholderTextColor="#94a3b8"
-                keyboardType="numeric"
-                value={quantity}
-                onChangeText={setQuantity}
-              />
+            <View style={styles.col}>
+              <Text style={styles.inputLabel}>
+                Condition <Text style={{ color: "#ba1a1a" }}>*</Text>
+              </Text>
+              <TouchableOpacity
+                style={[styles.dropdownPickerBox, isDark && styles.dropdownPickerBoxDark]}
+                activeOpacity={0.8}
+                onPress={() => setIsConditionModalVisible(true)}
+              >
+                <Text style={[styles.dropdownPickerText, isDark && styles.dropdownPickerTextDark]} numberOfLines={1}>
+                  {condition}
+                </Text>
+                <ChevronDown size={16} color="#64748b" />
+              </TouchableOpacity>
             </View>
           </View>
 
-          {/* Price Range */}
-          <Text style={styles.inputLabel}>Expected Price Range (₹) *</Text>
+          {/* 2-Column Row: Location & Quantity Available Stepper */}
           <View style={styles.twoColRow}>
-            <View style={{ flex: 1 }}>
-              <TextInput
-                style={[styles.input, isDark && styles.inputDark]}
-                placeholder="Min Price (₹)"
-                placeholderTextColor="#94a3b8"
-                keyboardType="numeric"
-                value={minPrice}
-                onChangeText={setMinPrice}
-              />
+            <View style={styles.col}>
+              <Text style={styles.inputLabel}>
+                Current Location <Text style={{ color: "#ba1a1a" }}>*</Text>
+              </Text>
+              <View style={[styles.iconInputBox, isDark && styles.iconInputBoxDark]}>
+                <MapPin size={16} color="#033a7d" style={{ marginLeft: 10 }} />
+                <TextInput
+                  style={[styles.iconInputField, isDark && styles.iconInputFieldDark]}
+                  placeholder="Hyderabad, Telangana"
+                  placeholderTextColor="#94a3b8"
+                  value={location}
+                  onChangeText={setLocation}
+                />
+              </View>
             </View>
 
-            <View style={{ flex: 1 }}>
-              <TextInput
-                style={[styles.input, isDark && styles.inputDark]}
-                placeholder="Max Price (₹)"
-                placeholderTextColor="#94a3b8"
-                keyboardType="numeric"
-                value={maxPrice}
-                onChangeText={setMaxPrice}
-              />
+            <View style={styles.col}>
+              <Text style={styles.inputLabel}>
+                Quantity Available <Text style={{ color: "#ba1a1a" }}>*</Text>
+              </Text>
+              <View style={[styles.stepperContainer, isDark && styles.stepperContainerDark]}>
+                <TouchableOpacity
+                  style={styles.stepperBtn}
+                  activeOpacity={0.7}
+                  onPress={handleQuantityMinus}
+                >
+                  <Minus size={16} color="#033a7d" />
+                </TouchableOpacity>
+
+                <Text style={[styles.stepperValueText, isDark && styles.stepperValueTextDark]}>
+                  {quantity}
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.stepperBtn}
+                  activeOpacity={0.7}
+                  onPress={handleQuantityPlus}
+                >
+                  <Plus size={16} color="#033a7d" />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 
-          {/* Detailed Description & Specifications (Matched to Reference Image) */}
-          <Text style={styles.inputLabel}>Detailed Description & Specifications *</Text>
-          <TextInput
-            style={[styles.textArea, isDark && styles.textAreaDark]}
-            placeholder={
-              itemType === "SPARE_PART"
-                ? "Describe part working status, manufacture date or expiry if applicable, original packaging, quantity included, testing verified..."
-                : "Include year of manufacture, software version, included modules/detectors, service history, operational status, calibration status..."
-            }
-            placeholderTextColor="#94a3b8"
-            value={description}
-            onChangeText={setDescription}
-            multiline
-            numberOfLines={4}
-          />
+          {/* Price Expectation Row with Target Bidding Range */}
+          <View style={styles.inputGroup}>
+            <View style={styles.priceHeaderRow}>
+              <Text style={styles.inputLabel}>
+                Price Expectation (₹) <Text style={{ color: "#ba1a1a" }}>*</Text>
+              </Text>
+              <Text style={styles.priceTargetSubtitle}>Target Bidding Range</Text>
+            </View>
+
+            <View style={styles.twoColRow}>
+              <View style={styles.col}>
+                <View style={[styles.iconInputBox, isDark && styles.iconInputBoxDark]}>
+                  <Text style={styles.rupeePrefix}>₹</Text>
+                  <TextInput
+                    style={[styles.iconInputField, isDark && styles.iconInputFieldDark]}
+                    placeholder="280,000"
+                    placeholderTextColor="#94a3b8"
+                    keyboardType="numeric"
+                    value={minPrice}
+                    onChangeText={setMinPrice}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.col}>
+                <View style={[styles.iconInputBox, isDark && styles.iconInputBoxDark]}>
+                  <Text style={styles.rupeePrefix}>₹</Text>
+                  <TextInput
+                    style={[styles.iconInputField, isDark && styles.iconInputFieldDark]}
+                    placeholder="340,000"
+                    placeholderTextColor="#94a3b8"
+                    keyboardType="numeric"
+                    value={maxPrice}
+                    onChangeText={setMaxPrice}
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Detailed Description & Specifications */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>
+              Detailed Description & Specifications <Text style={{ color: "#ba1a1a" }}>*</Text>
+            </Text>
+            <TextInput
+              style={[styles.textArea, isDark && styles.textAreaDark]}
+              placeholder="Waters Acquity UPLC H-Class configured with Sample Manager FTN, Quaternary Solvent Manager (QSM), and PDA detector. Decommissioned directly from pharma analytical laboratory. Last calibrated October..."
+              placeholderTextColor="#94a3b8"
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              value={description}
+              onChangeText={setDescription}
+            />
+          </View>
         </View>
 
-        {/* Card 2: Photos & Documentation (Matched to Reference Image) */}
+        {/* Section 2: Photos & Documentation */}
         <View style={[styles.sectionCard, isDark && styles.sectionCardDark]}>
-          <Text style={[styles.sectionHeading, isDark && styles.sectionHeadingDark]}>
-            2. Photos & Documentation
-          </Text>
-          <Text style={styles.sectionSubheading}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionBarIndicator} />
+            <Text style={[styles.sectionHeading, isDark && styles.sectionHeadingDark]}>
+              2. Photos & Documentation
+            </Text>
+          </View>
+
+          <Text style={styles.sectionSubtext}>
             High-quality photos of the serial plate, modules, and condition increase buyer interest.
           </Text>
 
-          <View style={styles.photoGrid}>
-            {/* Upload Button with Dashed Border */}
-            <TouchableOpacity
-              style={styles.dashedUploadBox}
-              activeOpacity={0.8}
-              onPress={pickImage}
-              disabled={isUploadingPhoto}
-            >
-              {isUploadingPhoto ? (
-                <ActivityIndicator size="small" color="#033a7d" />
-              ) : (
-                <>
-                  <Upload size={24} color="#64748b" style={{ marginBottom: 4 }} />
-                  <Text style={styles.uploadBoxTitle}>Add Photos</Text>
-                  <Text style={styles.uploadBoxSub}>PNG, JPG, WEBP</Text>
-                </>
-              )}
-            </TouchableOpacity>
+          {/* Dashed Upload Box */}
+          <TouchableOpacity
+            style={[styles.dashedUploadBox, isDark && styles.dashedUploadBoxDark]}
+            activeOpacity={0.8}
+            onPress={pickImage}
+            disabled={isUploadingPhoto}
+          >
+            {isUploadingPhoto ? (
+              <ActivityIndicator size="large" color="#033a7d" />
+            ) : (
+              <>
+                <View style={styles.cloudIconCircle}>
+                  <Upload size={22} color="#033a7d" />
+                </View>
+                <Text style={styles.uploadBoxTitle}>Add Photos & Specs</Text>
+                <Text style={styles.uploadBoxSub}>PNG, JPG, WEBP or PDF (Max 5MB each)</Text>
+              </>
+            )}
+          </TouchableOpacity>
 
-            {/* Thumbnail Grid */}
-            {photos.map((p, idx) => (
-              <View key={idx} style={styles.photoThumbWrapper}>
-                <Image source={{ uri: p }} style={styles.photoThumb} resizeMode="cover" />
+          {/* Photo Thumbnails Gallery */}
+          {photos.length > 0 && (
+            <View style={styles.thumbnailsContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbnailsRow}>
+                {photos.map((uri, index) => (
+                  <View key={index} style={styles.thumbnailWrapper}>
+                    <Image source={{ uri }} style={styles.thumbnailImage} />
+                    {index === 0 && (
+                      <View style={styles.primaryBadge}>
+                        <Text style={styles.primaryBadgeText}>Primary</Text>
+                      </View>
+                    )}
+                    <TouchableOpacity
+                      style={styles.removePhotoBtn}
+                      activeOpacity={0.8}
+                      onPress={() => removePhoto(index)}
+                    >
+                      <X size={12} color="#ffffff" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+
+                {/* Add More Squircle */}
                 <TouchableOpacity
-                  style={styles.photoRemoveBtn}
-                  onPress={() => removePhoto(idx)}
+                  style={styles.addMoreSquircle}
+                  activeOpacity={0.8}
+                  onPress={pickImage}
+                  disabled={isUploadingPhoto}
                 >
-                  <X size={12} color="#ffffff" />
+                  <Camera size={20} color="#033a7d" />
+                  <Text style={styles.addMoreText}>Add More</Text>
                 </TouchableOpacity>
+              </ScrollView>
+
+              {/* Verified Status Line */}
+              <View style={styles.verifiedPhotosLine}>
+                <CheckCircle2 size={15} color="#15803d" />
+                <Text style={styles.verifiedPhotosText}>
+                  {photos.length} photo{photos.length > 1 ? "s" : ""} added • Serial plate verified
+                </Text>
               </View>
-            ))}
-          </View>
+            </View>
+          )}
         </View>
 
-        {/* Card 3: Contact & Notification Details (Dark Navy Container Matched to Reference Image) */}
-        <View style={styles.contactDarkCard}>
-          <View style={styles.contactCardHeader}>
-            <View style={styles.lockIconBox}>
-              <Lock size={18} color="#fbc634" />
+        {/* Section 3: Contact & Notification Details (Dark Navy Container) */}
+        <View style={styles.darkNavyCard}>
+          <View style={styles.darkCardHeaderRow}>
+            <Lock size={20} color="#fdc836" />
+            <Text style={styles.darkCardTitle}>3. Contact & Notification Details</Text>
+          </View>
+
+          <Text style={styles.darkCardSubtitle}>
+            Your phone number will <Text style={{ fontWeight: "800", color: "#ffffff" }}>NEVER</Text> be displayed
+            publicly on this listing. It is used strictly for deal notifications and verifying interested buyers.
+          </Text>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.darkCardLabel}>
+              Your Mobile / WhatsApp Number <Text style={{ color: "#fdc836" }}>*</Text>
+            </Text>
+            <View style={styles.darkCardInputBox}>
+              <Phone size={16} color="#033a7d" style={{ marginLeft: 12 }} />
+              <TextInput
+                style={styles.darkCardInputField}
+                placeholder="+91 8920798971"
+                placeholderTextColor="#94a3b8"
+                keyboardType="phone-pad"
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+              />
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.contactCardTitle}>3. Contact & Notification Details</Text>
-              <Text style={styles.contactCardSub}>
-                Your phone number will NEVER be displayed publicly on this listing. It is used strictly for
-                deal notifications and verifying interested buyers.
-              </Text>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.darkCardLabel}>Company / Laboratory Name (Optional)</Text>
+            <View style={styles.darkCardInputBox}>
+              <Building2 size={16} color="#033a7d" style={{ marginLeft: 12 }} />
+              <TextInput
+                style={styles.darkCardInputField}
+                placeholder="Labmatrix Analytical Lab"
+                placeholderTextColor="#94a3b8"
+                value={companyName}
+                onChangeText={setCompanyName}
+              />
             </View>
           </View>
 
-          {/* Mobile / WhatsApp Number Input */}
-          <Text style={styles.darkInputLabel}>Your Mobile / WhatsApp Number *</Text>
-          <View style={styles.darkInputWrapper}>
-            <Phone size={15} color="#94a3b8" style={{ marginRight: 8 }} />
-            <TextInput
-              style={styles.darkInput}
-              placeholder="+91 98765 43210"
-              placeholderTextColor="#64748b"
-              keyboardType="phone-pad"
-              value={phoneNumber}
-              onChangeText={setPhoneNumber}
-            />
-          </View>
-
-          {/* Company / Laboratory Name Input */}
-          <Text style={styles.darkInputLabel}>Company / Laboratory Name (Optional)</Text>
-          <View style={styles.darkInputWrapper}>
-            <Building2 size={15} color="#94a3b8" style={{ marginRight: 8 }} />
-            <TextInput
-              style={styles.darkInput}
-              placeholder="e.g. Labmatrix"
-              placeholderTextColor="#64748b"
-              value={companyName}
-              onChangeText={setCompanyName}
-            />
-          </View>
-
-          {/* Phone Verified Note */}
-          <View style={styles.phoneVerifiedRow}>
-            <CheckCircle2 size={14} color="#fbc634" />
-            <Text style={styles.phoneVerifiedText}>
-              Phone on file: Verified for inquiry notifications.
+          {/* Verification Badge Footer */}
+          <View style={styles.darkCardFooter}>
+            <ShieldCheck size={16} color="#fdc836" />
+            <Text style={styles.darkCardFooterText}>
+              Phone on file: Verified for instant RFQ alerts
             </Text>
           </View>
         </View>
 
-        {/* Bottom Publish Button */}
+        {/* Big Yellow CTA Button */}
         <TouchableOpacity
-          style={[styles.publishBtn, isSubmitting && styles.publishBtnDisabled]}
-          activeOpacity={0.88}
-          onPress={handleSubmit}
+          style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+          activeOpacity={0.85}
           disabled={isSubmitting}
+          onPress={handleSubmit}
         >
           {isSubmitting ? (
-            <ActivityIndicator color="#ffffff" />
+            <ActivityIndicator size="small" color="#0f172a" />
           ) : (
             <>
-              <Text style={styles.publishBtnText}>{publishButtonLabel}</Text>
-              <ArrowRight size={16} color="#ffffff" />
+              <Text style={styles.submitButtonText}>Submit Listing for Verification →</Text>
             </>
           )}
         </TouchableOpacity>
+
+        {/* Assurance Text Below Button */}
+        <View style={styles.reassuranceRow}>
+          <CheckCircle2 size={16} color="#033a7d" style={{ marginTop: 1 }} />
+          <Text style={styles.reassuranceText}>
+            Listing is verified by LabMatrix Technical Desk within 2-4 business hours before appearing live to verified buyers.
+          </Text>
+        </View>
       </ScrollView>
+
+      {/* Category Selection Modal */}
+      <Modal
+        visible={isCategoryModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsCategoryModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContentCard, isDark && styles.modalContentCardDark]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>Select Category</Text>
+              <TouchableOpacity onPress={() => setIsCategoryModalVisible(false)}>
+                <X size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 380 }}>
+              {CATEGORIES.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[styles.modalItemRow, category === cat && styles.modalItemRowSelected]}
+                  onPress={() => {
+                    setCategory(cat);
+                    setIsCategoryModalVisible(false);
+                  }}
+                >
+                  <Text style={[styles.modalItemText, category === cat && styles.modalItemTextSelected]}>
+                    {cat}
+                  </Text>
+                  {category === cat && <Check size={18} color="#033a7d" />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Condition Selection Modal */}
+      <Modal
+        visible={isConditionModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsConditionModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContentCard, isDark && styles.modalContentCardDark]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>Select Condition</Text>
+              <TouchableOpacity onPress={() => setIsConditionModalVisible(false)}>
+                <X size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 380 }}>
+              {currentConditions.map((cond) => (
+                <TouchableOpacity
+                  key={cond}
+                  style={[styles.modalItemRow, condition === cond && styles.modalItemRowSelected]}
+                  onPress={() => {
+                    setCondition(cond);
+                    setIsConditionModalVisible(false);
+                  }}
+                >
+                  <Text style={[styles.modalItemText, condition === cond && styles.modalItemTextSelected]}>
+                    {cond}
+                  </Text>
+                  {condition === cond && <Check size={18} color="#033a7d" />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -768,24 +981,23 @@ export default function SellScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f8fafc",
   },
   safeAreaDark: {
-    backgroundColor: LabMatrixTokens.colors.brandBlue950,
+    backgroundColor: "#010f22",
   },
   topBar: {
+    height: 58,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === "android" ? 10 : 4,
-    paddingBottom: 8,
     backgroundColor: "#ffffff",
     borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
+    borderBottomColor: "#e2e8f0",
   },
   topBarDark: {
-    backgroundColor: "#0b1329",
+    backgroundColor: "#011936",
     borderBottomColor: "#1e293b",
   },
   logoRow: {
@@ -799,504 +1011,681 @@ const styles = StyleSheet.create({
   topRightIcons: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 10,
   },
   iconBtn: {
-    padding: 4,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#eff5fb",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  redBadgeDot: {
+    position: "absolute",
+    top: 7,
+    right: 7,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "#ba1a1a",
   },
   avatarCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#002555",
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#011936",
     alignItems: "center",
     justifyContent: "center",
   },
   scrollContent: {
+    padding: 16,
+    gap: 16,
     paddingBottom: 40,
-    backgroundColor: "#f8fafc",
+  },
+  backLinkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
+  },
+  backLinkText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#033a7d",
   },
   pageHeader: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 10,
-    backgroundColor: "#ffffff",
+    gap: 4,
   },
   pageTitle: {
     fontSize: 22,
-    fontWeight: "900",
+    fontWeight: "800",
     color: "#0f172a",
-    letterSpacing: -0.4,
-    marginBottom: 4,
+    letterSpacing: -0.3,
   },
   pageTitleDark: {
     color: "#f8fafc",
   },
   pageSubtitle: {
     fontSize: 13,
-    color: "#475569",
+    color: "#64748b",
     lineHeight: 18,
+  },
+  itemTypeSection: {
+    gap: 10,
+  },
+  sectionHeadingTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  sectionHeadingTitleDark: {
+    color: "#f8fafc",
+  },
+  itemTypeCardsCol: {
+    gap: 8,
+  },
+  itemTypeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    padding: 12,
+    gap: 12,
+  },
+  itemTypeCardDark: {
+    backgroundColor: "#03142e",
+    borderColor: "#1e293b",
+  },
+  itemTypeCardActive: {
+    borderColor: "#033a7d",
+    backgroundColor: "#f2f7fd",
+  },
+  typeIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  typeTextCol: {
+    flex: 1,
+  },
+  typeCardTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  typeCardTitleDark: {
+    color: "#f8fafc",
+  },
+  typeCardSub: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 2,
   },
   sectionCard: {
     backgroundColor: "#ffffff",
-    marginHorizontal: 16,
-    marginTop: 14,
-    borderRadius: 16,
+    borderRadius: 12,
+    padding: 16,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    padding: 16,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
+    gap: 14,
   },
   sectionCardDark: {
-    backgroundColor: "#0b1329",
+    backgroundColor: "#03142e",
     borderColor: "#1e293b",
   },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  sectionBarIndicator: {
+    width: 4,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: "#033a7d",
+    marginRight: 8,
+  },
   sectionHeading: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "800",
     color: "#0f172a",
-    marginBottom: 4,
   },
   sectionHeadingDark: {
     color: "#f8fafc",
   },
-  sectionSubheading: {
+  sectionSubtext: {
     fontSize: 12,
     color: "#64748b",
-    marginBottom: 14,
+    lineHeight: 16,
   },
-  itemTypeCardsRow: {
-    gap: 10,
-    marginTop: 10,
-  },
-  itemTypeCard: {
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
-    padding: 12,
-  },
-  itemTypeCardActive: {
-    borderColor: "#033a7d",
-    backgroundColor: "#eff5fb",
-  },
-  typeIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: "#eff5fb",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 6,
-  },
-  typeIconBoxActive: {
-    backgroundColor: "#033a7d",
-  },
-  typeCardTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#0f172a",
-    marginBottom: 2,
-  },
-  typeCardSub: {
-    fontSize: 11,
-    color: "#64748b",
+  inputGroup: {
+    gap: 6,
   },
   inputLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
-    color: "#334155",
-    marginBottom: 6,
-    marginTop: 12,
-  },
-  input: {
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    paddingHorizontal: 12,
-    fontSize: 14,
     color: "#0f172a",
   },
-  inputDark: {
-    backgroundColor: "#16203a",
-    borderColor: "#334155",
-    color: "#f8fafc",
-  },
-  textArea: {
-    minHeight: 90,
-    borderRadius: 10,
-    backgroundColor: "#ffffff",
+  input: {
     borderWidth: 1,
     borderColor: "#cbd5e1",
+    borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
     color: "#0f172a",
-    textAlignVertical: "top",
-    lineHeight: 20,
+    backgroundColor: "#ffffff",
   },
-  textAreaDark: {
-    backgroundColor: "#16203a",
+  inputDark: {
+    backgroundColor: "#020d1c",
     borderColor: "#334155",
     color: "#f8fafc",
-  },
-  catPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-    backgroundColor: "#f1f5f9",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  catPillActive: {
-    backgroundColor: "#033a7d",
-    borderColor: "#033a7d",
-  },
-  catPillText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#475569",
-  },
-  catPillTextActive: {
-    color: "#ffffff",
-    fontWeight: "700",
-  },
-  conditionsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  condChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-    backgroundColor: "#f1f5f9",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  condChipActive: {
-    backgroundColor: "#033a7d",
-    borderColor: "#033a7d",
-  },
-  condChipText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#475569",
-  },
-  condChipTextActive: {
-    color: "#ffffff",
-    fontWeight: "700",
   },
   twoColRow: {
     flexDirection: "row",
     gap: 10,
   },
-  photoGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
+  col: {
+    flex: 1,
+    gap: 6,
   },
-  dashedUploadBox: {
-    width: 100,
-    height: 100,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderStyle: "dashed",
-    borderColor: "#94a3b8",
-    backgroundColor: "#f8fafc",
+  dropdownPickerBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#ffffff",
+  },
+  dropdownPickerBoxDark: {
+    backgroundColor: "#020d1c",
+    borderColor: "#334155",
+  },
+  dropdownPickerText: {
+    fontSize: 13,
+    color: "#0f172a",
+    fontWeight: "500",
+    flex: 1,
+    marginRight: 4,
+  },
+  dropdownPickerTextDark: {
+    color: "#f8fafc",
+  },
+  iconInputBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    backgroundColor: "#ffffff",
+  },
+  iconInputBoxDark: {
+    backgroundColor: "#020d1c",
+    borderColor: "#334155",
+  },
+  iconInputField: {
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: "#0f172a",
+  },
+  iconInputFieldDark: {
+    color: "#f8fafc",
+  },
+  rupeePrefix: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#64748b",
+    marginLeft: 12,
+  },
+  stepperContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    padding: 3,
+    backgroundColor: "#ffffff",
+  },
+  stepperContainerDark: {
+    backgroundColor: "#020d1c",
+    borderColor: "#334155",
+  },
+  stepperBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: "#eff5fb",
     alignItems: "center",
     justifyContent: "center",
-    padding: 6,
+  },
+  stepperValueText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  stepperValueTextDark: {
+    color: "#f8fafc",
+  },
+  priceHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  priceTargetSubtitle: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  textArea: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: "#0f172a",
+    backgroundColor: "#ffffff",
+    minHeight: 88,
+  },
+  textAreaDark: {
+    backgroundColor: "#020d1c",
+    borderColor: "#334155",
+    color: "#f8fafc",
+  },
+  dashedUploadBox: {
+    backgroundColor: "#eff5fb",
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: "#bfdbfe",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 24,
+    gap: 6,
+  },
+  dashedUploadBoxDark: {
+    backgroundColor: "#021533",
+    borderColor: "#1e40af",
+  },
+  cloudIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#dbeaf7",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
   },
   uploadBoxTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#334155",
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#033a7d",
   },
   uploadBoxSub: {
-    fontSize: 9,
-    color: "#94a3b8",
-    marginTop: 2,
+    fontSize: 12,
+    color: "#64748b",
   },
-  photoThumbWrapper: {
-    position: "relative",
-    width: 100,
-    height: 100,
-    borderRadius: 12,
+  thumbnailsContainer: {
+    gap: 10,
+    marginTop: 4,
+  },
+  thumbnailsRow: {
+    gap: 10,
+    alignItems: "center",
+  },
+  thumbnailWrapper: {
+    width: 82,
+    height: 82,
+    borderRadius: 8,
     overflow: "hidden",
+    position: "relative",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: "#cbd5e1",
   },
-  photoThumb: {
+  thumbnailImage: {
     width: "100%",
     height: "100%",
   },
-  photoRemoveBtn: {
+  primaryBadge: {
+    position: "absolute",
+    bottom: 4,
+    left: 4,
+    backgroundColor: "rgba(15, 23, 42, 0.85)",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  primaryBadgeText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  removePhotoBtn: {
     position: "absolute",
     top: 4,
     right: 4,
-    backgroundColor: "rgba(185, 28, 28, 0.9)",
-    borderRadius: 10,
     width: 20,
     height: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  contactDarkCard: {
-    backgroundColor: "#0b1329",
-    marginHorizontal: 16,
-    marginTop: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#1e293b",
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  contactCardHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    marginBottom: 12,
-  },
-  lockIconBox: {
-    width: 36,
-    height: 36,
     borderRadius: 10,
-    backgroundColor: "rgba(251, 198, 52, 0.18)",
+    backgroundColor: "rgba(15, 23, 42, 0.75)",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 2,
   },
-  contactCardTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#ffffff",
-    marginBottom: 3,
+  addMoreSquircle: {
+    width: 82,
+    height: 82,
+    borderRadius: 8,
+    backgroundColor: "#eff5fb",
+    borderWidth: 1,
+    borderColor: "#dbeaf7",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
   },
-  contactCardSub: {
+  addMoreText: {
     fontSize: 11,
-    color: "#94a3b8",
-    lineHeight: 16,
-  },
-  darkInputLabel: {
-    fontSize: 12,
     fontWeight: "700",
-    color: "#cbd5e1",
-    marginBottom: 5,
-    marginTop: 10,
+    color: "#033a7d",
   },
-  darkInputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: "#16203a",
-    borderWidth: 1,
-    borderColor: "#334155",
-    paddingHorizontal: 12,
-  },
-  darkInput: {
-    flex: 1,
-    fontSize: 14,
-    color: "#ffffff",
-  },
-  phoneVerifiedRow: {
+  verifiedPhotosLine: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 10,
+    marginTop: 2,
   },
-  phoneVerifiedText: {
-    fontSize: 11,
+  verifiedPhotosText: {
+    fontSize: 12,
     fontWeight: "600",
-    color: "#fbc634",
+    color: "#15803d",
   },
-  publishBtn: {
+  darkNavyCard: {
+    backgroundColor: "#01142f",
+    borderRadius: 14,
+    padding: 18,
+    gap: 14,
+  },
+  darkCardHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
     gap: 8,
-    backgroundColor: "#002555",
-    marginHorizontal: 16,
-    marginTop: 20,
-    paddingVertical: 14,
-    borderRadius: 12,
-    shadowColor: "#002555",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  publishBtnDisabled: {
+  darkCardTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#ffffff",
+  },
+  darkCardSubtitle: {
+    fontSize: 12,
+    color: "#94a3b8",
+    lineHeight: 17,
+  },
+  darkCardLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  darkCardInputBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+  },
+  darkCardInputField: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: "#0f172a",
+  },
+  darkCardFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingTop: 4,
+  },
+  darkCardFooterText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#fdc836",
+  },
+  submitButton: {
+    backgroundColor: "#fbc634",
+    paddingVertical: 15,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    marginTop: 4,
+  },
+  submitButtonDisabled: {
     opacity: 0.6,
   },
-  publishBtnText: {
-    color: "#ffffff",
-    fontSize: 15,
+  submitButtonText: {
+    fontSize: 16,
     fontWeight: "800",
+    color: "#0f172a",
+  },
+  reassuranceRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  reassuranceText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#475569",
+    lineHeight: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContentCard: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 18,
+    gap: 12,
+  },
+  modalContentCardDark: {
+    backgroundColor: "#011936",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  modalTitleDark: {
+    color: "#f8fafc",
+  },
+  modalItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  modalItemRowSelected: {
+    backgroundColor: "#eff5fb",
+    marginHorizontal: -8,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  modalItemText: {
+    fontSize: 14,
+    color: "#0f172a",
+    fontWeight: "500",
+  },
+  modalItemTextSelected: {
+    color: "#033a7d",
+    fontWeight: "700",
   },
   authRequiredContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-    backgroundColor: "#f8fafc",
+    gap: 14,
   },
   authLockCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: "#eff5fb",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#dbeaf7",
   },
   authTitle: {
     fontSize: 20,
     fontWeight: "800",
     color: "#0f172a",
     textAlign: "center",
-    marginBottom: 8,
   },
   authTitleDark: {
     color: "#f8fafc",
   },
   authSubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#64748b",
     textAlign: "center",
-    lineHeight: 19,
-    marginBottom: 20,
-    maxWidth: 300,
+    lineHeight: 20,
+    maxWidth: 320,
   },
   signInButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     backgroundColor: "#033a7d",
-    paddingHorizontal: 24,
+    paddingHorizontal: 22,
     paddingVertical: 12,
     borderRadius: 10,
+    marginTop: 8,
   },
   signInButtonText: {
-    color: "#ffffff",
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: "700",
+    color: "#ffffff",
   },
   successContainer: {
     padding: 24,
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#ffffff",
+    gap: 14,
   },
   successIconCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: "#fef3c7",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: "#fde68a",
+    marginTop: 20,
   },
   pendingBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 5,
     backgroundColor: "#fef3c7",
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 9999,
-    marginBottom: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
   },
   pendingBadgeText: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
     color: "#b45309",
   },
   successTitle: {
     fontSize: 22,
-    fontWeight: "900",
+    fontWeight: "800",
     color: "#0f172a",
     textAlign: "center",
-    marginBottom: 8,
   },
   successTitleDark: {
     color: "#f8fafc",
   },
   successSubtitle: {
-    fontSize: 13,
-    color: "#475569",
+    fontSize: 14,
+    color: "#64748b",
     textAlign: "center",
-    lineHeight: 19,
-    marginBottom: 20,
+    lineHeight: 20,
   },
   successInfoCard: {
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#eff5fb",
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 14,
+    padding: 16,
+    gap: 12,
     width: "100%",
-    gap: 10,
-    marginBottom: 24,
+    marginTop: 6,
   },
   successInfoCardDark: {
-    backgroundColor: "#16203a",
-    borderColor: "#1e293b",
+    backgroundColor: "#03142e",
   },
   successInfoRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
+    gap: 10,
   },
   successInfoText: {
-    fontSize: 12,
-    color: "#475569",
-    lineHeight: 18,
     flex: 1,
+    fontSize: 13,
+    color: "#1e293b",
+    lineHeight: 18,
   },
   successActionCol: {
     width: "100%",
     gap: 10,
+    marginTop: 14,
   },
   goToMarketplaceBtn: {
     backgroundColor: "#033a7d",
-    paddingVertical: 13,
+    paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
-    justifyContent: "center",
   },
   goToMarketplaceBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
     color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "800",
   },
   postAnotherBtn: {
     backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    paddingVertical: 13,
+    borderColor: "#cbd5e1",
+    paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
-    justifyContent: "center",
   },
   postAnotherBtnText: {
-    color: "#475569",
     fontSize: 14,
     fontWeight: "700",
+    color: "#0f172a",
   },
 });

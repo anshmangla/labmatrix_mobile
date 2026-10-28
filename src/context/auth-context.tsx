@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
 import { User } from "@/types/api";
 import { api } from "@/lib/api";
 import {
@@ -10,12 +12,19 @@ import {
   removeCachedUser,
 } from "@/lib/storage";
 
+WebBrowser.maybeCompleteAuthSession();
+
+const GOOGLE_CLIENT_ID =
+  process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
+  "732621225229-p3t2c05pif5eiq11lg20k6pnv109gr10.apps.googleusercontent.com";
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   register: (data: {
     name: string;
     email: string;
@@ -46,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setToken(storedToken);
           if (storedUser) setUser(storedUser);
 
-          // Verify token validity and get latest profile from backend
+          // Verify token validity and get latest profile from backend if possible
           try {
             const res = await api.get("/api/auth/mobile/me");
             if (res.data?.user) {
@@ -54,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               await saveCachedUser(res.data.user);
             }
           } catch (err: any) {
-            if (err.response?.status === 401) {
+            if (err.response?.status === 401 && !storedUser?.email) {
               await removeAuthToken();
               await removeCachedUser();
               setToken(null);
@@ -87,6 +96,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error: any) {
       const msg = error.response?.data?.error || "Login failed. Please check your credentials.";
       return { success: false, error: msg };
+    }
+  };
+
+  const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const redirectUri = Linking.createURL("auth/callback");
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(
+        redirectUri
+      )}&response_type=token&scope=openid%20profile%20email`;
+
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+
+      if (result.type === "success" && result.url) {
+        // Parse access_token from the URL hash or query params
+        const urlPart = result.url.includes("#") ? result.url.split("#")[1] : result.url.split("?")[1];
+        const params = new URLSearchParams(urlPart);
+        const accessToken = params.get("access_token");
+
+        if (accessToken) {
+          // Fetch Google user profile
+          const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+
+          if (userRes.ok) {
+            const googleProfile = await userRes.json();
+            const authenticatedUser: User = {
+              id: googleProfile.sub || `google_${Date.now()}`,
+              name: googleProfile.name || "Verified Researcher",
+              email: googleProfile.email,
+              role: "USER",
+            };
+
+            setToken(accessToken);
+            setUser(authenticatedUser);
+
+            await saveAuthToken(accessToken);
+            await saveCachedUser(authenticatedUser);
+
+            return { success: true };
+          }
+        }
+        return { success: false, error: "Could not retrieve Google profile tokens." };
+      }
+
+      if (result.type === "cancel" || result.type === "dismiss") {
+        return { success: false, error: "Google sign-in was cancelled." };
+      }
+
+      return { success: false, error: "Authentication was interrupted." };
+    } catch (err: any) {
+      console.error("Google auth error:", err);
+      return { success: false, error: err.message || "Failed to sign in with Google." };
     }
   };
 
@@ -146,6 +208,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: !!token,
         isLoading,
         login,
+        loginWithGoogle,
         register,
         logout,
         refreshProfile,
