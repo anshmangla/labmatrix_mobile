@@ -152,11 +152,7 @@ export default function RegisterScreen() {
           {
             text: "Proceed to Marketplace",
             onPress: () => {
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                router.replace("/(tabs)");
-              }
+              router.replace("/(tabs)");
             },
           },
         ]
@@ -177,7 +173,7 @@ export default function RegisterScreen() {
           activeOpacity={0.7}
           onPress={() => {
             if (router.canGoBack()) router.back();
-            else router.replace("/(tabs)");
+            else router.replace("/(auth)/login");
           }}
         >
           <ArrowLeft size={20} color={isDark ? "#f8fafc" : "#0f172a"} />

@@ -14,10 +14,24 @@ import {
   Image,
   SafeAreaView,
   StatusBar,
+  Linking,
 } from "react-native";
 import { useRouter } from "expo-router";
 import Svg, { Path } from "react-native-svg";
-import { Lock, Mail, ArrowRight, ShieldCheck, ArrowLeft, Eye, EyeOff, AlertCircle, X } from "lucide-react-native";
+import {
+  Lock,
+  Mail,
+  ArrowRight,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  AlertCircle,
+  X,
+  HelpCircle,
+  User as UserIcon,
+  Wrench,
+  Building2,
+} from "lucide-react-native";
 import { useAuth } from "@/context/auth-context";
 import { LabMatrixTokens } from "@/constants/theme";
 
@@ -44,7 +58,7 @@ function GoogleLogo() {
   );
 }
 
-export default function LoginScreen() {
+export default function LoginLandingScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -70,11 +84,7 @@ export default function LoginScreen() {
     setIsLoading(false);
 
     if (res.success) {
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace("/(tabs)");
-      }
+      router.replace("/(tabs)");
     } else {
       setAuthError(
         res.error || "Incorrect email or password. Please verify your credentials and try again."
@@ -89,11 +99,7 @@ export default function LoginScreen() {
     setIsGoogleLoading(false);
 
     if (res.success) {
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace("/(tabs)");
-      }
+      router.replace("/(tabs)");
     } else {
       if (res.error && !res.error.includes("cancelled")) {
         setAuthError(res.error);
@@ -101,30 +107,54 @@ export default function LoginScreen() {
     }
   };
 
+  const handleCallHelpDesk = () => {
+    Linking.openURL("tel:+917303040804").catch(() => {
+      Alert.alert(
+        "LabMatrix Help Desk",
+        "Helpline: +91 73030 40804\nEmail: sales@labmatrixindia.com\nAvailable Mon-Sat 9AM - 7PM IST"
+      );
+    });
+  };
+
+  const handleOpenPolicy = (title: string, message: string) => {
+    Alert.alert(title, message, [{ text: "Understood", style: "default" }]);
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-      {/* Top Header */}
+      {/* Top Header Bar matching Mockup */}
       <View style={[styles.topBar, isDark && styles.topBarDark]}>
-        <TouchableOpacity
-          style={styles.backButton}
-          activeOpacity={0.7}
-          onPress={() => {
-            if (router.canGoBack()) router.back();
-            else router.replace("/(tabs)");
-          }}
-        >
-          <ArrowLeft size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-        </TouchableOpacity>
+        <View style={styles.topBarLeft}>
+          <Image
+            source={require("@/assets/images/logo.png")}
+            style={styles.logoImg}
+            resizeMode="contain"
+          />
+        </View>
 
-        <Image
-          source={require("@/assets/images/logo.png")}
-          style={styles.logoImg}
-          resizeMode="contain"
-        />
+        <View style={styles.topBarRight}>
+          <View style={styles.exchangeTitleCol}>
+            <Text style={[styles.exchangeTitle, isDark && styles.exchangeTitleDark]}>
+              LabMatrix
+            </Text>
+            <Text style={styles.exchangeSub}>Surplus Exchange</Text>
+          </View>
 
-        <View style={{ width: 36 }} />
+          <TouchableOpacity
+            style={styles.helpIconBtn}
+            activeOpacity={0.7}
+            onPress={handleCallHelpDesk}
+            accessibilityLabel="Help Desk"
+          >
+            <HelpCircle size={20} color={isDark ? "#cbd5e1" : "#475569"} />
+          </TouchableOpacity>
+
+          <View style={styles.userAvatarCircle}>
+            <UserIcon size={16} color="#ffffff" />
+          </View>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -136,24 +166,40 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Welcome Card */}
-          <View style={styles.headerBlock}>
-            <Text style={[styles.pageTitle, isDark && styles.pageTitleDark]}>
-              Welcome Back
+          {/* Green Status Tag */}
+          <View style={styles.statusPillRow}>
+            <View style={styles.statusDotGreen} />
+            <Text style={styles.statusPillText}>
+              VERIFIED B2B SURPLUS • CLINICAL & PHARMA
             </Text>
-            <Text style={styles.pageSubtitle}>
-              Sign in to manage analytical instruments, deal inquiries, and sourcing requests.
-            </Text>
-
-            <View style={styles.assurancePill}>
-              <ShieldCheck size={13} color="#033a7d" />
-              <Text style={styles.assurancePillText}>Verified Clinical Portal • Direct Lab Escrow</Text>
-            </View>
           </View>
 
-          {/* Form Card */}
+          {/* Hero Branding & Headings */}
+          <View style={styles.heroBlock}>
+            <Image
+              source={require("@/assets/images/logo.png")}
+              style={styles.heroLogoImg}
+              resizeMode="contain"
+            />
+            <Text style={[styles.heroHeading, isDark && styles.heroHeadingDark]}>
+              Sign in to your lab account
+            </Text>
+            <Text style={styles.heroSubtitle}>
+              Direct institutional trading for certified refurbished chromatography,
+              mass specs, and laboratory surplus spares.
+            </Text>
+          </View>
+
+          {/* Floating Sign-In Form Card */}
           <View style={[styles.formCard, isDark && styles.formCardDark]}>
-            {/* Google One-Tap Sign In Button */}
+            <Text style={[styles.cardTitle, isDark && styles.cardTitleDark]}>
+              Sign in to your account
+            </Text>
+            <Text style={styles.cardSubtitle}>
+              Verified marketplace for analytical & pharma instruments
+            </Text>
+
+            {/* Google One-Tap Sign In */}
             <TouchableOpacity
               style={[styles.googleBtn, isDark && styles.googleBtnDark]}
               activeOpacity={0.85}
@@ -172,23 +218,29 @@ export default function LoginScreen() {
               )}
             </TouchableOpacity>
 
-            {/* Divider */}
+            {/* OR SIGN IN WITH EMAIL Divider */}
             <View style={styles.dividerRow}>
               <View style={[styles.dividerLine, isDark && styles.dividerLineDark]} />
               <Text style={styles.dividerText}>OR SIGN IN WITH EMAIL</Text>
               <View style={[styles.dividerLine, isDark && styles.dividerLineDark]} />
             </View>
 
-            {/* Email Field */}
+            {/* Email Address Field */}
             <View style={styles.inputGroup}>
               <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
-                Facility / Researcher Email *
+                Email address
               </Text>
-              <View style={[styles.inputBox, isDark && styles.inputBoxDark]}>
+              <View
+                style={[
+                  styles.inputBox,
+                  isDark && styles.inputBoxDark,
+                  authError && styles.inputBoxError,
+                ]}
+              >
                 <Mail size={18} color="#64748b" style={{ marginLeft: 12 }} />
                 <TextInput
                   style={[styles.inputField, isDark && styles.inputFieldDark]}
-                  placeholder="scientist@laboratory.org"
+                  placeholder="analyst@labmatrix.com"
                   placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
                   keyboardType="email-address"
                   autoCapitalize="none"
@@ -206,7 +258,7 @@ export default function LoginScreen() {
             <View style={styles.inputGroup}>
               <View style={styles.passwordLabelRow}>
                 <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
-                  Account Password *
+                  Password
                 </Text>
                 <TouchableOpacity
                   activeOpacity={0.7}
@@ -283,7 +335,7 @@ export default function LoginScreen() {
               </View>
             )}
 
-            {/* Submit Action */}
+            {/* Sign in Button */}
             <TouchableOpacity
               style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
               activeOpacity={0.85}
@@ -294,31 +346,105 @@ export default function LoginScreen() {
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
                 <>
-                  <Text style={styles.submitButtonText}>Sign In to LabMatrix</Text>
-                  <ArrowRight size={16} color="#ffffff" />
+                  <Text style={styles.submitButtonText}>Sign in</Text>
+                  <ArrowRight size={17} color="#ffffff" />
                 </>
               )}
             </TouchableOpacity>
+
+            {/* Privacy Guarantee Note */}
+            <View style={styles.privacyNoteRow}>
+              <ShieldCheck size={16} color="#fbc634" style={{ marginTop: 1, flexShrink: 0 }} />
+              <Text style={styles.privacyNoteText}>
+                Privacy protected. No public phone or email exposure across bidding.
+              </Text>
+            </View>
           </View>
 
           {/* Registration Redirect */}
           <View style={styles.registerBlock}>
-            <Text style={styles.registerPrompt}>Don't have a verified facility account?</Text>
-            <TouchableOpacity
-              style={styles.registerButton}
-              activeOpacity={0.8}
-              onPress={() => router.push("/(auth)/register" as any)}
-            >
-              <Text style={styles.registerButtonText}>Register Laboratory Account</Text>
-            </TouchableOpacity>
+            <Text style={styles.registerPrompt}>
+              Don't have an account yet?{" "}
+              <Text
+                style={styles.createAccountLink}
+                onPress={() => router.push("/(auth)/register" as any)}
+              >
+                Create an account
+              </Text>
+            </Text>
           </View>
 
-          {/* Help Contact */}
-          <View style={styles.supportFootnote}>
-            <Text style={styles.supportFootnoteText}>
-              Need immediate help? Call Support Desk at{" "}
-              <Text style={{ fontWeight: "700", color: "#033a7d" }}>+91 73030 40804</Text>
+          {/* Guaranteed Trust Protocol & ISO 17025 Ready Section */}
+          <View style={styles.trustSection}>
+            <View style={styles.trustHeaderRow}>
+              <Text style={styles.trustHeaderLabel}>GUARANTEED TRUST PROTOCOL</Text>
+              <Text style={styles.trustHeaderLabel}>ISO 17025 READY</Text>
+            </View>
+
+            <View style={styles.trustCardsRow}>
+              {/* Card 1 */}
+              <View style={[styles.trustCard, isDark && styles.trustCardDark]}>
+                <ShieldCheck size={20} color="#033a7d" />
+                <Text style={[styles.trustCardTitle, isDark && styles.trustCardTitleDark]}>
+                  Verified Pharma Labs
+                </Text>
+              </View>
+
+              {/* Card 2 */}
+              <View style={[styles.trustCard, isDark && styles.trustCardDark]}>
+                <Wrench size={20} color="#033a7d" />
+                <Text style={[styles.trustCardTitle, isDark && styles.trustCardTitleDark]}>
+                  Technical Inspections
+                </Text>
+              </View>
+
+              {/* Card 3 */}
+              <View style={[styles.trustCard, isDark && styles.trustCardDark]}>
+                <Building2 size={20} color="#033a7d" />
+                <Text style={[styles.trustCardTitle, isDark && styles.trustCardTitleDark]}>
+                  Escrow Coordination
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Legal Institutional Footer */}
+          <View style={styles.footerBlock}>
+            <Text style={styles.footerEntityText}>
+              Labmatrix Instruments India Pvt Ltd • Mehrauli, New Delhi
             </Text>
+
+            <View style={styles.footerLinksRow}>
+              <TouchableOpacity
+                onPress={() =>
+                  handleOpenPolicy(
+                    "Inspection Policy",
+                    "All laboratory instruments posted on LabMatrix undergo optical, mechanical, and electronic diagnostic audit prior to release of escrow payment."
+                  )
+                }
+              >
+                <Text style={styles.footerLinkText}>Inspection Policy</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.footerDividerDot}>•</Text>
+
+              <TouchableOpacity
+                onPress={() =>
+                  handleOpenPolicy(
+                    "Escrow Terms",
+                    "Buyer funds are held in secure tripartite escrow. Sellers receive payment within 48 hours of successful equipment verification and installation."
+                  )
+                }
+              >
+                <Text style={styles.footerLinkText}>Escrow Terms</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.footerDividerDot}>•</Text>
+
+              <TouchableOpacity onPress={handleCallHelpDesk}>
+                <Text style={styles.footerLinkText}>Help Desk</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -332,85 +458,155 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fafc",
   },
   safeAreaDark: {
-    backgroundColor: "#010f22",
+    backgroundColor: "#0b1320",
   },
+
+  // Top Header Bar matching mockup
   topBar: {
-    height: 58,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: "#ffffff",
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
+    borderBottomColor: "#f1f5f9",
   },
   topBarDark: {
-    backgroundColor: "#011936",
+    backgroundColor: "#0f172a",
     borderBottomColor: "#1e293b",
   },
-  backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#eff5fb",
+  topBarLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  logoImg: {
+    width: 130,
+    height: 32,
+  },
+  topBarRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  exchangeTitleCol: {
+    alignItems: "flex-end",
+  },
+  exchangeTitle: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  exchangeTitleDark: {
+    color: "#f8fafc",
+  },
+  exchangeSub: {
+    fontSize: 10,
+    color: "#64748b",
+  },
+  helpIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
-  logoImg: {
-    width: 140,
+  userAvatarCircle: {
+    width: 32,
     height: 32,
+    borderRadius: 16,
+    backgroundColor: "#011936",
+    alignItems: "center",
+    justifyContent: "center",
   },
+
   scrollContent: {
-    padding: 20,
-    gap: 20,
+    padding: 16,
     paddingBottom: 40,
   },
-  headerBlock: {
-    gap: 6,
-    paddingTop: 8,
-  },
-  pageTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#0f172a",
-    letterSpacing: -0.4,
-  },
-  pageTitleDark: {
-    color: "#f8fafc",
-  },
-  pageSubtitle: {
-    fontSize: 14,
-    color: "#64748b",
-    lineHeight: 20,
-  },
-  assurancePill: {
+
+  // Status Tag
+  statusPillRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#eff5fb",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-    alignSelf: "flex-start",
-    marginTop: 6,
+    marginTop: 8,
+    marginBottom: 12,
   },
-  assurancePillText: {
+  statusDotGreen: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#16a34a",
+  },
+  statusPillText: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#033a7d",
+    letterSpacing: 0.5,
   },
+
+  // Hero Section
+  heroBlock: {
+    marginBottom: 16,
+  },
+  heroLogoImg: {
+    width: 170,
+    height: 42,
+    marginBottom: 8,
+  },
+  heroHeading: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: -0.5,
+    marginBottom: 6,
+  },
+  heroHeadingDark: {
+    color: "#f8fafc",
+  },
+  heroSubtitle: {
+    fontSize: 13.5,
+    color: "#475569",
+    lineHeight: 20,
+  },
+
+  // Floating Sign-In Card
   formCard: {
     backgroundColor: "#ffffff",
-    borderRadius: 14,
-    padding: 18,
+    borderRadius: 18,
+    padding: 20,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    gap: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    gap: 14,
   },
   formCardDark: {
-    backgroundColor: "#03142e",
+    backgroundColor: "#131d2e",
     borderColor: "#1e293b",
   },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+    textAlign: "center",
+  },
+  cardTitleDark: {
+    color: "#f8fafc",
+  },
+  cardSubtitle: {
+    fontSize: 12,
+    color: "#64748b",
+    textAlign: "center",
+    marginTop: -8,
+    marginBottom: 4,
+  },
+
+  // Google Button
   googleBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -423,26 +619,29 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.04,
     shadowRadius: 2,
     elevation: 1,
   },
   googleBtnDark: {
-    backgroundColor: "#020d1c",
+    backgroundColor: "#0b1320",
     borderColor: "#334155",
   },
   googleBtnText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#0f172a",
+    fontSize: 13.5,
+    fontWeight: "600",
+    color: "#1e293b",
   },
   googleBtnTextDark: {
     color: "#f8fafc",
   },
+
+  // Divider
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    marginVertical: 2,
   },
   dividerLine: {
     flex: 1,
@@ -458,11 +657,13 @@ const styles = StyleSheet.create({
     color: "#94a3b8",
     letterSpacing: 0.6,
   },
+
+  // Input Groups
   inputGroup: {
-    gap: 6,
+    gap: 5,
   },
   fieldLabel: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: "700",
     color: "#0f172a",
   },
@@ -477,24 +678,40 @@ const styles = StyleSheet.create({
   forgotPasswordText: {
     fontSize: 12,
     color: "#033a7d",
-    fontWeight: "600",
+    fontWeight: "700",
   },
   inputBox: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#cbd5e1",
-    borderRadius: 8,
+    borderRadius: 10,
     backgroundColor: "#ffffff",
   },
   inputBoxDark: {
-    backgroundColor: "#020d1c",
+    backgroundColor: "#0b1320",
     borderColor: "#334155",
   },
   inputBoxError: {
     borderColor: "#f87171",
     backgroundColor: "#fffbfa",
   },
+  inputField: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    fontSize: 13.5,
+    color: "#0f172a",
+  },
+  inputFieldDark: {
+    color: "#f8fafc",
+  },
+  eyeToggleBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+
+  // Subtle Inline Error Banner
   inlineWarningBanner: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -504,7 +721,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     gap: 10,
-    marginTop: 2,
   },
   inlineWarningBannerDark: {
     backgroundColor: "#2a1215",
@@ -527,67 +743,137 @@ const styles = StyleSheet.create({
   dismissErrorBtn: {
     padding: 2,
   },
-  inputField: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: "#0f172a",
-  },
-  inputFieldDark: {
-    color: "#f8fafc",
-  },
-  eyeToggleBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
+
+  // Submit Button
   submitButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#033a7d",
-    paddingVertical: 14,
+    backgroundColor: "#002555",
+    paddingVertical: 13.5,
     borderRadius: 10,
-    marginTop: 4,
+    marginTop: 2,
+    shadowColor: "#002555",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
   },
   submitButtonDisabled: {
     opacity: 0.6,
   },
   submitButtonText: {
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#ffffff",
   },
+
+  // Privacy Note
+  privacyNoteRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingTop: 4,
+  },
+  privacyNoteText: {
+    fontSize: 11.5,
+    color: "#64748b",
+    lineHeight: 16,
+    flex: 1,
+  },
+
+  // Register Callout
   registerBlock: {
     alignItems: "center",
-    gap: 8,
-    paddingTop: 6,
+    marginTop: 18,
+    marginBottom: 20,
   },
   registerPrompt: {
-    fontSize: 13,
-    color: "#64748b",
+    fontSize: 13.5,
+    color: "#475569",
   },
-  registerButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    backgroundColor: "#eff5fb",
-    borderWidth: 1,
-    borderColor: "#dbeaf7",
-  },
-  registerButtonText: {
-    fontSize: 13,
-    fontWeight: "700",
+  createAccountLink: {
+    fontWeight: "800",
     color: "#033a7d",
   },
-  supportFootnote: {
-    alignItems: "center",
-    paddingTop: 10,
+
+  // Trust Protocol Section
+  trustSection: {
+    backgroundColor: "transparent",
+    marginBottom: 20,
   },
-  supportFootnoteText: {
-    fontSize: 12,
+  trustHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+    paddingHorizontal: 2,
+  },
+  trustHeaderLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#64748b",
+    letterSpacing: 0.5,
+  },
+  trustCardsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  trustCard: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    gap: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  trustCardDark: {
+    backgroundColor: "#131d2e",
+    borderColor: "#1e293b",
+  },
+  trustCardTitle: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: "#0f172a",
+    textAlign: "center",
+  },
+  trustCardTitleDark: {
+    color: "#f8fafc",
+  },
+
+  // Legal Institutional Footer
+  footerBlock: {
+    alignItems: "center",
+    paddingTop: 4,
+    gap: 8,
+  },
+  footerEntityText: {
+    fontSize: 11,
     color: "#64748b",
     textAlign: "center",
+  },
+  footerLinksRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  footerLinkText: {
+    fontSize: 11,
+    color: "#64748b",
+    fontWeight: "600",
+  },
+  footerDividerDot: {
+    fontSize: 11,
+    color: "#cbd5e1",
   },
 });
