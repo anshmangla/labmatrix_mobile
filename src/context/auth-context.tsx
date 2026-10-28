@@ -83,7 +83,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      const res = await api.post("/api/auth/mobile/login", { email, password });
+      const res = await api.post("/api/auth/mobile/login", {
+        email: email.trim().toLowerCase(),
+        password,
+      });
       const { token: receivedToken, user: receivedUser } = res.data;
 
       setToken(receivedToken);
@@ -94,14 +97,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { success: true };
     } catch (error: any) {
-      const msg = error.response?.data?.error || "Login failed. Please check your credentials.";
-      return { success: false, error: msg };
+      console.error("Login API Error:", error.response?.status, error.response?.data, error.message);
+      if (error.response?.data?.error) {
+        return { success: false, error: error.response.data.error };
+      }
+      if (error.message === "Network Error" || !error.response) {
+        return {
+          success: false,
+          error: "Network error: Unable to reach server at surplus.labmatrixindia.com. Please check your internet connection.",
+        };
+      }
+      return { success: false, error: "Login failed. Please check your credentials." };
     }
   };
 
   const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
     try {
-      const redirectUri = Linking.createURL("auth/callback");
+      // Use the authorized Expo HTTPS proxy URI registered in Google Cloud Console
+      const redirectUri = "https://auth.expo.io/@anshmangla/labmatrix-market";
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(
         redirectUri
       )}&response_type=token&scope=openid%20profile%20email`;

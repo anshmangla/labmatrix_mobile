@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import Svg, { Path } from "react-native-svg";
-import { Lock, Mail, ArrowRight, ShieldCheck, ArrowLeft } from "lucide-react-native";
+import { Lock, Mail, ArrowRight, ShieldCheck, ArrowLeft, Eye, EyeOff } from "lucide-react-native";
 import { useAuth } from "@/context/auth-context";
 import { LabMatrixTokens } from "@/constants/theme";
 
@@ -53,6 +53,7 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
@@ -212,10 +213,23 @@ export default function LoginScreen() {
                   style={[styles.inputField, isDark && styles.inputFieldDark]}
                   placeholder="••••••••••••"
                   placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
                   value={password}
                   onChangeText={setPassword}
                 />
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeToggleBtn}
+                >
+                  {showPassword ? (
+                    <EyeOff size={18} color="#64748b" />
+                  ) : (
+                    <Eye size={18} color="#64748b" />
+                  )}
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -436,6 +450,10 @@ const styles = StyleSheet.create({
   },
   inputFieldDark: {
     color: "#f8fafc",
+  },
+  eyeToggleBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   submitButton: {
     flexDirection: "row",
