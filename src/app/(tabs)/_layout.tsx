@@ -78,16 +78,16 @@ export default function TabLayout() {
       <Tabs.Screen
         name="inquiries"
         options={{
+          headerShown: false,
           title: "Inquiries",
-          headerTitle: "My Inquiries",
           tabBarIcon: ({ color, size }) => <MessageSquare color={color} size={size || 22} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
+          headerShown: false,
           title: "Profile",
-          headerTitle: "My Account",
           tabBarIcon: ({ color, size }) => <User color={color} size={size || 22} />,
         }}
       />
