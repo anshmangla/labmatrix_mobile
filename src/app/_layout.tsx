@@ -54,28 +54,26 @@ export default function RootLayout() {
                 headerBackTitle: "Back",
               }}
             />
+            <Stack.Screen name="admin" options={{ headerShown: false }} />
             <Stack.Screen
               name="(auth)/login"
               options={{
                 presentation: "modal",
-                headerShown: true,
-                title: "Sign In",
+                headerShown: false,
               }}
             />
             <Stack.Screen
               name="(auth)/register"
               options={{
                 presentation: "modal",
-                headerShown: true,
-                title: "Create Account",
+                headerShown: false,
               }}
             />
             <Stack.Screen
               name="(auth)/forgot-password"
               options={{
                 presentation: "modal",
-                headerShown: true,
-                title: "Reset Password",
+                headerShown: false,
               }}
             />
           </Stack>
