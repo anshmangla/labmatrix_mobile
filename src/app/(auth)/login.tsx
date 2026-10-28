@@ -29,8 +29,8 @@ import {
   X,
   HelpCircle,
   User as UserIcon,
-  Wrench,
-  Building2,
+  Microscope,
+  CheckCircle2,
 } from "lucide-react-native";
 import { useAuth } from "@/context/auth-context";
 import { LabMatrixTokens } from "@/constants/theme";
@@ -116,15 +116,11 @@ export default function LoginLandingScreen() {
     });
   };
 
-  const handleOpenPolicy = (title: string, message: string) => {
-    Alert.alert(title, message, [{ text: "Understood", style: "default" }]);
-  };
-
   return (
     <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-      {/* Top Header Bar matching Mockup */}
+      {/* 1. Top Header Bar matching Mockup */}
       <View style={[styles.topBar, isDark && styles.topBarDark]}>
         <View style={styles.topBarLeft}>
           <Image
@@ -135,20 +131,13 @@ export default function LoginLandingScreen() {
         </View>
 
         <View style={styles.topBarRight}>
-          <View style={styles.exchangeTitleCol}>
-            <Text style={[styles.exchangeTitle, isDark && styles.exchangeTitleDark]}>
-              LabMatrix
-            </Text>
-            <Text style={styles.exchangeSub}>Surplus Exchange</Text>
-          </View>
-
           <TouchableOpacity
             style={styles.helpIconBtn}
             activeOpacity={0.7}
             onPress={handleCallHelpDesk}
             accessibilityLabel="Help Desk"
           >
-            <HelpCircle size={20} color={isDark ? "#cbd5e1" : "#475569"} />
+            <HelpCircle size={21} color={isDark ? "#cbd5e1" : "#475569"} />
           </TouchableOpacity>
 
           <View style={styles.userAvatarCircle}>
@@ -166,37 +155,60 @@ export default function LoginLandingScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Green Status Tag */}
-          <View style={styles.statusPillRow}>
-            <View style={styles.statusDotGreen} />
-            <Text style={styles.statusPillText}>
-              VERIFIED B2B SURPLUS • CLINICAL & PHARMA
-            </Text>
+          {/* 2. Top Pill Tag */}
+          <View style={styles.pillTagWrapper}>
+            <View style={[styles.statusPill, isDark && styles.statusPillDark]}>
+              <View style={styles.statusDotGreen} />
+              <Text style={styles.statusPillText}>
+                India's B2B Exchange • Refurbished Machinery
+              </Text>
+            </View>
           </View>
 
-          {/* Hero Branding & Headings */}
+          {/* 3. Hero Headline & Subtitle */}
           <View style={styles.heroBlock}>
-            <Image
-              source={require("@/assets/images/logo.png")}
-              style={styles.heroLogoImg}
-              resizeMode="contain"
-            />
             <Text style={[styles.heroHeading, isDark && styles.heroHeadingDark]}>
-              Sign in to your lab account
+              Buy & Sell Refurbished Analytical Instruments
             </Text>
             <Text style={styles.heroSubtitle}>
-              Direct institutional trading for certified refurbished chromatography,
-              mass specs, and laboratory surplus spares.
+              India's verified exchange for pre-owned HPLC, GC-MS & OEM replacement parts.
             </Text>
           </View>
 
-          {/* Floating Sign-In Form Card */}
+          {/* 4. Dual Value Proposition Cards (FOR BUYERS & FOR SELLERS) */}
+          <View style={styles.valuePropsRow}>
+            {/* For Buyers Card */}
+            <View style={[styles.valueCard, isDark && styles.valueCardDark]}>
+              <View style={styles.valueCardHeader}>
+                <Microscope size={15} color="#033a7d" />
+                <Text style={styles.buyerLabel}>FOR BUYERS</Text>
+              </View>
+              <Text style={[styles.valueMetric, isDark && styles.valueMetricDark]}>
+                40–70% Off OEM
+              </Text>
+              <Text style={styles.valueSubtext}>Tested bench reports</Text>
+            </View>
+
+            {/* For Sellers Card */}
+            <View style={[styles.valueCard, isDark && styles.valueCardDark]}>
+              <View style={styles.valueCardHeader}>
+                <ShieldCheck size={15} color="#b45309" />
+                <Text style={styles.sellerLabel}>FOR SELLERS</Text>
+              </View>
+              <Text style={[styles.valueMetric, isDark && styles.valueMetricDark]}>
+                1,200+ Lab Network
+              </Text>
+              <Text style={styles.valueSubtext}>Zero-spam escrow</Text>
+            </View>
+          </View>
+
+          {/* 5. Floating Sign-In Form Card */}
           <View style={[styles.formCard, isDark && styles.formCardDark]}>
             <Text style={[styles.cardTitle, isDark && styles.cardTitleDark]}>
-              Sign in to your account
+              Sign in to LabMatrix
             </Text>
             <Text style={styles.cardSubtitle}>
-              Verified marketplace for analytical & pharma instruments
+              Access verified inventory & surplus machinery
             </Text>
 
             {/* Google One-Tap Sign In */}
@@ -225,10 +237,10 @@ export default function LoginLandingScreen() {
               <View style={[styles.dividerLine, isDark && styles.dividerLineDark]} />
             </View>
 
-            {/* Email Address Field */}
+            {/* Work / Institutional Email Field */}
             <View style={styles.inputGroup}>
               <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
-                Email address
+                Work / Institutional Email
               </Text>
               <View
                 style={[
@@ -237,7 +249,7 @@ export default function LoginLandingScreen() {
                   authError && styles.inputBoxError,
                 ]}
               >
-                <Mail size={18} color="#64748b" style={{ marginLeft: 12 }} />
+                <Mail size={18} color="#64748b" style={{ marginLeft: 14 }} />
                 <TextInput
                   style={[styles.inputField, isDark && styles.inputFieldDark]}
                   placeholder="analyst@labmatrix.com"
@@ -274,7 +286,7 @@ export default function LoginLandingScreen() {
                   authError && styles.inputBoxError,
                 ]}
               >
-                <Lock size={18} color="#64748b" style={{ marginLeft: 12 }} />
+                <Lock size={18} color="#64748b" style={{ marginLeft: 14 }} />
                 <TextInput
                   style={[styles.inputField, isDark && styles.inputFieldDark]}
                   placeholder="••••••••••••"
@@ -335,7 +347,7 @@ export default function LoginLandingScreen() {
               </View>
             )}
 
-            {/* Sign in Button */}
+            {/* Sign in to Marketplace Button */}
             <TouchableOpacity
               style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
               activeOpacity={0.85}
@@ -346,22 +358,22 @@ export default function LoginLandingScreen() {
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
                 <>
-                  <Text style={styles.submitButtonText}>Sign in</Text>
+                  <Text style={styles.submitButtonText}>Sign in to Marketplace</Text>
                   <ArrowRight size={17} color="#ffffff" />
                 </>
               )}
             </TouchableOpacity>
 
-            {/* Privacy Guarantee Note */}
-            <View style={styles.privacyNoteRow}>
-              <ShieldCheck size={16} color="#fbc634" style={{ marginTop: 1, flexShrink: 0 }} />
-              <Text style={styles.privacyNoteText}>
-                Privacy protected. No public phone or email exposure across bidding.
+            {/* Masked Privacy Guarantee Box */}
+            <View style={[styles.privacyBox, isDark && styles.privacyBoxDark]}>
+              <Lock size={15} color="#b45309" style={{ marginTop: 1, flexShrink: 0 }} />
+              <Text style={styles.privacyBoxText}>
+                Masked phone & email guarantee. Zero unsolicited sales spam.
               </Text>
             </View>
           </View>
 
-          {/* Registration Redirect */}
+          {/* 6. Registration Redirect */}
           <View style={styles.registerBlock}>
             <Text style={styles.registerPrompt}>
               Don't have an account yet?{" "}
@@ -374,77 +386,33 @@ export default function LoginLandingScreen() {
             </Text>
           </View>
 
-          {/* Guaranteed Trust Protocol & ISO 17025 Ready Section */}
-          <View style={styles.trustSection}>
-            <View style={styles.trustHeaderRow}>
-              <Text style={styles.trustHeaderLabel}>GUARANTEED TRUST PROTOCOL</Text>
-              <Text style={styles.trustHeaderLabel}>ISO 17025 READY</Text>
-            </View>
-
-            <View style={styles.trustCardsRow}>
-              {/* Card 1 */}
-              <View style={[styles.trustCard, isDark && styles.trustCardDark]}>
-                <ShieldCheck size={20} color="#033a7d" />
-                <Text style={[styles.trustCardTitle, isDark && styles.trustCardTitleDark]}>
-                  Verified Pharma Labs
-                </Text>
+          {/* 7. Footer Trust Seals matching Mockup */}
+          <View style={styles.trustFooterSection}>
+            <View style={styles.trustSealsRow}>
+              <View style={styles.trustSealItem}>
+                <CheckCircle2 size={14} color="#15803d" />
+                <Text style={styles.trustSealText}>Tested & Inspected</Text>
               </View>
 
-              {/* Card 2 */}
-              <View style={[styles.trustCard, isDark && styles.trustCardDark]}>
-                <Wrench size={20} color="#033a7d" />
-                <Text style={[styles.trustCardTitle, isDark && styles.trustCardTitleDark]}>
-                  Technical Inspections
-                </Text>
-              </View>
+              <Text style={styles.trustSealDot}>•</Text>
 
-              {/* Card 3 */}
-              <View style={[styles.trustCard, isDark && styles.trustCardDark]}>
-                <Building2 size={20} color="#033a7d" />
-                <Text style={[styles.trustCardTitle, isDark && styles.trustCardTitleDark]}>
-                  Escrow Coordination
-                </Text>
+              <View style={styles.trustSealItem}>
+                <CheckCircle2 size={14} color="#15803d" />
+                <Text style={styles.trustSealText}>Direct Lab Pricing</Text>
               </View>
             </View>
-          </View>
 
-          {/* Legal Institutional Footer */}
-          <View style={styles.footerBlock}>
-            <Text style={styles.footerEntityText}>
-              Labmatrix Instruments India Pvt Ltd • Mehrauli, New Delhi
+            <View style={styles.trustSealsSecondRow}>
+              <View style={styles.trustSealItem}>
+                <CheckCircle2 size={14} color="#15803d" />
+                <Text style={styles.trustSealText}>Secure Escrow</Text>
+              </View>
+            </View>
+
+            {/* Copyright Line */}
+            <Text style={styles.copyrightText}>
+              © 2026 Labmatrix Instruments India Pvt. Ltd. • New Delhi
             </Text>
-
-            <View style={styles.footerLinksRow}>
-              <TouchableOpacity
-                onPress={() =>
-                  handleOpenPolicy(
-                    "Inspection Policy",
-                    "All laboratory instruments posted on LabMatrix undergo optical, mechanical, and electronic diagnostic audit prior to release of escrow payment."
-                  )
-                }
-              >
-                <Text style={styles.footerLinkText}>Inspection Policy</Text>
-              </TouchableOpacity>
-
-              <Text style={styles.footerDividerDot}>•</Text>
-
-              <TouchableOpacity
-                onPress={() =>
-                  handleOpenPolicy(
-                    "Escrow Terms",
-                    "Buyer funds are held in secure tripartite escrow. Sellers receive payment within 48 hours of successful equipment verification and installation."
-                  )
-                }
-              >
-                <Text style={styles.footerLinkText}>Escrow Terms</Text>
-              </TouchableOpacity>
-
-              <Text style={styles.footerDividerDot}>•</Text>
-
-              <TouchableOpacity onPress={handleCallHelpDesk}>
-                <Text style={styles.footerLinkText}>Help Desk</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -455,54 +423,36 @@ export default function LoginLandingScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#ffffff",
   },
   safeAreaDark: {
-    backgroundColor: "#0b1320",
+    backgroundColor: "#080f1a",
   },
 
-  // Top Header Bar matching mockup
+  // Top Header Bar
   topBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     paddingVertical: 12,
     backgroundColor: "#ffffff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
   },
   topBarDark: {
-    backgroundColor: "#0f172a",
-    borderBottomColor: "#1e293b",
+    backgroundColor: "#080f1a",
   },
   topBarLeft: {
     flexDirection: "row",
     alignItems: "center",
   },
   logoImg: {
-    width: 130,
-    height: 32,
+    width: 140,
+    height: 34,
   },
   topBarRight: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-  },
-  exchangeTitleCol: {
-    alignItems: "flex-end",
-  },
-  exchangeTitle: {
-    fontSize: 12.5,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  exchangeTitleDark: {
-    color: "#f8fafc",
-  },
-  exchangeSub: {
-    fontSize: 10,
-    color: "#64748b",
   },
   helpIconBtn: {
     width: 32,
@@ -512,54 +462,60 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   userAvatarCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: "#011936",
     alignItems: "center",
     justifyContent: "center",
   },
 
   scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 36,
   },
 
-  // Status Tag
-  statusPillRow: {
+  // Pill Tag
+  pillTagWrapper: {
+    alignItems: "flex-start",
+    marginBottom: 10,
+  },
+  statusPill: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#eff5fb",
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 20,
     gap: 6,
-    marginTop: 8,
-    marginBottom: 12,
+  },
+  statusPillDark: {
+    backgroundColor: "#132138",
   },
   statusDotGreen: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#16a34a",
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "#10b981",
   },
   statusPillText: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: "800",
     color: "#033a7d",
-    letterSpacing: 0.5,
+    letterSpacing: 0.2,
   },
 
   // Hero Section
   heroBlock: {
-    marginBottom: 16,
-  },
-  heroLogoImg: {
-    width: 170,
-    height: 42,
-    marginBottom: 8,
+    marginBottom: 14,
   },
   heroHeading: {
-    fontSize: 26,
+    fontSize: 25,
     fontWeight: "900",
-    color: "#0f172a",
-    letterSpacing: -0.5,
+    color: "#002555",
+    letterSpacing: -0.6,
+    lineHeight: 31,
     marginBottom: 6,
   },
   heroHeadingDark: {
@@ -571,10 +527,65 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // Floating Sign-In Card
+  // Dual Value Cards
+  valuePropsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  valueCard: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  valueCardDark: {
+    backgroundColor: "#0f172a",
+    borderColor: "#1e293b",
+  },
+  valueCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  buyerLabel: {
+    fontSize: 10.5,
+    fontWeight: "800",
+    color: "#033a7d",
+    letterSpacing: 0.5,
+  },
+  sellerLabel: {
+    fontSize: 10.5,
+    fontWeight: "800",
+    color: "#b45309",
+    letterSpacing: 0.5,
+  },
+  valueMetric: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginTop: 5,
+  },
+  valueMetricDark: {
+    color: "#f8fafc",
+  },
+  valueSubtext: {
+    fontSize: 10.5,
+    color: "#64748b",
+    marginTop: 1,
+  },
+
+  // Floating Sign-In Form Card
   formCard: {
     backgroundColor: "#ffffff",
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 20,
     borderWidth: 1,
     borderColor: "#e2e8f0",
@@ -583,15 +594,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
-    gap: 14,
+    gap: 13,
   },
   formCardDark: {
-    backgroundColor: "#131d2e",
+    backgroundColor: "#0f172a",
     borderColor: "#1e293b",
   },
   cardTitle: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 19,
+    fontWeight: "900",
     color: "#0f172a",
     textAlign: "center",
   },
@@ -599,11 +610,11 @@ const styles = StyleSheet.create({
     color: "#f8fafc",
   },
   cardSubtitle: {
-    fontSize: 12,
+    fontSize: 12.5,
     color: "#64748b",
     textAlign: "center",
     marginTop: -8,
-    marginBottom: 4,
+    marginBottom: 3,
   },
 
   // Google Button
@@ -612,25 +623,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f0f4ff",
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: "#e0e7ff",
     paddingVertical: 12,
-    borderRadius: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
+    borderRadius: 11,
   },
   googleBtnDark: {
-    backgroundColor: "#0b1320",
-    borderColor: "#334155",
+    backgroundColor: "#132138",
+    borderColor: "#1e3a8a",
   },
   googleBtnText: {
     fontSize: 13.5,
-    fontWeight: "600",
-    color: "#1e293b",
+    fontWeight: "700",
+    color: "#0f172a",
   },
   googleBtnTextDark: {
     color: "#f8fafc",
@@ -652,13 +658,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#1e293b",
   },
   dividerText: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "800",
     color: "#94a3b8",
-    letterSpacing: 0.6,
+    letterSpacing: 0.8,
   },
 
-  // Input Groups
+  // Input Fields
   inputGroup: {
     gap: 5,
   },
@@ -684,13 +690,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#cbd5e1",
+    borderColor: "#e2e8f0",
     borderRadius: 10,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f3f6fc",
   },
   inputBoxDark: {
-    backgroundColor: "#0b1320",
-    borderColor: "#334155",
+    backgroundColor: "#131d2e",
+    borderColor: "#1e293b",
   },
   inputBoxError: {
     borderColor: "#f87171",
@@ -711,7 +717,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
 
-  // Subtle Inline Error Banner
+  // Subtle Warning Banner
   inlineWarningBanner: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -769,16 +775,22 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
 
-  // Privacy Note
-  privacyNoteRow: {
+  // Masked Privacy Note Box
+  privacyBox: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    paddingTop: 4,
+    alignItems: "center",
+    backgroundColor: "#f0f4ff",
+    borderRadius: 10,
+    padding: 12,
+    gap: 9,
+    marginTop: 2,
   },
-  privacyNoteText: {
+  privacyBoxDark: {
+    backgroundColor: "#132138",
+  },
+  privacyBoxText: {
     fontSize: 11.5,
-    color: "#64748b",
+    color: "#475569",
     lineHeight: 16,
     flex: 1,
   },
@@ -787,10 +799,10 @@ const styles = StyleSheet.create({
   registerBlock: {
     alignItems: "center",
     marginTop: 18,
-    marginBottom: 20,
+    marginBottom: 22,
   },
   registerPrompt: {
-    fontSize: 13.5,
+    fontSize: 13,
     color: "#475569",
   },
   createAccountLink: {
@@ -798,82 +810,41 @@ const styles = StyleSheet.create({
     color: "#033a7d",
   },
 
-  // Trust Protocol Section
-  trustSection: {
-    backgroundColor: "transparent",
-    marginBottom: 20,
-  },
-  trustHeaderRow: {
-    flexDirection: "row",
+  // Footer Trust Seals
+  trustFooterSection: {
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-    paddingHorizontal: 2,
+    gap: 6,
   },
-  trustHeaderLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#64748b",
-    letterSpacing: 0.5,
-  },
-  trustCardsRow: {
+  trustSealsRow: {
     flexDirection: "row",
-    gap: 8,
-  },
-  trustCard: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 6,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    gap: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  trustCardDark: {
-    backgroundColor: "#131d2e",
-    borderColor: "#1e293b",
-  },
-  trustCardTitle: {
-    fontSize: 10.5,
-    fontWeight: "700",
-    color: "#0f172a",
-    textAlign: "center",
-  },
-  trustCardTitleDark: {
-    color: "#f8fafc",
-  },
-
-  // Legal Institutional Footer
-  footerBlock: {
-    alignItems: "center",
-    paddingTop: 4,
     gap: 8,
   },
-  footerEntityText: {
-    fontSize: 11,
-    color: "#64748b",
-    textAlign: "center",
-  },
-  footerLinksRow: {
+  trustSealsSecondRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "center",
+    marginTop: 2,
   },
-  footerLinkText: {
+  trustSealItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  trustSealText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#334155",
+  },
+  trustSealDot: {
+    fontSize: 12,
+    color: "#cbd5e1",
+  },
+  copyrightText: {
     fontSize: 11,
     color: "#64748b",
-    fontWeight: "600",
-  },
-  footerDividerDot: {
-    fontSize: 11,
-    color: "#cbd5e1",
+    textAlign: "center",
+    marginTop: 8,
   },
 });
