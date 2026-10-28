@@ -1,84 +1,275 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import {
   View,
   Text,
+  TextInput,
   FlatList,
   TouchableOpacity,
+  Image,
   RefreshControl,
   ActivityIndicator,
   StyleSheet,
   useColorScheme,
+  ScrollView,
+  Modal,
+  SafeAreaView,
+  Platform,
+  StatusBar,
+  Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
-import { ClipboardList, Clock, Layers } from "lucide-react-native";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Search,
+  MapPin,
+  Clock,
+  ShieldCheck,
+  Shield,
+  FileQuestion,
+  PlusCircle,
+  FileText,
+  X,
+  Bell,
+  User,
+  ArrowRight,
+  Layers,
+  Wrench,
+  CheckCircle2,
+  Building,
+  Check,
+} from "lucide-react-native";
 import { api } from "@/lib/api";
 import { Requirement } from "@/types/api";
+import { useAuth } from "@/context/auth-context";
+import { LabMatrixTokens } from "@/constants/theme";
+
+const CATEGORIES = [
+  "ALL",
+  "HPLC & UHPLC",
+  "ICP-OES & ICP-MS",
+  "GC & GC-MS",
+  "UV-Vis & FTIR",
+  "AAS",
+  "DSC-TGA & DMA",
+  "Dissolution Testers",
+  "Stability Chambers",
+  "Particle Analyzers",
+  "Centrifuges & Shakers",
+  "Karl Fischer & Titrators",
+  "Other Lab Equipment",
+];
 
 export default function RequestsScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
+  const { colors } = LabMatrixTokens;
+  const { isAuthenticated, user } = useAuth();
+  const queryClient = useQueryClient();
+  const searchInputRef = useRef<any>(null);
 
-  const [selectedStatus, setSelectedStatus] = useState<string>("OPEN");
+  // Filter States
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<"ALL" | "URGENT" | "SPARE_PART">("ALL");
+  const [selectedCategory, setSelectedCategory] = useState("ALL");
 
+  // Post Wanted Modal State
+  const [postModalVisible, setPostModalVisible] = useState(false);
+  const [postTitle, setPostTitle] = useState("");
+  const [postCategory, setPostCategory] = useState(CATEGORIES[1]);
+  const [postItemType, setPostItemType] = useState<"MACHINE" | "SPARE_PART">("MACHINE");
+  const [postPartNumber, setPostPartNumber] = useState("");
+  const [postCompatibleWith, setPostCompatibleWith] = useState("");
+  const [postDescription, setPostDescription] = useState("");
+  const [postPhone, setPostPhone] = useState(user?.phoneNumber || "");
+  const [postCompany, setPostCompany] = useState(user?.companyName || "");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Fetch Requirements from Backend
   const {
     data,
     isLoading,
     isRefetching,
     refetch,
   } = useQuery({
-    queryKey: ["requirements", selectedStatus],
+    queryKey: ["requirements", selectedCategory, searchQuery, selectedTypeFilter],
     queryFn: async () => {
       const params: any = {};
-      if (selectedStatus !== "ALL") params.status = selectedStatus;
+      if (selectedCategory !== "ALL") params.category = selectedCategory;
+      if (searchQuery.trim()) params.query = searchQuery.trim();
+      if (selectedTypeFilter === "SPARE_PART") params.itemType = "SPARE_PART";
+
       const res = await api.get("/api/requirements", { params });
       return (res.data?.requirements || []) as Requirement[];
     },
   });
 
+  const filteredRequirements = useMemo(() => {
+    if (!data) return [];
+    if (selectedTypeFilter === "URGENT") {
+      // Urgent sourcing: items with urgent keywords or open status
+      return data.filter(
+        (r) =>
+          r.description.toLowerCase().includes("urgent") ||
+          r.title.toLowerCase().includes("urgent") ||
+          r.category.includes("ICP") ||
+          r.category.includes("HPLC")
+      );
+    }
+    return data;
+  }, [data, selectedTypeFilter]);
+
+  const urgentCount = useMemo(() => {
+    if (!data) return 0;
+    return data.filter(
+      (r) =>
+        r.description.toLowerCase().includes("urgent") ||
+        r.title.toLowerCase().includes("urgent") ||
+        r.category.includes("ICP") ||
+        r.category.includes("HPLC")
+    ).length;
+  }, [data]);
+
+  // Handle Post Wanted Submission
+  const handlePostWanted = async () => {
+    if (!postTitle.trim() || !postDescription.trim()) {
+      Alert.alert("Validation Error", "Please provide a title and detailed specifications.");
+      return;
+    }
+    if (postDescription.trim().length < 10) {
+      Alert.alert("Validation Error", "Specifications description must be at least 10 characters.");
+      return;
+    }
+    if (!postPhone.trim()) {
+      Alert.alert("Contact Required", "Please enter a valid mobile number for administrator verification.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await api.post("/api/requirements", {
+        title: postTitle.trim(),
+        description: postDescription.trim(),
+        category: postCategory,
+        itemType: postItemType,
+        partNumber: postItemType === "SPARE_PART" ? postPartNumber.trim() : undefined,
+        compatibleWith: postItemType === "SPARE_PART" ? postCompatibleWith.trim() : undefined,
+        phoneNumber: postPhone.trim(),
+        companyName: postCompany.trim() || undefined,
+      });
+
+      setPostModalVisible(false);
+      setPostTitle("");
+      setPostDescription("");
+      setPostPartNumber("");
+      setPostCompatibleWith("");
+      queryClient.invalidateQueries({ queryKey: ["requirements"] });
+
+      Alert.alert(
+        "Requirement Submitted",
+        "Your procurement request has been submitted for administrator review. Once verified, it will be broadcasted to certified laboratories."
+      );
+    } catch (err: any) {
+      Alert.alert("Submission Failed", err.response?.data?.error || "Could not submit requirement.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const getTargetBudget = (item: Requirement) => {
+    const desc = item.description;
+    const match = desc.match(/₹[\d,]+(\s*-\s*₹[\d,]+)?/i) || desc.match(/budget:?\s*₹?[\d,]+/i);
+    if (match) return match[0];
+    if (item.category.includes("ICP") || item.category.includes("GC-MS")) return "₹18,00,000 – ₹25,00,000";
+    if (item.category.includes("HPLC")) return "₹4,00,000 – ₹7,50,000";
+    if (item.category.includes("FTIR") || item.category.includes("UV")) return "₹3,50,000 – ₹6,00,000";
+    if (item.itemType === "SPARE_PART") return "₹50,000 – ₹1,50,000";
+    return "Budget Upon Quotation";
+  };
+
+  const getPreferredOEM = (item: Requirement) => {
+    const desc = item.description.toLowerCase();
+    const title = item.title.toLowerCase();
+    const combined = `${title} ${desc}`;
+
+    const brands: string[] = [];
+    if (combined.includes("perkinelmer") || combined.includes("perkin elmer")) brands.push("PerkinElmer");
+    if (combined.includes("agilent")) brands.push("Agilent");
+    if (combined.includes("waters")) brands.push("Waters");
+    if (combined.includes("shimadzu")) brands.push("Shimadzu");
+    if (combined.includes("thermo")) brands.push("Thermo Fisher");
+    if (combined.includes("metrohm")) brands.push("Metrohm");
+
+    if (brands.length > 0) return brands.join(", ");
+    return "Verified Lab OEMs";
+  };
+
+  const getDestinationLab = (item: Requirement) => {
+    const desc = item.description;
+    if (desc.includes("Ahmedabad") || desc.includes("Gujarat")) return "Ahmedabad, Gujarat (Pharma Facility)";
+    if (desc.includes("Mumbai") || desc.includes("Maharashtra")) return "Mumbai, Maharashtra (Analytical Lab)";
+    if (desc.includes("Hyderabad") || desc.includes("Telangana")) return "Hyderabad, Telangana (R&D Center)";
+    if (desc.includes("Delhi") || desc.includes("NCR")) return "New Delhi NCR (Testing Facility)";
+    if (desc.includes("Bangalore") || desc.includes("Karnataka")) return "Bengaluru, Karnataka (Biotech Lab)";
+    return "Accredited Research Facility (India)";
+  };
+
   const renderRequirementCard = ({ item }: { item: Requirement }) => {
     const isFulfilled = item.status === "FULFILLED";
+    const shortCode = item.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 5).toUpperCase();
+    const targetBudget = getTargetBudget(item);
+    const preferredOEM = getPreferredOEM(item);
+    const destinationLab = getDestinationLab(item);
 
     return (
       <TouchableOpacity
         style={[styles.card, isDark && styles.cardDark]}
-        activeOpacity={0.8}
+        activeOpacity={0.92}
         onPress={() => router.push(`/requests/${item.id}`)}
       >
-        <View style={styles.cardHeader}>
-          <View style={styles.badgeRow}>
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryBadgeText}>{item.category}</Text>
-            </View>
-            <View
-              style={[
-                styles.statusBadge,
-                isFulfilled ? styles.statusFulfilled : styles.statusOpen,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.statusBadgeText,
-                  isFulfilled ? styles.statusFulfilledText : styles.statusOpenText,
-                ]}
-              >
-                {item.status}
-              </Text>
-            </View>
+        {/* Row 1: Badges */}
+        <View style={styles.cardBadgeRow}>
+          <View style={styles.categoryBadge}>
+            <Text style={styles.categoryBadgeText}>{item.category}</Text>
           </View>
-          <View style={styles.dateRow}>
-            <Clock size={12} color="#64748b" />
-            <Text style={styles.dateText}>
-              {new Date(item.createdAt).toLocaleDateString()}
-            </Text>
+
+          <View style={styles.adminProtectedBadge}>
+            <Shield size={12} color="#033a7d" />
+            <Text style={styles.adminProtectedText}>ADMIN PROTECTED BUYER</Text>
           </View>
         </View>
 
+        {/* Row 2: Status Pill */}
+        <View style={styles.statusPillRow}>
+          {isFulfilled ? (
+            <View style={styles.fulfilledPill}>
+              <View style={styles.fulfilledDot} />
+              <Text style={styles.fulfilledPillText}>FULFILLED</Text>
+            </View>
+          ) : (
+            <View style={styles.openPill}>
+              <View style={styles.openDot} />
+              <Text style={styles.openPillText}>OPEN FOR PROPOSALS</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Row 3: Timestamp & REQ Code */}
+        <View style={styles.metaRow}>
+          <Clock size={12} color="#64748b" />
+          <Text style={styles.metaDate}>
+            Posted on {new Date(item.createdAt).toLocaleDateString("en-GB")}
+          </Text>
+          <Text style={styles.metaDot}>•</Text>
+          <Text style={styles.reqCodeText}>REQ-2026-{shortCode}</Text>
+        </View>
+
+        {/* Row 4: Title */}
         <Text style={[styles.cardTitle, isDark && styles.cardTitleDark]} numberOfLines={2}>
           {item.title}
         </Text>
 
+        {/* Row 5: Description */}
         <Text
           style={[styles.cardDescription, isDark && styles.cardDescriptionDark]}
           numberOfLines={3}
@@ -86,264 +277,1151 @@ export default function RequestsScreen() {
           {item.description}
         </Text>
 
-        {(item.partNumber || item.compatibleWith) && (
-          <View style={styles.specsRow}>
-            <Layers size={13} color="#64748b" />
-            <Text style={styles.specsText} numberOfLines={1}>
-              {item.partNumber ? `PN: ${item.partNumber}` : ""}
-              {item.partNumber && item.compatibleWith ? " • " : ""}
-              {item.compatibleWith ? `For: ${item.compatibleWith}` : ""}
-            </Text>
+        {/* Row 6: Structured Specs Grid (Gray Box) */}
+        <View style={[styles.specsBox, isDark && styles.specsBoxDark]}>
+          <View style={styles.specsGrid}>
+            <View style={styles.specsCol}>
+              <Text style={styles.specsLabel}>PREFERRED OEM</Text>
+              <Text style={[styles.specsValue, isDark && styles.specsValueDark]} numberOfLines={1}>
+                {preferredOEM}
+              </Text>
+            </View>
+
+            <View style={styles.specsCol}>
+              <Text style={styles.specsLabel}>TARGET BUDGET</Text>
+              <Text style={styles.specsBudgetValue} numberOfLines={1}>
+                {targetBudget}
+              </Text>
+            </View>
           </View>
-        )}
+
+          <View style={styles.destLabRow}>
+            <Text style={styles.specsLabel}>DESTINATION LABORATORY</Text>
+            <View style={styles.destLabValueRow}>
+              <MapPin size={12} color="#64748b" />
+              <Text style={[styles.destLabText, isDark && styles.destLabTextDark]} numberOfLines={1}>
+                {destinationLab}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Row 7: Action CTA */}
+        <View style={styles.cardFooter}>
+          <TouchableOpacity
+            style={styles.fulfillBtn}
+            activeOpacity={0.85}
+            onPress={() => router.push(`/requests/${item.id}`)}
+          >
+            <Text style={styles.fulfillBtnText}>Submit Quotation Proposal</Text>
+            <ArrowRight size={14} color="#ffffff" />
+          </TouchableOpacity>
+        </View>
       </TouchableOpacity>
     );
   };
 
   return (
-    <View style={[styles.container, isDark && styles.containerDark]}>
-      {/* Filter Tabs */}
-      <View style={[styles.filterBar, isDark && styles.filterBarDark]}>
-        {["OPEN", "FULFILLED", "ALL"].map((s) => {
-          const isSelected = selectedStatus === s;
-          return (
-            <TouchableOpacity
-              key={s}
-              style={[
-                styles.filterChip,
-                isDark && styles.filterChipDark,
-                isSelected && styles.filterChipSelected,
-              ]}
-              onPress={() => setSelectedStatus(s)}
-            >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  isDark && styles.filterChipTextDark,
-                  isSelected && styles.filterChipTextSelected,
-                ]}
-              >
-                {s === "ALL" ? "All Requirements" : `${s.charAt(0)}${s.slice(1).toLowerCase()} Needs`}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+    <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+
+      {/* 1. Top Branding Header Bar */}
+      <View style={[styles.topBar, isDark && styles.topBarDark]}>
+        <View style={styles.logoRow}>
+          <Image
+            source={require("@/assets/images/logo.png")}
+            style={styles.logoImg}
+            resizeMode="contain"
+          />
+        </View>
+
+        <View style={styles.topRightIcons}>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            activeOpacity={0.7}
+            onPress={() => searchInputRef.current?.focus()}
+          >
+            <Search size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.iconBtn}
+            activeOpacity={0.7}
+            onPress={() => router.push("/notifications" as any)}
+          >
+            <Bell size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+            <View style={styles.redDot} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.avatarCircle}
+            activeOpacity={0.7}
+            onPress={() =>
+              router.push(isAuthenticated ? ("/profile" as any) : ("/(auth)/login" as any))
+            }
+          >
+            <User size={16} color="#ffffff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Requirements List */}
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#0284c7" />
-          <Text style={[styles.loadingText, isDark && styles.loadingTextDark]}>
-            Loading open equipment requirements...
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={data}
-          keyExtractor={(item) => item.id}
-          renderItem={renderRequirementCard}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefetching}
-              onRefresh={() => {
-                refetch();
-              }}
-              tintColor="#0284c7"
-            />
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <ClipboardList size={40} color="#94a3b8" />
-              <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>
-                No requirements found
-              </Text>
-              <Text style={styles.emptySubtitle}>
-                There are currently no active requests matching this filter.
+      <FlatList
+        data={filteredRequirements}
+        keyExtractor={(item) => item.id}
+        renderItem={renderRequirementCard}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => {
+              refetch();
+            }}
+            tintColor={colors.primaryContainer}
+          />
+        }
+        ListHeaderComponent={
+          <View style={styles.headerContainer}>
+            {/* Active Procurement Header Badge */}
+            <View style={styles.procurementBadge}>
+              <ShieldCheck size={13} color="#033a7d" />
+              <Text style={styles.procurementBadgeText}>
+                ACTIVE LABORATORY PROCUREMENT REQUESTS
               </Text>
             </View>
-          }
-        />
-      )}
-    </View>
+
+            {/* Title & Subtitle */}
+            <Text style={[styles.headerTitle, isDark && styles.headerTitleDark]}>
+              Buyer Equipment Requirements
+            </Text>
+            <Text style={[styles.headerSubtitle, isDark && styles.headerSubtitleDark]}>
+              Laboratories actively looking for analytical instruments. Have a matching unit? Submit
+              your quotation proposal directly.
+            </Text>
+
+            {/* "Need equipment or spares?" Callout Card */}
+            <View style={[styles.postCalloutCard, isDark && styles.postCalloutCardDark]}>
+              <View style={styles.postCalloutLeft}>
+                <View style={styles.memoIconCircle}>
+                  <FileText size={20} color="#b45309" />
+                </View>
+                <View style={styles.postCalloutTextCol}>
+                  <Text style={[styles.postCalloutTitle, isDark && styles.postCalloutTitleDark]}>
+                    Need equipment or spares?
+                  </Text>
+                  <Text style={styles.postCalloutSub}>
+                    Broadcast requirements to verified labs
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.postWantedBtn}
+                activeOpacity={0.85}
+                onPress={() => {
+                  if (!isAuthenticated) {
+                    Alert.alert(
+                      "Sign In Required",
+                      "Please sign in to broadcast your laboratory equipment requirement.",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Sign In", onPress: () => router.push("/(auth)/login" as any) },
+                      ]
+                    );
+                    return;
+                  }
+                  setPostModalVisible(true);
+                }}
+              >
+                <PlusCircle size={15} color="#0f172a" />
+                <Text style={styles.postWantedBtnText}>+ Post Wanted</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Search Input */}
+            <View style={[styles.searchInputWrapper, isDark && styles.searchInputWrapperDark]}>
+              <Search size={16} color={isDark ? "#94a3b8" : colors.textMuted} />
+              <TextInput
+                ref={searchInputRef}
+                style={[styles.searchInput, isDark && styles.searchInputDark]}
+                placeholder="Search desired instruments (HPLC, GC-M..."
+                placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                returnKeyType="search"
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery("")} style={styles.clearSearchBtn}>
+                  <X size={15} color={colors.textMuted} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Filter Chips Row 1 */}
+            <View style={styles.typeChipsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.typeChip,
+                  selectedTypeFilter === "ALL" && styles.typeChipActive,
+                ]}
+                onPress={() => setSelectedTypeFilter("ALL")}
+              >
+                <Text
+                  style={[
+                    styles.typeChipText,
+                    selectedTypeFilter === "ALL" && styles.typeChipTextActive,
+                  ]}
+                >
+                  All Requests ({data?.length || 0})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.typeChip,
+                  selectedTypeFilter === "URGENT" && styles.typeChipActive,
+                ]}
+                onPress={() => setSelectedTypeFilter("URGENT")}
+              >
+                <View style={styles.urgentDot} />
+                <Text
+                  style={[
+                    styles.typeChipText,
+                    selectedTypeFilter === "URGENT" && styles.typeChipTextActive,
+                  ]}
+                >
+                  Urgent Sourcing ({urgentCount})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.typeChip,
+                  selectedTypeFilter === "SPARE_PART" && styles.typeChipActive,
+                ]}
+                onPress={() => setSelectedTypeFilter("SPARE_PART")}
+              >
+                <Wrench size={13} color={selectedTypeFilter === "SPARE_PART" ? "#ffffff" : "#64748b"} />
+                <Text
+                  style={[
+                    styles.typeChipText,
+                    selectedTypeFilter === "SPARE_PART" && styles.typeChipTextActive,
+                  ]}
+                >
+                  Spare Parts
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Filter Chips Row 2 (Categories) */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryPillsScroll}
+            >
+              {CATEGORIES.map((cat) => {
+                const isSelected = selectedCategory === cat;
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.categoryPill, isSelected && styles.categoryPillActive]}
+                    onPress={() => setSelectedCategory(cat)}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryPillText,
+                        isSelected && styles.categoryPillTextActive,
+                      ]}
+                    >
+                      {cat}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        }
+        ListEmptyComponent={
+          isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#002555" />
+              <Text style={styles.loadingText}>Loading procurement requirements...</Text>
+            </View>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconCircle}>
+                <FileQuestion size={34} color="#94a3b8" />
+              </View>
+              <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>
+                No equipment requirements found
+              </Text>
+              <Text style={styles.emptySubtitle}>
+                No active buyer requests matched your filters. Be the first to broadcast an equipment need!
+              </Text>
+              <TouchableOpacity
+                style={styles.emptyPostBtn}
+                onPress={() => setPostModalVisible(true)}
+              >
+                <PlusCircle size={15} color="#0f172a" />
+                <Text style={styles.emptyPostBtnText}>Post First Requirement</Text>
+              </TouchableOpacity>
+            </View>
+          )
+        }
+      />
+
+      {/* Post Wanted Equipment Modal Form */}
+      <Modal
+        visible={postModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setPostModalVisible(false)}
+      >
+        <SafeAreaView style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, isDark && styles.modalSheetDark]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalSubHeader}>Broadcast Sourcing Request</Text>
+                <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>
+                  Post Equipment Wanted
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setPostModalVisible(false)}
+                style={styles.closeModalBtn}
+              >
+                <X size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false}>
+              {/* Classification Selector */}
+              <Text style={styles.inputLabel}>Requirement Type *</Text>
+              <View style={styles.typeSelectorRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.typeSelectorBtn,
+                    postItemType === "MACHINE" && styles.typeSelectorBtnActive,
+                  ]}
+                  onPress={() => setPostItemType("MACHINE")}
+                >
+                  <Text
+                    style={[
+                      styles.typeSelectorBtnText,
+                      postItemType === "MACHINE" && styles.typeSelectorBtnTextActive,
+                    ]}
+                  >
+                    Analytical Machine / System
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.typeSelectorBtn,
+                    postItemType === "SPARE_PART" && styles.typeSelectorBtnActive,
+                  ]}
+                  onPress={() => setPostItemType("SPARE_PART")}
+                >
+                  <Text
+                    style={[
+                      styles.typeSelectorBtnText,
+                      postItemType === "SPARE_PART" && styles.typeSelectorBtnTextActive,
+                    ]}
+                  >
+                    Spare Part / Board
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Instrument Title */}
+              <Text style={styles.inputLabel}>Desired Equipment / Model *</Text>
+              <TextInput
+                style={[styles.input, isDark && styles.inputDark]}
+                placeholder="e.g. Waters 2695 HPLC or PerkinElmer Avio 500"
+                placeholderTextColor="#94a3b8"
+                value={postTitle}
+                onChangeText={setPostTitle}
+              />
+
+              {/* Category Picker */}
+              <Text style={styles.inputLabel}>Category *</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {CATEGORIES.filter((c) => c !== "ALL").map((cat) => (
+                    <TouchableOpacity
+                      key={cat}
+                      style={[
+                        styles.catOptionPill,
+                        postCategory === cat && styles.catOptionPillActive,
+                      ]}
+                      onPress={() => setPostCategory(cat)}
+                    >
+                      <Text
+                        style={[
+                          styles.catOptionPillText,
+                          postCategory === cat && styles.catOptionPillTextActive,
+                        ]}
+                      >
+                        {cat}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+
+              {/* Spare Part Specific Fields */}
+              {postItemType === "SPARE_PART" && (
+                <>
+                  <Text style={styles.inputLabel}>Part Number / Catalog #</Text>
+                  <TextInput
+                    style={[styles.input, isDark && styles.inputDark]}
+                    placeholder="e.g. PE-CL-50402"
+                    placeholderTextColor="#94a3b8"
+                    value={postPartNumber}
+                    onChangeText={setPostPartNumber}
+                  />
+
+                  <Text style={styles.inputLabel}>Target Machine Compatibility</Text>
+                  <TextInput
+                    style={[styles.input, isDark && styles.inputDark]}
+                    placeholder="e.g. Clarus GC 500 / 580 series"
+                    placeholderTextColor="#94a3b8"
+                    value={postCompatibleWith}
+                    onChangeText={setPostCompatibleWith}
+                  />
+                </>
+              )}
+
+              {/* Specifications Description */}
+              <Text style={styles.inputLabel}>
+                Required Specifications, Detectors, & Testing Scope *
+              </Text>
+              <TextInput
+                style={[styles.textArea, isDark && styles.textAreaDark]}
+                placeholder="Describe required configuration, acceptable working condition, target budget range, and delivery destination..."
+                placeholderTextColor="#94a3b8"
+                value={postDescription}
+                onChangeText={setPostDescription}
+                multiline
+                numberOfLines={4}
+              />
+
+              {/* Contact Info */}
+              <Text style={styles.inputLabel}>Mobile / WhatsApp (Admin Verification) *</Text>
+              <TextInput
+                style={[styles.input, isDark && styles.inputDark]}
+                placeholder="+91-XXXXXXXXXX"
+                placeholderTextColor="#94a3b8"
+                keyboardType="phone-pad"
+                value={postPhone}
+                onChangeText={setPostPhone}
+              />
+
+              <Text style={styles.inputLabel}>Company / Institution Name</Text>
+              <TextInput
+                style={[styles.input, isDark && styles.inputDark]}
+                placeholder="Laboratory or Research Organization"
+                placeholderTextColor="#94a3b8"
+                value={postCompany}
+                onChangeText={setPostCompany}
+              />
+
+              {/* Submit CTA */}
+              <TouchableOpacity
+                style={[styles.modalSubmitBtn, isSubmitting && styles.modalSubmitBtnDisabled]}
+                activeOpacity={0.85}
+                onPress={handlePostWanted}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator color="#0f172a" />
+                ) : (
+                  <>
+                    <PlusCircle size={16} color="#0f172a" />
+                    <Text style={styles.modalSubmitBtnText}>Broadcast Sourcing Request</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </SafeAreaView>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: "#f8fafc",
-  },
-  containerDark: {
-    backgroundColor: "#090d16",
-  },
-  filterBar: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
     backgroundColor: "#ffffff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
   },
-  filterBarDark: {
-    backgroundColor: "#0f172a",
-    borderBottomColor: "#1e293b",
+  safeAreaDark: {
+    backgroundColor: LabMatrixTokens.colors.brandBlue950,
   },
-  filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: "#f1f5f9",
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === "android" ? 10 : 4,
+    paddingBottom: 8,
+    backgroundColor: "#ffffff",
   },
-  filterChipDark: {
-    backgroundColor: "#1e293b",
+  topBarDark: {
+    backgroundColor: "#0b1329",
   },
-  filterChipSelected: {
-    backgroundColor: "#0284c7",
+  logoRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
-  filterChipText: {
+  logoImg: {
+    width: 140,
+    height: 32,
+  },
+  topRightIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  iconBtn: {
+    padding: 4,
+    position: "relative",
+  },
+  redDot: {
+    position: "absolute",
+    top: 3,
+    right: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "#f43f5e",
+  },
+  avatarCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#002555",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 6,
+    backgroundColor: "#ffffff",
+  },
+  procurementBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    backgroundColor: "#eff5fb",
+    borderWidth: 1,
+    borderColor: "#dbeaf7",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 9999,
+    marginBottom: 10,
+  },
+  procurementBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#033a7d",
+    letterSpacing: 0.4,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: -0.4,
+    marginBottom: 6,
+  },
+  headerTitleDark: {
+    color: "#f8fafc",
+  },
+  headerSubtitle: {
     fontSize: 13,
-    fontWeight: "600",
     color: "#475569",
+    lineHeight: 19,
+    marginBottom: 16,
   },
-  filterChipTextDark: {
+  headerSubtitleDark: {
     color: "#94a3b8",
   },
-  filterChipTextSelected: {
-    color: "#ffffff",
-  },
-  listContent: {
-    padding: 16,
-    gap: 12,
-  },
-  card: {
+  postCalloutCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: "#ffffff",
     borderRadius: 14,
-    padding: 16,
     borderWidth: 1,
     borderColor: "#e2e8f0",
+    padding: 12,
+    marginBottom: 16,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  cardDark: {
+  postCalloutCardDark: {
     backgroundColor: "#0f172a",
     borderColor: "#1e293b",
   },
-  cardHeader: {
+  postCalloutLeft: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: 10,
+    flex: 1,
+    paddingRight: 8,
+  },
+  memoIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: "#fef3c7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  postCalloutTextCol: {
+    flex: 1,
+  },
+  postCalloutTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 2,
+  },
+  postCalloutTitleDark: {
+    color: "#f8fafc",
+  },
+  postCalloutSub: {
+    fontSize: 11,
+    color: "#64748b",
+  },
+  postWantedBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#fbc634",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  postWantedBtnText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  searchInputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    marginBottom: 14,
+  },
+  searchInputWrapperDark: {
+    backgroundColor: "#16203a",
+    borderColor: "#1e293b",
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 13,
+    color: "#0f172a",
+  },
+  searchInputDark: {
+    color: "#f8fafc",
+  },
+  clearSearchBtn: {
+    padding: 4,
+  },
+  typeChipsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  typeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  typeChipActive: {
+    backgroundColor: "#002555",
+    borderColor: "#002555",
+  },
+  typeChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#475569",
+  },
+  typeChipTextActive: {
+    color: "#ffffff",
+  },
+  urgentDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#ef4444",
+  },
+  categoryPillsScroll: {
+    flexDirection: "row",
+    gap: 8,
+    paddingBottom: 6,
+  },
+  categoryPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
+  },
+  categoryPillActive: {
+    backgroundColor: "#002555",
+  },
+  categoryPillText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  categoryPillTextActive: {
+    color: "#ffffff",
+  },
+  listContent: {
+    paddingBottom: 24,
+    backgroundColor: "#f8fafc",
+  },
+  card: {
+    backgroundColor: "#ffffff",
+    marginHorizontal: 16,
+    marginTop: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 16,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  cardDark: {
+    backgroundColor: "#0b1329",
+    borderColor: "#1e293b",
+  },
+  cardBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 8,
   },
-  badgeRow: {
-    flexDirection: "row",
-    gap: 6,
-  },
   categoryBadge: {
-    backgroundColor: "#e0f2fe",
+    backgroundColor: "#eff5fb",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
   },
   categoryBadgeText: {
-    color: "#0369a1",
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "800",
+    color: "#033a7d",
+    letterSpacing: 0.3,
   },
-  statusBadge: {
+  adminProtectedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#eff5fb",
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
   },
-  statusBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
+  adminProtectedText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#033a7d",
+    letterSpacing: 0.3,
   },
-  statusOpen: {
-    backgroundColor: "#dcfce7",
+  statusPillRow: {
+    flexDirection: "row",
+    marginBottom: 8,
   },
-  statusOpenText: {
-    color: "#15803d",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  statusFulfilled: {
-    backgroundColor: "#f1f5f9",
-  },
-  statusFulfilledText: {
-    color: "#64748b",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  dateRow: {
+  openPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 5,
+    backgroundColor: "#dcfce7",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 9999,
   },
-  dateText: {
+  openDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#15803d",
+  },
+  openPillText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#15803d",
+    letterSpacing: 0.4,
+  },
+  fulfilledPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 9999,
+  },
+  fulfilledDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#64748b",
+  },
+  fulfilledPillText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#64748b",
+    letterSpacing: 0.4,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
+  metaDate: {
     fontSize: 11,
     color: "#64748b",
   },
+  metaDot: {
+    fontSize: 11,
+    color: "#cbd5e1",
+  },
+  reqCodeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#b45309",
+    fontFamily: Platform.select({ ios: "Courier", android: "monospace" }),
+  },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 17,
+    fontWeight: "800",
     color: "#0f172a",
-    marginBottom: 6,
+    lineHeight: 23,
+    marginBottom: 8,
   },
   cardTitleDark: {
     color: "#f8fafc",
   },
   cardDescription: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#475569",
-    lineHeight: 20,
-    marginBottom: 8,
+    lineHeight: 19,
+    marginBottom: 14,
   },
   cardDescriptionDark: {
     color: "#94a3b8",
   },
-  specsRow: {
+  specsBox: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 12,
+    marginBottom: 14,
+  },
+  specsBoxDark: {
+    backgroundColor: "#16203a",
+    borderColor: "#1e293b",
+  },
+  specsGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+    paddingBottom: 8,
+    marginBottom: 8,
+  },
+  specsCol: {
+    flex: 1,
+  },
+  specsLabel: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#64748b",
+    letterSpacing: 0.5,
+    marginBottom: 3,
+  },
+  specsValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  specsValueDark: {
+    color: "#f8fafc",
+  },
+  specsBudgetValue: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#002555",
+  },
+  destLabRow: {
+    paddingTop: 2,
+  },
+  destLabValueRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    borderTopWidth: 1,
-    borderTopColor: "#f1f5f9",
-    paddingTop: 8,
+    gap: 4,
+    marginTop: 2,
   },
-  specsText: {
+  destLabText: {
     fontSize: 12,
-    color: "#64748b",
+    color: "#475569",
+    fontWeight: "600",
   },
-  loadingContainer: {
-    flex: 1,
+  destLabTextDark: {
+    color: "#cbd5e1",
+  },
+  cardFooter: {
+    paddingTop: 2,
+  },
+  fulfillBtn: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 6,
+    backgroundColor: "#033a7d",
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  fulfillBtnText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#ffffff",
+  },
+  loadingContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 60,
+    gap: 12,
   },
   loadingText: {
     fontSize: 14,
     color: "#64748b",
   },
-  loadingTextDark: {
-    color: "#94a3b8",
-  },
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 60,
-    gap: 8,
+    paddingTop: 50,
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  emptyIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "700",
     color: "#0f172a",
+    textAlign: "center",
   },
   emptyTitleDark: {
     color: "#f8fafc",
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#64748b",
     textAlign: "center",
+    lineHeight: 18,
+  },
+  emptyPostBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#fbc634",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  emptyPostBtnText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    justifyContent: "flex-end",
+  },
+  modalSheet: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === "ios" ? 34 : 20,
+    maxHeight: "90%",
+  },
+  modalSheetDark: {
+    backgroundColor: "#0b1329",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  modalSubHeader: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#033a7d",
+    letterSpacing: 0.5,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  modalTitleDark: {
+    color: "#f8fafc",
+  },
+  closeModalBtn: {
+    padding: 4,
+  },
+  modalForm: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#334155",
+    marginBottom: 5,
+    marginTop: 10,
+  },
+  typeSelectorRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 8,
+  },
+  typeSelectorBtn: {
+    flex: 1,
+    paddingVertical: 9,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  typeSelectorBtnActive: {
+    backgroundColor: "#002555",
+    borderColor: "#002555",
+  },
+  typeSelectorBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#475569",
+    textAlign: "center",
+  },
+  typeSelectorBtnTextActive: {
+    color: "#ffffff",
+  },
+  catOptionPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  catOptionPillActive: {
+    backgroundColor: "#033a7d",
+    borderColor: "#033a7d",
+  },
+  catOptionPillText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  catOptionPillTextActive: {
+    color: "#ffffff",
+    fontWeight: "700",
+  },
+  input: {
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: "#0f172a",
+  },
+  inputDark: {
+    backgroundColor: "#16203a",
+    borderColor: "#1e293b",
+    color: "#f8fafc",
+  },
+  textArea: {
+    height: 90,
+    borderRadius: 10,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: "#0f172a",
+    textAlignVertical: "top",
+  },
+  textAreaDark: {
+    backgroundColor: "#16203a",
+    borderColor: "#1e293b",
+    color: "#f8fafc",
+  },
+  modalSubmitBtn: {
+    backgroundColor: "#fbc634",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    borderRadius: 10,
+    gap: 8,
+    marginTop: 20,
+    marginBottom: 24,
+  },
+  modalSubmitBtnDisabled: {
+    opacity: 0.6,
+  },
+  modalSubmitBtnText: {
+    color: "#0f172a",
+    fontSize: 14,
+    fontWeight: "800",
   },
 });

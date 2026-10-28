@@ -53,16 +53,16 @@ export default function TabLayout() {
       <Tabs.Screen
         name="requests"
         options={{
+          headerShown: false,
           title: "Requests",
-          headerTitle: "Equipment Needs",
           tabBarIcon: ({ color, size }) => <ClipboardList color={color} size={size || 22} />,
         }}
       />
       <Tabs.Screen
         name="sell"
         options={{
+          headerShown: false,
           title: "Sell",
-          headerTitle: "List Instrument / Part",
           tabBarLabelStyle: {
             fontSize: 11,
             fontWeight: "700",
