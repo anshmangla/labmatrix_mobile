@@ -141,15 +141,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // 1. Try Native Google Sign-In first (preferred for standalone APK)
       try {
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+
+        // Sign out previous session first so Android ALWAYS shows the account chooser dialog
+        try {
+          await GoogleSignin.signOut();
+        } catch (_) {}
+
         const signInResult = await GoogleSignin.signIn();
 
         if (signInResult.type === "success" && signInResult.data?.user) {
           const gUser = signInResult.data.user;
+          const cleanEmail = (gUser.email || "").toLowerCase().trim();
+          const isAdmin =
+            cleanEmail.endsWith("@labmatrixindia.com") ||
+            cleanEmail === "manish.mangla@labmatrixindia.com" ||
+            cleanEmail === "pradeep.sharma@labmatrixindia.com";
+
           const authenticatedUser: User = {
             id: gUser.id || `google_${Date.now()}`,
             name: gUser.name || "Verified Researcher",
-            email: gUser.email,
-            role: "USER",
+            email: cleanEmail,
+            phoneNumber: cleanEmail.includes("manish") ? "+91 8920798971" : "+91 7011269207",
+            companyName: "LabMatrix Technologies",
+            role: isAdmin ? "ADMIN" : "USER",
           };
 
           const authToken = signInResult.data.idToken || `gtoken_${Date.now()}`;
@@ -255,6 +269,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
+      try {
+        await GoogleSignin.signOut();
+      } catch (_) {}
       await removeAuthToken();
       await removeCachedUser();
       setToken(null);
