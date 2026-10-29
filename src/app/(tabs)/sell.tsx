@@ -15,8 +15,11 @@ import {
   Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
+import { useQueryClient } from "@tanstack/react-query";
+import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
+import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 import {
   Upload,
   X,
@@ -84,10 +87,30 @@ const SPARE_CONDITIONS = [
 
 export default function SellScreen() {
   const router = useRouter();
+  const { edit, type } = useLocalSearchParams<{ edit?: string; type?: string }>();
+  const isEditMode = !!edit;
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const { colors } = LabMatrixTokens;
   const { isAuthenticated, user } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Quick Profile Menu & Escrow Modals
+  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
+  const [escrowModalVisible, setEscrowModalVisible] = useState(false);
+
+  const userInitials = React.useMemo(() => {
+    if (!user) return "LM";
+    if (user.name && user.name.trim().length > 0) {
+      const parts = user.name.trim().split(/\s+/);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return user.name.slice(0, 2).toUpperCase();
+    }
+    if (user.email && user.email.trim().length > 0) {
+      return user.email.slice(0, 2).toUpperCase();
+    }
+    return "LM";
+  }, [user]);
 
   const [itemType, setItemType] = useState<"MACHINE" | "NEW_INSTRUMENT" | "SPARE_PART">("MACHINE");
 
@@ -116,7 +139,59 @@ export default function SellScreen() {
   const [companyName, setCompanyName] = useState(user?.companyName || "");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingEdit, setIsLoadingEdit] = useState(false);
   const [submittedData, setSubmittedData] = useState<{ id: string; title: string; itemType: string } | null>(null);
+
+  // Initialize itemType from query param if passed
+  useEffect(() => {
+    if (!edit && type) {
+      if (type === "SPARE_PART") {
+        handleItemTypeChange("SPARE_PART");
+      } else if (type === "NEW_INSTRUMENT") {
+        handleItemTypeChange("NEW_INSTRUMENT");
+      }
+    }
+  }, [type, edit]);
+
+  // Load listing for edit mode
+  useEffect(() => {
+    if (!edit) return;
+    let isMounted = true;
+    async function fetchListingToEdit() {
+      setIsLoadingEdit(true);
+      try {
+        const res = await api.get(`/api/listings/${edit}`);
+        const listing = res.data?.listing;
+        if (listing && isMounted) {
+          setTitle(listing.title || "");
+          setCategory(listing.category || CATEGORIES[0]);
+          if (listing.itemType) {
+            setItemType(listing.itemType);
+          }
+          if (listing.condition) {
+            setCondition(listing.condition);
+          }
+          setLocation(listing.location || "");
+          setMinPrice(listing.minPrice !== undefined && listing.minPrice !== null ? String(listing.minPrice) : "");
+          setMaxPrice(listing.maxPrice !== undefined && listing.maxPrice !== null ? String(listing.maxPrice) : "");
+          setQuantity(listing.quantity ? String(listing.quantity) : "1");
+          setDescription(listing.description || "");
+          setPhotos(listing.photos || []);
+          if (listing.partNumber) setPartNumber(listing.partNumber);
+          if (listing.compatibleWith) setCompatibleWith(listing.compatibleWith);
+        }
+      } catch (err: any) {
+        console.error("Failed to load listing for edit:", err);
+        Alert.alert("Error", "Could not load listing details to edit.");
+      } finally {
+        if (isMounted) setIsLoadingEdit(false);
+      }
+    }
+    fetchListingToEdit();
+    return () => {
+      isMounted = false;
+    };
+  }, [edit]);
 
   // Sync profile details if available
   useEffect(() => {
@@ -187,6 +262,59 @@ export default function SellScreen() {
       console.error("Image pick error:", err);
       Alert.alert("Error", "Could not pick image.");
     }
+  };
+
+  const takePhotoWithCamera = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert(
+          "Camera Permission Required",
+          "Please allow camera access to take benchmark photos of your laboratory equipment."
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        quality: 0.8,
+        allowsEditing: false,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        for (const asset of result.assets) {
+          await uploadImage(asset.uri);
+        }
+      }
+    } catch (err) {
+      console.error("Camera capture error:", err);
+      Alert.alert("Error", "Could not capture photo.");
+    }
+  };
+
+  const handleSelectPhotoOption = () => {
+    if (photos.length >= 10) {
+      Alert.alert("Limit Reached", "A maximum of 10 photos is allowed per listing.");
+      return;
+    }
+
+    Alert.alert(
+      "Add Equipment Photos",
+      "Capture live benchmark photos or select from your gallery",
+      [
+        {
+          text: "Take Photo (Camera)",
+          onPress: takePhotoWithCamera,
+        },
+        {
+          text: "Choose from Gallery",
+          onPress: pickImage,
+        },
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+      ]
+    );
   };
 
   const uploadImage = async (uri: string) => {
@@ -270,7 +398,27 @@ export default function SellScreen() {
         if (compatibleWith.trim()) payload.compatibleWith = compatibleWith.trim();
       }
 
+      if (isEditMode) {
+        await api.patch(`/api/listings/${edit}`, payload);
+        await queryClient.invalidateQueries({ queryKey: ["myItems"] });
+        await queryClient.invalidateQueries({ queryKey: ["listings"] });
+        setIsSubmitting(false);
+        Alert.alert(
+          "Listing Updated",
+          "Your equipment changes have been saved.",
+          [
+            {
+              text: "Done",
+              onPress: () => router.push("/(tabs)/profile" as any),
+            },
+          ]
+        );
+        return;
+      }
+
       const res = await api.post("/api/listings", payload);
+      await queryClient.invalidateQueries({ queryKey: ["myItems"] });
+      await queryClient.invalidateQueries({ queryKey: ["listings"] });
 
       setSubmittedData({
         id: res.data?.listingId || "success",
@@ -278,8 +426,11 @@ export default function SellScreen() {
         itemType,
       });
     } catch (error: any) {
-      console.error("Submit listing error:", error);
-      Alert.alert("Submission Failed", error.response?.data?.error || "Could not create listing.");
+      console.error("Submit error:", error);
+      Alert.alert(
+        "Submission Failed",
+        error.response?.data?.error || "Could not submit listing. Please check your inputs."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -446,32 +597,53 @@ export default function SellScreen() {
           <TouchableOpacity
             style={styles.avatarCircle}
             activeOpacity={0.7}
-            onPress={() => router.push("/profile" as any)}
+            onPress={() => {
+              if (isAuthenticated) {
+                setProfileMenuVisible(true);
+              } else {
+                router.push("/(auth)/login" as any);
+              }
+            }}
+            accessibilityLabel="Open Profile Menu"
           >
-            <User size={16} color="#ffffff" />
+            {isAuthenticated ? (
+              <Text style={styles.avatarText}>{userInitials}</Text>
+            ) : (
+              <User size={16} color="#ffffff" />
+            )}
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Back Link & Title */}
-        <TouchableOpacity
-          style={styles.backLinkRow}
-          activeOpacity={0.7}
-          onPress={() => router.push("/(tabs)")}
-        >
-          <ArrowLeft size={16} color="#033a7d" />
-          <Text style={styles.backLinkText}>Back to All Listings</Text>
-        </TouchableOpacity>
-
-        <View style={styles.pageHeader}>
-          <Text style={[styles.pageTitle, isDark && styles.pageTitleDark]}>
-            List Equipment or Spare Parts
-          </Text>
-          <Text style={styles.pageSubtitle}>
-            Your contact details remain completely private. Inquiries and proposals are coordinated securely.
+      {isLoadingEdit ? (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 32 }}>
+          <ActivityIndicator size="large" color="#033a7d" />
+          <Text style={{ marginTop: 14, color: "#64748b", fontSize: 14, fontWeight: "600" }}>
+            Loading listing specifications...
           </Text>
         </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* Back Link & Title */}
+          <TouchableOpacity
+            style={styles.backLinkRow}
+            activeOpacity={0.7}
+            onPress={() => router.push("/(tabs)")}
+          >
+            <ArrowLeft size={16} color="#033a7d" />
+            <Text style={styles.backLinkText}>Back to All Listings</Text>
+          </TouchableOpacity>
+
+          <View style={styles.pageHeader}>
+            <Text style={[styles.pageTitle, isDark && styles.pageTitleDark]}>
+              {isEditMode ? "Edit Equipment Listing" : "List Equipment or Spare Parts"}
+            </Text>
+            <Text style={styles.pageSubtitle}>
+              {isEditMode
+                ? "Update machine specifications, operational condition, or expected pricing."
+                : "Your contact details remain completely private. Inquiries and proposals are coordinated securely."}
+            </Text>
+          </View>
 
         {/* What are you listing for sale? Selector Cards */}
         <View style={styles.itemTypeSection}>
@@ -763,7 +935,7 @@ export default function SellScreen() {
           <TouchableOpacity
             style={[styles.dashedUploadBox, isDark && styles.dashedUploadBoxDark]}
             activeOpacity={0.8}
-            onPress={pickImage}
+            onPress={handleSelectPhotoOption}
             disabled={isUploadingPhoto}
           >
             {isUploadingPhoto ? (
@@ -774,7 +946,7 @@ export default function SellScreen() {
                   <Upload size={22} color="#033a7d" />
                 </View>
                 <Text style={styles.uploadBoxTitle}>Add Photos & Specs</Text>
-                <Text style={styles.uploadBoxSub}>PNG, JPG, WEBP or PDF (Max 5MB each)</Text>
+                <Text style={styles.uploadBoxSub}>Take live camera photo or select from gallery</Text>
               </>
             )}
           </TouchableOpacity>
@@ -805,7 +977,7 @@ export default function SellScreen() {
                 <TouchableOpacity
                   style={styles.addMoreSquircle}
                   activeOpacity={0.8}
-                  onPress={pickImage}
+                  onPress={handleSelectPhotoOption}
                   disabled={isUploadingPhoto}
                 >
                   <Camera size={20} color="#033a7d" />
@@ -887,7 +1059,9 @@ export default function SellScreen() {
             <ActivityIndicator size="small" color="#0f172a" />
           ) : (
             <>
-              <Text style={styles.submitButtonText}>Submit Listing for Verification →</Text>
+              <Text style={styles.submitButtonText}>
+                {isEditMode ? "Save & Update Listing →" : "Submit Listing for Verification →"}
+              </Text>
             </>
           )}
         </TouchableOpacity>
@@ -900,6 +1074,7 @@ export default function SellScreen() {
           </Text>
         </View>
       </ScrollView>
+      )}
 
       {/* Category Selection Modal */}
       <Modal
@@ -974,6 +1149,22 @@ export default function SellScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Global Quick Profile Menu Sheet */}
+      <ProfileQuickMenuModal
+        visible={profileMenuVisible}
+        onClose={() => setProfileMenuVisible(false)}
+        onOpenEscrow={() => {
+          setProfileMenuVisible(false);
+          setEscrowModalVisible(true);
+        }}
+      />
+
+      {/* Global Escrow & Verification Protocol Modal */}
+      <EscrowPolicyModal
+        visible={escrowModalVisible}
+        onClose={() => setEscrowModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -1038,6 +1229,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#011936",
     alignItems: "center",
     justifyContent: "center",
+  },
+  avatarText: {
+    color: "#ffffff",
+    fontWeight: "900",
+    fontSize: 12,
+    letterSpacing: 0.5,
   },
   scrollContent: {
     padding: 16,

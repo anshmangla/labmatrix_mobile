@@ -42,6 +42,8 @@ import { api } from "@/lib/api";
 import { Requirement } from "@/types/api";
 import { useAuth } from "@/context/auth-context";
 import { LabMatrixTokens } from "@/constants/theme";
+import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
+import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 
 const CATEGORIES = [
   "ALL",
@@ -67,6 +69,23 @@ export default function RequestsScreen() {
   const { isAuthenticated, user } = useAuth();
   const queryClient = useQueryClient();
   const searchInputRef = useRef<any>(null);
+
+  // Quick Profile Menu & Escrow Modals
+  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
+  const [escrowModalVisible, setEscrowModalVisible] = useState(false);
+
+  const userInitials = useMemo(() => {
+    if (!user) return "LM";
+    if (user.name && user.name.trim().length > 0) {
+      const parts = user.name.trim().split(/\s+/);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return user.name.slice(0, 2).toUpperCase();
+    }
+    if (user.email && user.email.trim().length > 0) {
+      return user.email.slice(0, 2).toUpperCase();
+    }
+    return "LM";
+  }, [user]);
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState("");
@@ -106,9 +125,24 @@ export default function RequestsScreen() {
 
   const filteredRequirements = useMemo(() => {
     if (!data) return [];
+    let list = data;
+
+    // Client-side search refinement for instantaneous matching
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(
+        (r) =>
+          r.title.toLowerCase().includes(q) ||
+          r.description.toLowerCase().includes(q) ||
+          r.category.toLowerCase().includes(q) ||
+          (r.partNumber && r.partNumber.toLowerCase().includes(q)) ||
+          (r.compatibleWith && r.compatibleWith.toLowerCase().includes(q))
+      );
+    }
+
     if (selectedTypeFilter === "URGENT") {
       // Urgent sourcing: items with urgent keywords or open status
-      return data.filter(
+      return list.filter(
         (r) =>
           r.description.toLowerCase().includes("urgent") ||
           r.title.toLowerCase().includes("urgent") ||
@@ -116,8 +150,8 @@ export default function RequestsScreen() {
           r.category.includes("HPLC")
       );
     }
-    return data;
-  }, [data, selectedTypeFilter]);
+    return list;
+  }, [data, searchQuery, selectedTypeFilter]);
 
   const urgentCount = useMemo(() => {
     if (!data) return 0;
@@ -356,11 +390,20 @@ export default function RequestsScreen() {
           <TouchableOpacity
             style={styles.avatarCircle}
             activeOpacity={0.7}
-            onPress={() =>
-              router.push(isAuthenticated ? ("/profile" as any) : ("/(auth)/login" as any))
-            }
+            onPress={() => {
+              if (isAuthenticated) {
+                setProfileMenuVisible(true);
+              } else {
+                router.push("/(auth)/login" as any);
+              }
+            }}
+            accessibilityLabel="Open Profile Menu"
           >
-            <User size={16} color="#ffffff" />
+            {isAuthenticated ? (
+              <Text style={styles.avatarText}>{userInitials}</Text>
+            ) : (
+              <User size={16} color="#ffffff" />
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -746,6 +789,22 @@ export default function RequestsScreen() {
           </View>
         </SafeAreaView>
       </Modal>
+
+      {/* Global Quick Profile Menu Sheet */}
+      <ProfileQuickMenuModal
+        visible={profileMenuVisible}
+        onClose={() => setProfileMenuVisible(false)}
+        onOpenEscrow={() => {
+          setProfileMenuVisible(false);
+          setEscrowModalVisible(true);
+        }}
+      />
+
+      {/* Global Escrow & Verification Protocol Modal */}
+      <EscrowPolicyModal
+        visible={escrowModalVisible}
+        onClose={() => setEscrowModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -803,6 +862,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#002555",
     alignItems: "center",
     justifyContent: "center",
+  },
+  avatarText: {
+    color: "#ffffff",
+    fontWeight: "900",
+    fontSize: 12,
+    letterSpacing: 0.5,
   },
   headerContainer: {
     paddingHorizontal: 16,

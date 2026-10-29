@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -39,13 +39,32 @@ import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
 import { Inquiry } from "@/types/api";
 import { LabMatrixTokens } from "@/constants/theme";
+import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
+import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 
 export default function InquiriesScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const { colors } = LabMatrixTokens;
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+
+  // Quick Profile Menu & Escrow Modals
+  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
+  const [escrowModalVisible, setEscrowModalVisible] = useState(false);
+
+  const userInitials = useMemo(() => {
+    if (!user) return "LM";
+    if (user.name && user.name.trim().length > 0) {
+      const parts = user.name.trim().split(/\s+/);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return user.name.slice(0, 2).toUpperCase();
+    }
+    if (user.email && user.email.trim().length > 0) {
+      return user.email.slice(0, 2).toUpperCase();
+    }
+    return "LM";
+  }, [user]);
 
   const [activeTab, setActiveTab] = useState<"received" | "sent">("received");
 
@@ -342,9 +361,20 @@ export default function InquiriesScreen() {
           <TouchableOpacity
             style={styles.avatarCircle}
             activeOpacity={0.7}
-            onPress={() => router.push("/profile" as any)}
+            onPress={() => {
+              if (isAuthenticated) {
+                setProfileMenuVisible(true);
+              } else {
+                router.push("/(auth)/login" as any);
+              }
+            }}
+            accessibilityLabel="Open Profile Menu"
           >
-            <User size={16} color="#ffffff" />
+            {isAuthenticated ? (
+              <Text style={styles.avatarText}>{userInitials}</Text>
+            ) : (
+              <User size={16} color="#ffffff" />
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -495,6 +525,22 @@ export default function InquiriesScreen() {
           }
         />
       )}
+
+      {/* Global Quick Profile Menu Sheet */}
+      <ProfileQuickMenuModal
+        visible={profileMenuVisible}
+        onClose={() => setProfileMenuVisible(false)}
+        onOpenEscrow={() => {
+          setProfileMenuVisible(false);
+          setEscrowModalVisible(true);
+        }}
+      />
+
+      {/* Global Escrow & Verification Protocol Modal */}
+      <EscrowPolicyModal
+        visible={escrowModalVisible}
+        onClose={() => setEscrowModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -557,6 +603,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#033a7d",
     alignItems: "center",
     justifyContent: "center",
+  },
+  avatarText: {
+    color: "#ffffff",
+    fontWeight: "900",
+    fontSize: 12,
+    letterSpacing: 0.5,
   },
   headerSection: {
     backgroundColor: "#ffffff",

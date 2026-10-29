@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import {
   Share,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   User as UserIcon,
@@ -58,9 +58,12 @@ import {
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
 import { LabMatrixTokens } from "@/constants/theme";
+import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
+import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { tab } = useLocalSearchParams<{ tab?: string }>();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const { colors } = LabMatrixTokens;
@@ -71,6 +74,18 @@ export default function ProfileScreen() {
   const [activeTab, setActiveTab] = useState<
     "listings" | "requests" | "inquiries" | "settings"
   >("listings");
+
+  // Synchronize incoming tab route param
+  useEffect(() => {
+    if (tab === "settings") setActiveTab("settings");
+    else if (tab === "requests") setActiveTab("requests");
+    else if (tab === "inquiries") setActiveTab("inquiries");
+    else if (tab === "listings") setActiveTab("listings");
+  }, [tab]);
+
+  // Quick Profile Menu & Escrow modal states
+  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
+  const [escrowModalVisible, setEscrowModalVisible] = useState(false);
 
   // Status updating state
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -471,10 +486,15 @@ export default function ProfileScreen() {
             {unreadCount > 0 && <View style={styles.headerNotificationDot} />}
           </TouchableOpacity>
 
-          {/* User Avatar Mini Pill */}
-          <View style={styles.headerAvatarPill}>
+          {/* User Avatar Mini Pill - Opens Quick Profile Menu */}
+          <TouchableOpacity
+            style={styles.headerAvatarPill}
+            activeOpacity={0.7}
+            onPress={() => setProfileMenuVisible(true)}
+            accessibilityLabel="Open Profile Menu"
+          >
             <Text style={styles.headerAvatarText}>{userInitials}</Text>
-          </View>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -494,17 +514,30 @@ export default function ProfileScreen() {
 
             <View style={styles.heroTextCol}>
               <View style={styles.heroNameRow}>
-                <Text
-                  style={[styles.heroName, isDark && styles.heroNameDark]}
-                  numberOfLines={1}
-                >
-                  {user.name || "Laboratory Representative"}
-                </Text>
-                {/* Verified LabMatrix Badge */}
-                <View style={styles.labmatrixVerifiedBadge}>
-                  <CheckCircle2 size={11} color="#033a7d" />
-                  <Text style={styles.labmatrixVerifiedText}>Labmatrix</Text>
+                <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <Text
+                    style={[styles.heroName, isDark && styles.heroNameDark]}
+                    numberOfLines={1}
+                  >
+                    {user.name || "Laboratory Representative"}
+                  </Text>
+                  {/* Verified LabMatrix Badge */}
+                  <View style={styles.labmatrixVerifiedBadge}>
+                    <CheckCircle2 size={11} color="#033a7d" />
+                    <Text style={styles.labmatrixVerifiedText}>Labmatrix</Text>
+                  </View>
                 </View>
+
+                {/* Visible Sign Out Button */}
+                <TouchableOpacity
+                  style={styles.heroSignOutPill}
+                  activeOpacity={0.75}
+                  onPress={handleLogout}
+                  accessibilityLabel="Sign Out"
+                >
+                  <LogOut size={12} color="#dc2626" />
+                  <Text style={styles.heroSignOutText}>Sign Out</Text>
+                </TouchableOpacity>
               </View>
 
               {/* Email */}
@@ -1705,6 +1738,22 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Global Quick Profile Menu Sheet */}
+      <ProfileQuickMenuModal
+        visible={profileMenuVisible}
+        onClose={() => setProfileMenuVisible(false)}
+        onOpenEscrow={() => {
+          setProfileMenuVisible(false);
+          setEscrowModalVisible(true);
+        }}
+      />
+
+      {/* Global Escrow & Verification Protocol Modal */}
+      <EscrowPolicyModal
+        visible={escrowModalVisible}
+        onClose={() => setEscrowModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -1840,6 +1889,22 @@ const styles = StyleSheet.create({
   },
   heroNameDark: {
     color: "#f8fafc",
+  },
+  heroSignOutPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#fef2f2",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  heroSignOutText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#dc2626",
   },
   labmatrixVerifiedBadge: {
     flexDirection: "row",

@@ -45,6 +45,8 @@ import {
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
 import { LabMatrixTokens } from "@/constants/theme";
+import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
+import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 
 // Helper for initials
 const getInitials = (name?: string, email?: string) => {
@@ -68,6 +70,10 @@ export default function AdminConsoleScreen() {
   const isDark = colorScheme === "dark";
   const { user, isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
+
+  // Quick Profile Menu & Escrow Modals
+  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
+  const [escrowModalVisible, setEscrowModalVisible] = useState(false);
 
   // Active Tab: exactly 2 tabs matching website console
   const [activeTab, setActiveTab] = useState<"inquiries" | "users">("inquiries");
@@ -447,9 +453,14 @@ export default function AdminConsoleScreen() {
             <Bookmark size={19} color={isDark ? "#cbd5e1" : "#475569"} />
           </TouchableOpacity>
 
-          <View style={styles.headerAvatarPill}>
+          <TouchableOpacity
+            style={styles.headerAvatarPill}
+            activeOpacity={0.7}
+            onPress={() => setProfileMenuVisible(true)}
+            accessibilityLabel="Open Profile Menu"
+          >
             <Text style={styles.headerAvatarText}>{adminInitials}</Text>
-          </View>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -1132,6 +1143,22 @@ export default function AdminConsoleScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Global Quick Profile Menu Sheet */}
+      <ProfileQuickMenuModal
+        visible={profileMenuVisible}
+        onClose={() => setProfileMenuVisible(false)}
+        onOpenEscrow={() => {
+          setProfileMenuVisible(false);
+          setEscrowModalVisible(true);
+        }}
+      />
+
+      {/* Global Escrow & Verification Protocol Modal */}
+      <EscrowPolicyModal
+        visible={escrowModalVisible}
+        onClose={() => setEscrowModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }

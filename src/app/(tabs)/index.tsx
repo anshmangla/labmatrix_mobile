@@ -40,6 +40,8 @@ import { Listing } from "@/types/api";
 import { useAuth } from "@/context/auth-context";
 import { LabMatrixTokens } from "@/constants/theme";
 import { getOptimizedImageUrl, IMAGE_PRESETS } from "@/lib/images";
+import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
+import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 
 const ITEM_TYPES = [
   { label: "All Items", value: "ALL" },
@@ -77,8 +79,25 @@ export default function MarketplaceScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const { colors } = LabMatrixTokens;
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const searchInputRef = useRef<any>(null);
+
+  // Profile Menu & Escrow Modals
+  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
+  const [escrowModalVisible, setEscrowModalVisible] = useState(false);
+
+  const userInitials = useMemo(() => {
+    if (!user) return "LM";
+    if (user.name && user.name.trim().length > 0) {
+      const parts = user.name.trim().split(/\s+/);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return user.name.slice(0, 2).toUpperCase();
+    }
+    if (user.email && user.email.trim().length > 0) {
+      return user.email.slice(0, 2).toUpperCase();
+    }
+    return "LM";
+  }, [user]);
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
@@ -340,11 +359,20 @@ export default function MarketplaceScreen() {
           <TouchableOpacity
             style={styles.avatarCircle}
             activeOpacity={0.7}
-            onPress={() =>
-              router.push(isAuthenticated ? ("/profile" as any) : ("/(auth)/login" as any))
-            }
+            onPress={() => {
+              if (isAuthenticated) {
+                setProfileMenuVisible(true);
+              } else {
+                router.push("/(auth)/login" as any);
+              }
+            }}
+            accessibilityLabel="Open Profile Menu"
           >
-            <User size={16} color="#ffffff" />
+            {isAuthenticated ? (
+              <Text style={styles.avatarText}>{userInitials}</Text>
+            ) : (
+              <User size={16} color="#ffffff" />
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -636,6 +664,22 @@ export default function MarketplaceScreen() {
           </View>
         </SafeAreaView>
       </Modal>
+
+      {/* Global Quick Profile Menu Sheet */}
+      <ProfileQuickMenuModal
+        visible={profileMenuVisible}
+        onClose={() => setProfileMenuVisible(false)}
+        onOpenEscrow={() => {
+          setProfileMenuVisible(false);
+          setEscrowModalVisible(true);
+        }}
+      />
+
+      {/* Global Escrow & Verification Protocol Modal */}
+      <EscrowPolicyModal
+        visible={escrowModalVisible}
+        onClose={() => setEscrowModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -693,6 +737,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#002555",
     alignItems: "center",
     justifyContent: "center",
+  },
+  avatarText: {
+    color: "#ffffff",
+    fontWeight: "900",
+    fontSize: 12,
+    letterSpacing: 0.5,
   },
   searchContainer: {
     flexDirection: "row",
