@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
-import { GoogleSignin, statusCodes } from "@react-native-google-signin/google-signin";
 import { User } from "@/types/api";
 import { api } from "@/lib/api";
 import {
@@ -19,15 +18,30 @@ const GOOGLE_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
   "732621225229-p3t2c05pif5eiq11lg20k6pnv109gr10.apps.googleusercontent.com";
 
-// Configure GoogleSignin for native builds (standalone APK & custom dev clients)
+// Safely obtain native GoogleSignin module so Expo Go does not crash on TurboModuleRegistry
+let GoogleSignin: any = null;
+let statusCodes: any = {
+  SIGN_IN_CANCELLED: "SIGN_IN_CANCELLED",
+  IN_PROGRESS: "IN_PROGRESS",
+  PLAY_SERVICES_NOT_AVAILABLE: "PLAY_SERVICES_NOT_AVAILABLE",
+};
+
 try {
-  GoogleSignin.configure({
-    webClientId: GOOGLE_CLIENT_ID,
-    scopes: ["profile", "email"],
-    offlineAccess: false,
-  });
-} catch (e) {
-  // Ignored in environments where native module is not linked
+  const gModule = require("@react-native-google-signin/google-signin");
+  GoogleSignin = gModule.GoogleSignin;
+  if (gModule.statusCodes) {
+    statusCodes = gModule.statusCodes;
+  }
+  if (GoogleSignin?.configure) {
+    GoogleSignin.configure({
+      webClientId: GOOGLE_CLIENT_ID,
+      scopes: ["profile", "email"],
+      offlineAccess: false,
+    });
+  }
+} catch (_e) {
+  // Running inside standard Expo Go where RNGoogleSignin native binary is not embedded
+  GoogleSignin = null;
 }
 
 interface AuthContextType {
@@ -138,16 +152,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
     try {
-      // 1. Try Native Google Sign-In first (preferred for standalone APK)
-      try {
-        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-
-        // Sign out previous session first so Android ALWAYS shows the account chooser dialog
+      // 1. Try Native Google Sign-In first (standalone APK / custom dev clients)
+      if (GoogleSignin) {
         try {
-          await GoogleSignin.signOut();
-        } catch (_) {}
+          await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
-        const signInResult = await GoogleSignin.signIn();
+          // Sign out previous session first so Android ALWAYS shows the account chooser dialog
+          try {
+            await GoogleSignin.signOut();
+          } catch (_) {}
+
+          const signInResult = await GoogleSignin.signIn();
 
         if (signInResult.type === "success" && signInResult.data?.user) {
           const gUser = signInResult.data.user;
@@ -189,6 +204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Log warning and gracefully fall through to browser OAuth flow
         console.warn("Native Google Sign-In not ready, attempting fallback:", nativeErr.message);
       }
+    }
 
       // 2. Fallback to Browser OAuth Flow
       const redirectUri = "https://auth.expo.io/@anshmangla/labmatrix-market";
@@ -269,9 +285,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      try {
-        await GoogleSignin.signOut();
-      } catch (_) {}
+      if (GoogleSignin) {
+        try {
+          await GoogleSignin.signOut();
+        } catch (_) {}
+      }
       await removeAuthToken();
       await removeCachedUser();
       setToken(null);
