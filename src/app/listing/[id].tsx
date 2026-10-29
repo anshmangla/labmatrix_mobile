@@ -281,9 +281,17 @@ export default function ListingDetailScreen() {
               <Text style={styles.conditionChipText}>{data.condition}</Text>
             </View>
 
-            <View style={styles.qtyChip}>
-              <Text style={styles.qtyChipText}>Qty: {data.quantity || 1} available</Text>
-            </View>
+            {isSold ? (
+              <View style={[styles.conditionChip, { backgroundColor: "#fee2e2" }]}>
+                <Text style={[styles.conditionChipText, { color: "#b91c1c", fontWeight: "800" }]}>
+                  • Sold Out
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.qtyChip}>
+                <Text style={styles.qtyChipText}>Qty: {data.quantity || 1} available</Text>
+              </View>
+            )}
 
             {data.location ? (
               <View style={styles.locationChip}>
@@ -517,6 +525,11 @@ export default function ListingDetailScreen() {
               ]);
               return;
             }
+            if (isSold && !inquiryMessage) {
+              setInquiryMessage(
+                `Hello, I saw that this ${data.title} was recently sold. I am looking for a similar or equivalent unit. Please let me know what options or incoming inventory are available.`
+              );
+            }
             setInquiryModalVisible(true);
           }}
         >
@@ -538,7 +551,9 @@ export default function ListingDetailScreen() {
           <View style={[styles.modalSheet, isDark && styles.modalSheetDark]}>
             <View style={styles.modalHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.modalSub}>Quotation Request</Text>
+                <Text style={styles.modalSub}>
+                  {isSold ? "Request Equivalent Machine" : "Quotation Request"}
+                </Text>
                 <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]} numberOfLines={1}>
                   {data.title}
                 </Text>

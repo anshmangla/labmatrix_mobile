@@ -74,6 +74,12 @@ const PRICE_TIERS = [
   { label: "₹20 Lakh+", min: "2000000", max: "" },
 ];
 
+const STATUS_OPTIONS: { label: string; value: "ALL" | "AVAILABLE" | "SOLD" }[] = [
+  { label: "All Items", value: "ALL" },
+  { label: "Available / In Stock", value: "AVAILABLE" },
+  { label: "Sold Out", value: "SOLD" },
+];
+
 export default function MarketplaceScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -103,16 +109,18 @@ export default function MarketplaceScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState("ALL");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
+  const [selectedStatus, setSelectedStatus] = useState<"ALL" | "AVAILABLE" | "SOLD">("ALL");
   const [selectedPriceTier, setSelectedPriceTier] = useState(0);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
   // Active filter count for badge
   const activeFilterCount = useMemo(() => {
     let count = 0;
+    if (selectedStatus !== "ALL") count++;
     if (selectedCategory !== "ALL") count++;
     if (selectedPriceTier !== 0) count++;
     return count;
-  }, [selectedCategory, selectedPriceTier]);
+  }, [selectedStatus, selectedCategory, selectedPriceTier]);
 
   // Query Backend Listings
   const {
@@ -122,9 +130,13 @@ export default function MarketplaceScreen() {
     isError,
     refetch,
   } = useQuery({
-    queryKey: ["listings", selectedType, selectedCategory, selectedPriceTier, searchQuery],
+    queryKey: ["listings", selectedType, selectedCategory, selectedStatus, selectedPriceTier, searchQuery],
     queryFn: async () => {
-      const params: any = { status: "AVAILABLE" };
+      const params: any = {};
+      // When status is "ALL", do not restrict status so backend returns both AVAILABLE and SOLD
+      if (selectedStatus !== "ALL") {
+        params.status = selectedStatus;
+      }
       if (selectedType !== "ALL") params.itemType = selectedType;
       if (selectedCategory !== "ALL") params.category = selectedCategory;
       if (searchQuery.trim()) params.query = searchQuery.trim();
@@ -141,6 +153,7 @@ export default function MarketplaceScreen() {
   const resetAllFilters = () => {
     setSelectedType("ALL");
     setSelectedCategory("ALL");
+    setSelectedStatus("ALL");
     setSelectedPriceTier(0);
     setSearchQuery("");
   };
@@ -297,7 +310,7 @@ export default function MarketplaceScreen() {
                 onPress={() => router.push(`/listing/${item.id}`)}
               >
                 <Text style={styles.requestSimilarBtnText}>Request Similar</Text>
-                <ArrowRight size={13} color="#0f172a" />
+                <ArrowRight size={13} color="#b45309" />
               </TouchableOpacity>
             ) : isSpare ? (
               <TouchableOpacity
@@ -475,12 +488,85 @@ export default function MarketplaceScreen() {
         </ScrollView>
       </View>
 
-      {/* 5. Live Status / Available Instruments Bar */}
+      {/* 5. Row 3: Availability / Status Filter Bar (Matching Website) */}
+      <View style={[styles.statusFilterRowWrapper, isDark && styles.statusFilterRowWrapperDark]}>
+        <View style={styles.statusFilterLabelRow}>
+          <Text style={[styles.statusFilterLabel, isDark && styles.statusFilterLabelDark]}>
+            STATUS:
+          </Text>
+        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.statusFilterScroll}
+        >
+          {STATUS_OPTIONS.map((opt) => {
+            const isSelected = selectedStatus === opt.value;
+            return (
+              <TouchableOpacity
+                key={opt.value}
+                style={[
+                  styles.statusChip,
+                  isDark && styles.statusChipDark,
+                  isSelected && (
+                    opt.value === "AVAILABLE"
+                      ? styles.statusChipAvailableSelected
+                      : opt.value === "SOLD"
+                      ? styles.statusChipSoldSelected
+                      : styles.statusChipAllSelected
+                  ),
+                ]}
+                activeOpacity={0.75}
+                onPress={() => setSelectedStatus(opt.value)}
+              >
+                {opt.value === "AVAILABLE" && (
+                  <View
+                    style={[
+                      styles.statusChipDot,
+                      { backgroundColor: isSelected ? "#ffffff" : "#16a34a" },
+                    ]}
+                  />
+                )}
+                {opt.value === "SOLD" && (
+                  <View
+                    style={[
+                      styles.statusChipDot,
+                      { backgroundColor: isSelected ? "#ffffff" : "#f43f5e" },
+                    ]}
+                  />
+                )}
+                <Text
+                  style={[
+                    styles.statusChipText,
+                    isDark && styles.statusChipTextDark,
+                    isSelected && styles.statusChipTextSelected,
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* 6. Live Status / Available Instruments Bar */}
       <View style={[styles.statusBarRow, isDark && styles.statusBarRowDark]}>
         <View style={styles.statusLeft}>
-          <View style={styles.statusLiveDot} />
+          <View
+            style={[
+              styles.statusLiveDot,
+              selectedStatus === "SOLD" && { backgroundColor: "#f43f5e" },
+            ]}
+          />
           <Text style={styles.statusAvailableText}>
-            {data ? `${data.length} INSTRUMENTS AVAILABLE` : "CATALOG AVAILABLE"}
+            {data
+              ? selectedStatus === "SOLD"
+                ? `${data.length} RECENTLY SOLD UNITS`
+                : selectedStatus === "AVAILABLE"
+                ? `${data.length} INSTRUMENTS AVAILABLE`
+                : `${data.length} TOTAL INSTRUMENTS CATALOGED`
+              : "CATALOG AVAILABLE"}
           </Text>
         </View>
 
@@ -614,6 +700,50 @@ export default function MarketplaceScreen() {
                 })}
               </View>
 
+              {/* Availability Status Filter */}
+              <Text style={[styles.modalSectionTitle, { marginTop: 20 }]}>Availability Status</Text>
+              <View style={styles.modalOptionsGrid}>
+                {STATUS_OPTIONS.map((opt) => {
+                  const isStatusSelected = selectedStatus === opt.value;
+                  return (
+                    <TouchableOpacity
+                      key={opt.value}
+                      style={[
+                        styles.modalOptionPill,
+                        isStatusSelected && styles.modalOptionPillSelected,
+                      ]}
+                      onPress={() => setSelectedStatus(opt.value)}
+                    >
+                      {opt.value === "AVAILABLE" && (
+                        <View
+                          style={[
+                            styles.statusChipDot,
+                            { backgroundColor: isStatusSelected ? "#ffffff" : "#16a34a", marginRight: 5 },
+                          ]}
+                        />
+                      )}
+                      {opt.value === "SOLD" && (
+                        <View
+                          style={[
+                            styles.statusChipDot,
+                            { backgroundColor: isStatusSelected ? "#ffffff" : "#f43f5e", marginRight: 5 },
+                          ]}
+                        />
+                      )}
+                      <Text
+                        style={[
+                          styles.modalOptionPillText,
+                          isStatusSelected && styles.modalOptionPillTextSelected,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                      {isStatusSelected && <Check size={14} color="#ffffff" />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
               {/* Price Tier Filter */}
               <Text style={[styles.modalSectionTitle, { marginTop: 20 }]}>Price Range</Text>
               <View style={styles.modalOptionsGrid}>
@@ -649,6 +779,7 @@ export default function MarketplaceScreen() {
                 style={styles.modalResetBtn}
                 onPress={() => {
                   setSelectedCategory("ALL");
+                  setSelectedStatus("ALL");
                   setSelectedPriceTier(0);
                 }}
               >
@@ -875,6 +1006,77 @@ const styles = StyleSheet.create({
   categoryPillTextSelected: {
     color: "#033a7d",
     fontWeight: "800",
+  },
+  statusFilterRowWrapper: {
+    backgroundColor: "#ffffff",
+    paddingVertical: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  statusFilterRowWrapperDark: {
+    backgroundColor: "#0b1329",
+    borderBottomColor: "#1e293b",
+  },
+  statusFilterLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: 16,
+    paddingRight: 8,
+  },
+  statusFilterLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#64748b",
+    letterSpacing: 0.5,
+  },
+  statusFilterLabelDark: {
+    color: "#94a3b8",
+  },
+  statusFilterScroll: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingRight: 16,
+  },
+  statusChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 4.5,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
+    gap: 5,
+  },
+  statusChipDark: {
+    backgroundColor: "#16203a",
+  },
+  statusChipAllSelected: {
+    backgroundColor: "#033a7d",
+  },
+  statusChipAvailableSelected: {
+    backgroundColor: "#16a34a",
+  },
+  statusChipSoldSelected: {
+    backgroundColor: "#e11d48",
+  },
+  statusChipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusChipText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  statusChipTextDark: {
+    color: "#cbd5e1",
+  },
+  statusChipTextSelected: {
+    color: "#ffffff",
+    fontWeight: "700",
   },
   statusBarRow: {
     flexDirection: "row",
@@ -1188,13 +1390,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#f59e0b",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    backgroundColor: "#fffbeb",
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 8,
   },
   requestSimilarBtnText: {
-    color: "#0f172a",
+    color: "#b45309",
     fontSize: 12,
     fontWeight: "800",
   },
