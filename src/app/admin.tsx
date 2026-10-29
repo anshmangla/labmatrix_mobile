@@ -9,13 +9,13 @@ import {
   useColorScheme,
   Linking,
   Image,
-  SafeAreaView,
   StatusBar,
   Modal,
   TextInput,
   ActivityIndicator,
   Share,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -519,7 +519,7 @@ export default function AdminConsoleScreen() {
   // ==========================================
   if (!isAuthenticated || !user) {
     return (
-      <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
+      <SafeAreaView edges={["top", "bottom"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <View style={styles.restrictedContainer}>
           <ShieldAlert size={48} color="#ba1a1a" />
@@ -543,7 +543,7 @@ export default function AdminConsoleScreen() {
 
   if (user.role !== "ADMIN") {
     return (
-      <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
+      <SafeAreaView edges={["top", "bottom"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <View style={styles.restrictedContainer}>
           <ShieldAlert size={48} color="#f59e0b" />
@@ -617,7 +617,7 @@ export default function AdminConsoleScreen() {
   const adminInitials = getInitials(user.name, user.email);
 
   return (
-    <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
+    <SafeAreaView edges={["top", "bottom"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* Top Header Bar with Back Arrow */}

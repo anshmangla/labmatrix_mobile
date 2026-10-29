@@ -12,9 +12,9 @@ import {
   Platform,
   ScrollView,
   Image,
-  SafeAreaView,
   StatusBar,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Mail, Lock, KeyRound, ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react-native";
 import { api } from "@/lib/api";
@@ -86,7 +86,7 @@ export default function ForgotPasswordScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
+    <SafeAreaView edges={["top", "bottom"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* Top Header */}

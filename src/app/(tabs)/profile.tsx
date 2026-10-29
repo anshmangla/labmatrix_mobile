@@ -9,13 +9,13 @@ import {
   useColorScheme,
   Linking,
   Image,
-  SafeAreaView,
   StatusBar,
   Modal,
   TextInput,
   ActivityIndicator,
   Share,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -278,7 +278,7 @@ export default function ProfileScreen() {
   // ==========================================
   if (!isAuthenticated || !user) {
     return (
-      <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
+      <SafeAreaView edges={["top"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
         {/* Top Header */}
@@ -438,7 +438,7 @@ export default function ProfileScreen() {
   const userInitials = getInitials(user.name, user.email);
 
   return (
-    <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
+    <SafeAreaView edges={["top"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* Top Header Bar matching Mockup */}

@@ -11,10 +11,10 @@ import {
   StyleSheet,
   useColorScheme,
   Platform,
-  SafeAreaView,
   StatusBar,
   Modal,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import {
@@ -288,7 +288,7 @@ export default function SellScreen() {
   // Auth Guard Screen
   if (!isAuthenticated) {
     return (
-      <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
+      <SafeAreaView edges={["top"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <View style={styles.topBar}>
           <Image
@@ -325,7 +325,7 @@ export default function SellScreen() {
   // Submitted Success Confirmation Screen
   if (submittedData) {
     return (
-      <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
+      <SafeAreaView edges={["top"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <View style={styles.topBar}>
           <Image
@@ -412,7 +412,7 @@ export default function SellScreen() {
       : "1. Machine Specifications";
 
   return (
-    <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
+    <SafeAreaView edges={["top"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* 1. Top Branding Header Bar with Search, Bell, Profile */}

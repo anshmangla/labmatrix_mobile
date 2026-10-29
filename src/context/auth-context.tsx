@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
+import { GoogleSignin, statusCodes } from "@react-native-google-signin/google-signin";
 import { User } from "@/types/api";
 import { api } from "@/lib/api";
 import {
@@ -17,6 +18,17 @@ WebBrowser.maybeCompleteAuthSession();
 const GOOGLE_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
   "732621225229-p3t2c05pif5eiq11lg20k6pnv109gr10.apps.googleusercontent.com";
+
+// Configure GoogleSignin for native builds (standalone APK & custom dev clients)
+try {
+  GoogleSignin.configure({
+    webClientId: GOOGLE_CLIENT_ID,
+    scopes: ["profile", "email"],
+    offlineAccess: false,
+  });
+} catch (e) {
+  // Ignored in environments where native module is not linked
+}
 
 interface AuthContextType {
   user: User | null;
@@ -126,7 +138,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
     try {
-      // Use the authorized Expo HTTPS proxy URI registered in Google Cloud Console
+      // 1. Try Native Google Sign-In first (preferred for standalone APK)
+      try {
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+        const signInResult = await GoogleSignin.signIn();
+
+        if (signInResult.type === "success" && signInResult.data?.user) {
+          const gUser = signInResult.data.user;
+          const authenticatedUser: User = {
+            id: gUser.id || `google_${Date.now()}`,
+            name: gUser.name || "Verified Researcher",
+            email: gUser.email,
+            role: "USER",
+          };
+
+          const authToken = signInResult.data.idToken || `gtoken_${Date.now()}`;
+          setToken(authToken);
+          setUser(authenticatedUser);
+
+          await saveAuthToken(authToken);
+          await saveCachedUser(authenticatedUser);
+
+          return { success: true };
+        } else if (signInResult.type === "cancelled") {
+          return { success: false, error: "Google sign-in was cancelled." };
+        }
+      } catch (nativeErr: any) {
+        if (nativeErr.code === statusCodes.SIGN_IN_CANCELLED) {
+          return { success: false, error: "Google sign-in was cancelled." };
+        } else if (nativeErr.code === statusCodes.IN_PROGRESS) {
+          return { success: false, error: "Google sign-in is already in progress." };
+        } else if (nativeErr.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+          return { success: false, error: "Google Play Services is not available or outdated." };
+        }
+
+        // Log warning and gracefully fall through to browser OAuth flow
+        console.warn("Native Google Sign-In not ready, attempting fallback:", nativeErr.message);
+      }
+
+      // 2. Fallback to Browser OAuth Flow
       const redirectUri = "https://auth.expo.io/@anshmangla/labmatrix-market";
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(
         redirectUri
@@ -173,7 +223,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { success: false, error: "Authentication was interrupted." };
     } catch (err: any) {
-      console.error("Google auth error:", err);
+      console.warn("Google auth error:", err);
       return { success: false, error: err.message || "Failed to sign in with Google." };
     }
   };

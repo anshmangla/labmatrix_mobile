@@ -15,8 +15,8 @@ import {
   Linking,
   Share,
   Platform,
-  SafeAreaView,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -51,6 +51,7 @@ const DETAIL_TABS = ["Overview", "Specifications", "Verification", "Assurance"] 
 type DetailTab = (typeof DETAIL_TABS)[number];
 
 export default function ListingDetailScreen() {
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -490,7 +491,13 @@ export default function ListingDetailScreen() {
       </ScrollView>
 
       {/* Sticky Bottom Action Bar */}
-      <View style={[styles.bottomBar, isDark && styles.bottomBarDark]}>
+      <View
+        style={[
+          styles.bottomBar,
+          isDark && styles.bottomBarDark,
+          { paddingBottom: Math.max(insets.bottom, 12) },
+        ]}
+      >
         <TouchableOpacity
           style={styles.callDeskBtn}
           activeOpacity={0.8}

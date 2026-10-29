@@ -1,18 +1,24 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { useColorScheme, View, StyleSheet, Platform } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Store, ClipboardList, Plus, MessageSquare, User } from "lucide-react-native";
 import { LabMatrixTokens } from "@/constants/theme";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
+  const insets = useSafeAreaInsets();
 
   const { colors } = LabMatrixTokens;
   const activeColor = colors.primaryContainer; // #033a7d
   const inactiveColor = isDark ? "#94a3b8" : colors.textMuted; // #64748b
   const bgColor = isDark ? colors.brandBlue950 : colors.surface; // #ffffff
   const borderColor = isDark ? "#1e293b" : colors.border; // #e2e8f0
+
+  // Calculate safe bottom padding for Android (navigation bar) and iOS (home indicator)
+  const bottomInset = Math.max(insets.bottom, Platform.OS === "android" ? 10 : 8);
+  const tabHeight = 56 + bottomInset;
 
   return (
     <Tabs
@@ -22,8 +28,8 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: bgColor,
           borderTopColor: borderColor,
-          height: Platform.OS === "ios" ? 84 : 64,
-          paddingBottom: Platform.OS === "ios" ? 22 : 8,
+          height: tabHeight,
+          paddingBottom: bottomInset,
           paddingTop: 6,
         },
         tabBarLabelStyle: {

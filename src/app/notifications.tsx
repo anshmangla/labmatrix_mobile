@@ -9,9 +9,9 @@ import {
   StyleSheet,
   useColorScheme,
   Image,
-  SafeAreaView,
   StatusBar,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell, CheckCheck, Clock, ArrowLeft, ArrowRight, MessageSquare, Package, ChevronRight } from "lucide-react-native";
@@ -127,7 +127,7 @@ export default function NotificationsScreen() {
   );
 
   return (
-    <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
+    <SafeAreaView edges={["top", "bottom"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* Top Header */}
