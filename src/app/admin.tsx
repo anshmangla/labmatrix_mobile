@@ -516,7 +516,10 @@ export default function AdminConsoleScreen() {
       try {
         const res = await api.get("/api/admin/listings");
         if (res.data?.listings && res.data.listings.length > 0) {
-          return res.data.listings;
+          return res.data.listings.map((l: any) => ({
+            ...l,
+            isApproved: l.isApproved !== false,
+          }));
         }
       } catch (err) {}
 
@@ -524,7 +527,11 @@ export default function AdminConsoleScreen() {
       try {
         const publicRes = await api.get("/api/listings?limit=100");
         if (publicRes.data?.listings && publicRes.data.listings.length > 0) {
-          return publicRes.data.listings;
+          // Public listings API only returns approved items (where: { isApproved: true })
+          return publicRes.data.listings.map((l: any) => ({
+            ...l,
+            isApproved: l.isApproved !== false,
+          }));
         }
       } catch (err) {}
 
@@ -639,7 +646,7 @@ export default function AdminConsoleScreen() {
   }, [localRequirementsList, searchRequirementQuery]);
 
   const pendingListingsCount = useMemo(() => {
-    return localListingsList.filter((l) => !l.isApproved).length;
+    return localListingsList.filter((l) => l.isApproved === false).length;
   }, [localListingsList]);
 
   // Global Refresh
@@ -1524,7 +1531,7 @@ export default function AdminConsoleScreen() {
             ) : (
               <View style={styles.listingsList}>
                 {filteredListings.map((item: any) => {
-                  const isApproved = item.isApproved;
+                  const isApproved = item.isApproved !== false;
                   const itemPrice =
                     item.minPrice && item.maxPrice
                       ? `₹${Number(item.minPrice).toLocaleString("en-IN")} - ₹${Number(item.maxPrice).toLocaleString("en-IN")}`
