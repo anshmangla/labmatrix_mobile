@@ -69,270 +69,6 @@ const getInitials = (name?: string, email?: string) => {
   return "AD";
 };
 
-// 12 REAL PLATFORM USERS EXACTLY MATCHING THE LIVE DATABASE (Website Console)
-const REAL_PLATFORM_USERS = [
-  {
-    id: "usr-redacted-1",
-    name: "Redacted User",
-    email: "redacted.user@example.com",
-    phoneNumber: "+91 0000000000",
-    companyName: "Redacted User",
-    role: "USER",
-    createdAt: "2026-10-23T10:00:00.000Z",
-    _count: { listings: 1, requirements: 0 },
-  },
-  {
-    id: "usr-redacted-2",
-    name: "Redacted User",
-    email: "redacted.user@example.com",
-    phoneNumber: "0000000000",
-    companyName: "Redacted User",
-    role: "USER",
-    createdAt: "2026-10-22T11:00:00.000Z",
-    _count: { listings: 1, requirements: 0 },
-  },
-  {
-    id: "usr-redacted-3",
-    name: "Redacted User",
-    email: "redacted.user@example.com",
-    phoneNumber: null,
-    companyName: null,
-    role: "USER",
-    createdAt: "2026-10-19T09:00:00.000Z",
-    _count: { listings: 0, requirements: 0 },
-  },
-  {
-    id: "usr-redacted-4",
-    name: "Redacted User",
-    email: "redacted.user@example.com",
-    phoneNumber: null,
-    companyName: null,
-    role: "USER",
-    createdAt: "2026-10-16T12:00:00.000Z",
-    _count: { listings: 0, requirements: 0 },
-  },
-  {
-    id: "usr-redacted-5",
-    name: "Redacted User",
-    email: "redacted.user@example.com",
-    phoneNumber: "0000000000",
-    companyName: null,
-    role: "USER",
-    createdAt: "2026-10-16T13:00:00.000Z",
-    _count: { listings: 1, requirements: 0 },
-  },
-  {
-    id: "usr-deleted",
-    name: "Deleted User",
-    email: "deleted_redacted@archived.labmatrixindia.com",
-    phoneNumber: null,
-    companyName: null,
-    role: "USER",
-    createdAt: "2026-10-16T14:00:00.000Z",
-    isArchived: true,
-    _count: { listings: 0, requirements: 0 },
-  },
-  {
-    id: "usr-pradeep-admin",
-    name: "Pradeep Sharma",
-    email: "pradeep.sharma@labmatrixindia.com",
-    phoneNumber: "7011269207",
-    companyName: "Labmatrix Instrument India Pvt Limited",
-    role: "ADMIN",
-    createdAt: "2026-10-16T15:00:00.000Z",
-    _count: { listings: 8, requirements: 0 },
-  },
-  {
-    id: "usr-redacted-6",
-    name: "Redacted User",
-    email: "redacted.user@example.com",
-    phoneNumber: "0000000000",
-    companyName: null,
-    role: "USER",
-    createdAt: "2026-10-16T16:00:00.000Z",
-    _count: { listings: 2, requirements: 0 },
-  },
-  {
-    id: "usr-redacted-7",
-    name: "pradeep sharma",
-    email: "redacted.user@example.com",
-    phoneNumber: "+91 7303040804",
-    companyName: "Labmatrix Instrument India Private Limited",
-    role: "USER",
-    createdAt: "2026-10-16T17:00:00.000Z",
-    _count: { listings: 1, requirements: 0 },
-  },
-  {
-    id: "usr-labmatrix-admin",
-    name: "Labmatrix",
-    email: "labmatrixindia@gmail.com",
-    phoneNumber: "0000000000",
-    companyName: "Labmatrix Instrument India Pvt Ltd",
-    role: "ADMIN",
-    createdAt: "2026-10-16T18:00:00.000Z",
-    _count: { listings: 1, requirements: 0 },
-  },
-  {
-    id: "usr-manish-admin",
-    name: "Manish Mangla",
-    email: "manish.mangla@labmatrixindia.com",
-    phoneNumber: "+91 8920798971",
-    companyName: "Labmatrix",
-    role: "ADMIN",
-    createdAt: "2026-08-30T10:00:00.000Z",
-    _count: { listings: 14, requirements: 1 },
-  },
-  {
-    id: "usr-ansh-client",
-    name: "Ansh Mangla",
-    email: "anshmangla3107@gmail.com",
-    phoneNumber: null,
-    companyName: null,
-    role: "USER",
-    createdAt: "2026-10-14T07:35:10.000Z",
-    _count: { listings: 0, requirements: 0 },
-  },
-];
-
-// REAL PLATFORM LISTINGS MATCHING THE LIVE DATABASE (Website Console Image 3)
-const REAL_PLATFORM_LISTINGS = [
-  {
-    id: "lst-09903392",
-    title: "SS 1/16 SS Union Male Extension Nut",
-    category: "Spare Parts & Consumables",
-    itemType: "SPARE_PART",
-    partNumber: "09903392",
-    compatibleWith: "PerkinElmer GC",
-    minPrice: 4500,
-    maxPrice: 5500,
-    quantity: 1,
-    isApproved: true,
-    status: "AVAILABLE",
-    seller: {
-      name: "Redacted User",
-      email: "redacted.user@example.com",
-      phoneNumber: "0000000000",
-      companyName: "Labmatrix Verified Seller",
-    },
-    _count: { inquiries: 0 },
-  },
-  {
-    id: "lst-glowplug",
-    title: "Stainless Steel Glow Plug for Auto-Ignite FID",
-    category: "Spare Parts & Consumables",
-    itemType: "SPARE_PART",
-    partNumber: "N6100147",
-    compatibleWith: "PerkinElmer GC Clarus",
-    minPrice: 6000,
-    maxPrice: 8000,
-    quantity: 1,
-    isApproved: true,
-    status: "AVAILABLE",
-    seller: {
-      name: "Redacted User",
-      email: "redacted.user@example.com",
-      phoneNumber: "0000000000",
-      companyName: "Labmatrix Verified Seller",
-    },
-    _count: { inquiries: 0 },
-  },
-  {
-    id: "lst-nebulizer",
-    title: "TR Plus Glass Nebulizer 0.5 mL",
-    category: "ICP-OES & ICP-MS",
-    itemType: "SPARE_PART",
-    partNumber: "N0777707",
-    compatibleWith: "Avio 200/500 ICP-OES",
-    minPrice: 80000,
-    maxPrice: 95000,
-    quantity: 1,
-    isApproved: true,
-    status: "AVAILABLE",
-    seller: {
-      name: "Labmatrix",
-      email: "labmatrixindia@gmail.com",
-      phoneNumber: "0000000000",
-      companyName: "Labmatrix Instrument India Pvt Ltd",
-    },
-    _count: { inquiries: 0 },
-  },
-  {
-    id: "lst-dist-board",
-    title: "AC distribution board pre-owned Perkinelmer GC model Clarus 500/580/600/680 GC",
-    category: "GC & GC-MS",
-    itemType: "SPARE_PART",
-    partNumber: "09930812",
-    compatibleWith: "PerkinElmer GC",
-    minPrice: 40000,
-    maxPrice: 45000,
-    quantity: 1,
-    isApproved: true,
-    status: "AVAILABLE",
-    seller: {
-      name: "Manish Mangla",
-      email: "manish.mangla@labmatrixindia.com",
-      phoneNumber: "8920798971",
-      companyName: "Labmatrix",
-    },
-    _count: { inquiries: 0 },
-  },
-  {
-    id: "cmvamewx7000008jhazhq3i24",
-    title: "Rotary Evaporator",
-    category: "Karl Fischer & Titrators",
-    itemType: "MACHINE",
-    minPrice: 250000,
-    maxPrice: 350000,
-    quantity: 1,
-    isApproved: true,
-    status: "AVAILABLE",
-    seller: {
-      name: "Pradeep Sharma",
-      email: "pradeep.sharma@labmatrixindia.com",
-      phoneNumber: "7011269207",
-      companyName: "Labmatrix Instrument India Pvt Limited",
-    },
-    _count: { inquiries: 1 },
-  },
-  {
-    id: "cmvrt55vt000307l3q7mi2sva",
-    title: "Waters 2695 Alliance Separations HPLC System",
-    category: "HPLC & UHPLC",
-    itemType: "MACHINE",
-    minPrice: 450000,
-    maxPrice: 500000,
-    quantity: 1,
-    isApproved: true,
-    status: "AVAILABLE",
-    seller: {
-      name: "Manish Mangla",
-      email: "manish.mangla@labmatrixindia.com",
-      phoneNumber: "8920798971",
-      companyName: "Labmatrix Technologies",
-    },
-    _count: { inquiries: 1 },
-  },
-];
-
-// REAL PLATFORM REQUIREMENTS (RFQs)
-const REAL_PLATFORM_REQUIREMENTS = [
-  {
-    id: "req-waters-2695",
-    title: "Waters 2695 Separations Module with PDA Detector",
-    category: "HPLC & UHPLC",
-    itemType: "MACHINE",
-    description: "Looking for calibrated Waters 2695 HPLC module with 2996/2998 PDA detector for pharmaceutical QC bench. Immediate procurement.",
-    targetPrice: "₹4,00,000 - ₹5,00,000",
-    isApproved: true,
-    status: "OPEN",
-    buyer: {
-      name: "Redacted User",
-      email: "redacted.user@example.com",
-      phoneNumber: "+91 0000000000",
-      companyName: "Redacted User",
-    },
-  },
-];
 
 export default function AdminConsoleScreen() {
   const router = useRouter();
@@ -423,74 +159,12 @@ export default function AdminConsoleScreen() {
         }
       } catch (err) {}
 
-      // Real platform brokerage deals (no fake names)
-      return [
-        {
-          id: "cmvamewx7000008jhazhq3i24-inq",
-          status: "NEW",
-          createdAt: "2026-10-16T13:47:25.000Z",
-          message:
-            "Hello, I am interested in acquiring this Rotary Evaporator. Please let me know the availability and inspection schedule.",
-          inquirer: {
-            id: "usr-pradeep-buyer",
-            name: "Pradeep Sharma",
-            email: "pradeep.sharma@labmatrixindia.com",
-            phoneNumber: "7011269207",
-            companyName: "Labmatrix Instrument India Pvt Limited",
-            badge: "VERIFIED BUYER",
-          },
-          listing: {
-            id: "cmvamewx7000008jhazhq3i24",
-            title: "Rotary Evaporator",
-            category: "Karl Fischer & Titrators",
-            minPrice: 250000,
-            maxPrice: 350000,
-            seller: {
-              id: "usr-pradeep-seller",
-              name: "Pradeep Sharma",
-              email: "pradeep.sharma@labmatrixindia.com",
-              phoneNumber: "7011269207",
-              companyName: "Labmatrix Instrument India Pvt Limited",
-              badge: "DIRECT CONSIGNOR",
-            },
-          },
-        },
-        {
-          id: "cmvrt55vt000307l3q7mi2sva-inq",
-          status: "IN_PROGRESS",
-          createdAt: "2026-10-17T11:20:10.000Z",
-          message:
-            "Looking to inspect and purchase the Waters 2695 HPLC. We have sent our purchase order draft.",
-          inquirer: {
-            id: "usr-redacted-1b",
-            name: "Redacted User",
-            email: "redacted.user@example.com",
-            phoneNumber: "+91 0000000000",
-            companyName: "Redacted User",
-            badge: "VERIFIED BUYER",
-          },
-          listing: {
-            id: "cmvrt55vt000307l3q7mi2sva",
-            title: "Waters 2695 Alliance Separations HPLC System",
-            category: "HPLC & UHPLC",
-            minPrice: 450000,
-            maxPrice: 500000,
-            seller: {
-              id: "usr-manish-seller",
-              name: "Manish Mangla",
-              email: "manish.mangla@labmatrixindia.com",
-              phoneNumber: "+91 8920798971",
-              companyName: "Labmatrix",
-              badge: "DIRECT CONSIGNOR",
-            },
-          },
-        },
-      ];
+      return [];
     },
   });
 
   // 3. Fetch Registered Enterprise Users (Image 1)
-  const [localUsersList, setLocalUsersList] = useState<any[]>(REAL_PLATFORM_USERS);
+  const [localUsersList, setLocalUsersList] = useState<any[]>([]);
 
   const {
     data: fetchedUsersData,
@@ -507,13 +181,12 @@ export default function AdminConsoleScreen() {
         }
       } catch (err) {}
 
-      // Fall back to the 12 exact real users from live database
-      return REAL_PLATFORM_USERS;
+      return [];
     },
   });
 
   // 4. Fetch All Listings for Admin Control (Image 3)
-  const [localListingsList, setLocalListingsList] = useState<any[]>(REAL_PLATFORM_LISTINGS);
+  const [localListingsList, setLocalListingsList] = useState<any[]>([]);
 
   const {
     data: fetchedListingsData,
@@ -545,12 +218,12 @@ export default function AdminConsoleScreen() {
         }
       } catch (err) {}
 
-      return REAL_PLATFORM_LISTINGS;
+      return [];
     },
   });
 
   // 5. Fetch Buyer Requirements for Admin Control
-  const [localRequirementsList, setLocalRequirementsList] = useState<any[]>(REAL_PLATFORM_REQUIREMENTS);
+  const [localRequirementsList, setLocalRequirementsList] = useState<any[]>([]);
 
   const {
     data: fetchedRequirementsData,
@@ -574,7 +247,7 @@ export default function AdminConsoleScreen() {
         }
       } catch (err) {}
 
-      return REAL_PLATFORM_REQUIREMENTS;
+      return [];
     },
   });
 

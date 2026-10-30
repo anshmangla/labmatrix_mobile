@@ -179,8 +179,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             id: gUser.id || `google_${Date.now()}`,
             name: gUser.name || "Verified Researcher",
             email: cleanEmail,
-            phoneNumber: cleanEmail.includes("manish") ? "+91 8920798971" : "+91 7011269207",
-            companyName: "LabMatrix Technologies",
             role: isAdmin ? "ADMIN" : "USER",
           };
 
