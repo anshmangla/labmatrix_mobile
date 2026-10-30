@@ -182,6 +182,16 @@ const REAL_PLATFORM_USERS = [
     createdAt: "2026-08-30T10:00:00.000Z",
     _count: { listings: 14, requirements: 1 },
   },
+  {
+    id: "usr-ansh-client",
+    name: "Ansh Mangla",
+    email: "anshmangla3107@gmail.com",
+    phoneNumber: null,
+    companyName: null,
+    role: "USER",
+    createdAt: "2026-10-14T07:35:10.000Z",
+    _count: { listings: 0, requirements: 0 },
+  },
 ];
 
 // REAL PLATFORM LISTINGS MATCHING THE LIVE DATABASE (Website Console Image 3)
@@ -732,6 +742,16 @@ export default function AdminConsoleScreen() {
         await api.patch(`/api/listings/${id}`, { status: newStatus });
       });
       Alert.alert("Status Updated", `Listing status set to ${newStatus}.`);
+    } catch {}
+  };
+
+  const handleCopyListing = async (item: any) => {
+    try {
+      const shareUrl = `https://labmatrixindia.com/listing/${item.id}`;
+      await Share.share({
+        title: item.title,
+        message: `${item.title}\n${shareUrl}`,
+      });
     } catch {}
   };
 
@@ -1687,8 +1707,17 @@ export default function AdminConsoleScreen() {
                         </View>
                       </View>
 
-                      {/* Actions Bar (Copy, Edit, Delete) */}
+                      {/* Actions Bar (Copy, Edit, Delete - Exact Match to Website Console Image 3) */}
                       <View style={styles.listingActionsRow}>
+                        <TouchableOpacity
+                          style={styles.listingActionBtn}
+                          activeOpacity={0.7}
+                          onPress={() => handleCopyListing(item)}
+                        >
+                          <Copy size={13} color="#475569" />
+                          <Text style={styles.listingActionBtnText}>Copy</Text>
+                        </TouchableOpacity>
+
                         <TouchableOpacity
                           style={styles.listingActionBtn}
                           activeOpacity={0.7}
@@ -1696,15 +1725,6 @@ export default function AdminConsoleScreen() {
                         >
                           <Pencil size={13} color="#475569" />
                           <Text style={styles.listingActionBtnText}>Edit</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={styles.listingActionBtn}
-                          activeOpacity={0.7}
-                          onPress={() => router.push(`/listing/${item.id}` as any)}
-                        >
-                          <ExternalLink size={13} color="#475569" />
-                          <Text style={styles.listingActionBtnText}>View</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
