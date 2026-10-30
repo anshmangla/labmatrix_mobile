@@ -686,7 +686,11 @@ export default function ListingDetailScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.modalForm}
+              contentContainerStyle={styles.modalFormContent}
+              showsVerticalScrollIndicator={false}
+            >
               <Text style={styles.inputLabel}>Your Name *</Text>
               <TextInput
                 style={[styles.input, isDark && styles.inputDark]}
@@ -1519,6 +1523,9 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   modalForm: {
+    flexShrink: 1,
+  },
+  modalFormContent: {
     paddingHorizontal: 20,
     paddingVertical: 14,
   },

@@ -704,7 +704,11 @@ export default function MarketplaceScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
               {/* Category Filter */}
               <Text style={styles.modalSectionTitle}>Instrument Category</Text>
               <View style={styles.modalOptionsGrid}>
@@ -1591,6 +1595,9 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   modalScroll: {
+    flexShrink: 1,
+  },
+  modalScrollContent: {
     paddingHorizontal: 20,
     paddingVertical: 16,
   },

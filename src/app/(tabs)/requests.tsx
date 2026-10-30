@@ -629,8 +629,13 @@ export default function RequestsScreen() {
               )}
             </View>
 
-            {/* Filter Chips Row 1 */}
-            <View style={styles.typeChipsRow}>
+            {/* Filter Chips Row 1 (scrolls sideways when the chips don't fit) */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.typeChipsScroll}
+              contentContainerStyle={styles.typeChipsRow}
+            >
               <TouchableOpacity
                 style={[
                   styles.typeChip,
@@ -683,7 +688,7 @@ export default function RequestsScreen() {
                   Spare Parts
                 </Text>
               </TouchableOpacity>
-            </View>
+            </ScrollView>
 
             {/* Filter Chips Row 2 (Categories) */}
             <ScrollView
@@ -768,7 +773,11 @@ export default function RequestsScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.modalForm}
+              contentContainerStyle={styles.modalFormContent}
+              showsVerticalScrollIndicator={false}
+            >
               {/* Classification Selector */}
               <Text style={styles.inputLabel}>Requirement Type *</Text>
               <View style={styles.typeSelectorRow}>
@@ -1142,10 +1151,13 @@ const styles = StyleSheet.create({
   clearSearchBtn: {
     padding: 4,
   },
+  typeChipsScroll: {
+    marginBottom: 12,
+    flexGrow: 0,
+  },
   typeChipsRow: {
     flexDirection: "row",
     gap: 8,
-    marginBottom: 12,
   },
   typeChip: {
     flexDirection: "row",
@@ -1515,6 +1527,9 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   modalForm: {
+    flexShrink: 1,
+  },
+  modalFormContent: {
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
