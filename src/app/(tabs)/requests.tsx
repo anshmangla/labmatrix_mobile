@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -17,8 +17,8 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Search,
   MapPin,
@@ -60,6 +60,8 @@ const CATEGORIES = [
   "Karl Fischer & Titrators",
   "Other Lab Equipment",
 ];
+
+const PAGE_SIZE = 30;
 
 export default function RequestsScreen() {
   const router = useRouter();
@@ -103,25 +105,49 @@ export default function RequestsScreen() {
   const [postPhone, setPostPhone] = useState(user?.phoneNumber || "");
   const [postCompany, setPostCompany] = useState(user?.companyName || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Set when the form is editing an existing request (opened via ?edit=<id>)
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const { edit } = useLocalSearchParams<{ edit?: string }>();
 
   // Fetch Requirements from Backend
   const {
-    data,
+    data: pagedData,
     isLoading,
     isRefetching,
     refetch,
-  } = useQuery({
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ["requirements", selectedCategory, searchQuery, selectedTypeFilter],
-    queryFn: async () => {
-      const params: any = {};
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => {
+      const params: any = { page: pageParam, limit: PAGE_SIZE };
       if (selectedCategory !== "ALL") params.category = selectedCategory;
       if (searchQuery.trim()) params.query = searchQuery.trim();
       if (selectedTypeFilter === "SPARE_PART") params.itemType = "SPARE_PART";
 
       const res = await api.get("/api/requirements", { params });
-      return (res.data?.requirements || []) as Requirement[];
+      return {
+        requirements: (res.data?.requirements || []) as Requirement[],
+        page: (res.data?.pagination?.page as number) ?? pageParam,
+        totalPages: (res.data?.pagination?.totalPages as number) ?? 1,
+        total: res.data?.pagination?.total as number | undefined,
+      };
     },
+    getNextPageParam: (lastPage) =>
+      lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
   });
+
+  // Flatten loaded pages; skip duplicates if new items shifted page boundaries
+  const data = useMemo(() => {
+    if (!pagedData) return undefined;
+    const seen = new Set<string>();
+    return pagedData.pages
+      .flatMap((p) => p.requirements)
+      .filter((item) => (seen.has(item.id) ? false : (seen.add(item.id), true)));
+  }, [pagedData]);
+  const totalCount = pagedData?.pages[0]?.total ?? data?.length ?? 0;
 
   const filteredRequirements = useMemo(() => {
     if (!data) return [];
@@ -163,6 +189,97 @@ export default function RequestsScreen() {
         r.category.includes("HPLC")
     ).length;
   }, [data]);
+
+  useEffect(() => {
+    if (!edit || !isAuthenticated) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await api.get(`/api/requirements/${encodeURIComponent(edit)}`);
+        const req = res.data?.requirement;
+        if (cancelled || !req) return;
+        if (!res.data?.isOwner && !res.data?.isAdmin) {
+          Alert.alert("Not Allowed", "You can only edit your own requests.");
+          return;
+        }
+        setPostTitle(req.title || "");
+        setPostCategory(req.category || CATEGORIES[1]);
+        setPostItemType(req.itemType === "SPARE_PART" ? "SPARE_PART" : "MACHINE");
+        setPostPartNumber(req.partNumber || "");
+        setPostCompatibleWith(req.compatibleWith || "");
+        setPostDescription(req.description || "");
+        setEditingId(req.id);
+        setPostModalVisible(true);
+      } catch (err: any) {
+        if (!cancelled) {
+          Alert.alert("Unable to Load", err.response?.data?.error || "Could not load this request for editing.");
+        }
+      } finally {
+        // Clear the param so the form doesn't reopen when returning to this tab
+        router.setParams({ edit: undefined } as any);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [edit, isAuthenticated, router]);
+
+  const closePostModal = () => {
+    setPostModalVisible(false);
+    if (editingId) {
+      setEditingId(null);
+      setPostTitle("");
+      setPostDescription("");
+      setPostPartNumber("");
+      setPostCompatibleWith("");
+    }
+  };
+
+  // Save changes to an existing request (same fields as the website's edit page)
+  const handleSaveEdit = async () => {
+    if (!editingId) return;
+    const title = postTitle.trim();
+    const description = postDescription.trim();
+    if (title.length < 3) {
+      Alert.alert("Validation Error", "Title must be at least 3 characters.");
+      return;
+    }
+    if (description.length < 10) {
+      Alert.alert("Validation Error", "Specifications description must be at least 10 characters.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await api.patch(`/api/requirements/${encodeURIComponent(editingId)}`, {
+        title,
+        description,
+        category: postCategory,
+        itemType: postItemType,
+        partNumber: postItemType === "SPARE_PART" ? postPartNumber.trim() || null : null,
+        compatibleWith: postItemType === "SPARE_PART" ? postCompatibleWith.trim() || null : null,
+      });
+
+      const savedId = editingId;
+      closePostModal();
+      queryClient.invalidateQueries({ queryKey: ["requirements"] });
+      queryClient.invalidateQueries({ queryKey: ["myItems"] });
+      queryClient.invalidateQueries({ queryKey: ["requirement", savedId] });
+
+      Alert.alert(
+        "Request Updated",
+        res.data?.requiresReapproval
+          ? "Your changes were saved and are pending admin re-approval before appearing live."
+          : "Your changes were saved."
+      );
+    } catch (err: any) {
+      Alert.alert("Update Failed", err.response?.data?.error || "Could not save your changes.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // Handle Post Wanted Submission
   const handlePostWanted = async () => {
@@ -414,9 +531,18 @@ export default function RequestsScreen() {
         renderItem={renderRequirementCard}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        onEndReached={() => {
+          if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+        }}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          isFetchingNextPage ? (
+            <ActivityIndicator style={{ marginVertical: 20 }} color={colors.primaryContainer} />
+          ) : undefined
+        }
         refreshControl={
           <RefreshControl
-            refreshing={isRefetching}
+            refreshing={isRefetching && !isFetchingNextPage}
             onRefresh={() => {
               refetch();
             }}
@@ -515,7 +641,7 @@ export default function RequestsScreen() {
                     selectedTypeFilter === "ALL" && styles.typeChipTextActive,
                   ]}
                 >
-                  All Requests ({data?.length || 0})
+                  All Requests ({totalCount})
                 </Text>
               </TouchableOpacity>
 
@@ -618,19 +744,21 @@ export default function RequestsScreen() {
         visible={postModalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setPostModalVisible(false)}
+        onRequestClose={closePostModal}
       >
         <SafeAreaView style={styles.modalOverlay}>
           <View style={[styles.modalSheet, isDark && styles.modalSheetDark]}>
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalSubHeader}>Broadcast Sourcing Request</Text>
+                <Text style={styles.modalSubHeader}>
+                  {editingId ? "Update Sourcing Request" : "Broadcast Sourcing Request"}
+                </Text>
                 <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>
-                  Post Equipment Wanted
+                  {editingId ? "Edit Equipment Wanted" : "Post Equipment Wanted"}
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={() => setPostModalVisible(false)}
+                onPress={closePostModal}
                 style={styles.closeModalBtn}
               >
                 <X size={20} color="#64748b" />
@@ -749,31 +877,35 @@ export default function RequestsScreen() {
                 numberOfLines={4}
               />
 
-              {/* Contact Info */}
-              <Text style={styles.inputLabel}>Mobile / WhatsApp (Admin Verification) *</Text>
-              <TextInput
-                style={[styles.input, isDark && styles.inputDark]}
-                placeholder="+91-XXXXXXXXXX"
-                placeholderTextColor="#94a3b8"
-                keyboardType="phone-pad"
-                value={postPhone}
-                onChangeText={setPostPhone}
-              />
+              {/* Contact Info (collected when posting; not part of an edit) */}
+              {!editingId && (
+                <>
+                  <Text style={styles.inputLabel}>Mobile / WhatsApp (Admin Verification) *</Text>
+                  <TextInput
+                    style={[styles.input, isDark && styles.inputDark]}
+                    placeholder="+91-XXXXXXXXXX"
+                    placeholderTextColor="#94a3b8"
+                    keyboardType="phone-pad"
+                    value={postPhone}
+                    onChangeText={setPostPhone}
+                  />
 
-              <Text style={styles.inputLabel}>Company / Institution Name</Text>
-              <TextInput
-                style={[styles.input, isDark && styles.inputDark]}
-                placeholder="Laboratory or Research Organization"
-                placeholderTextColor="#94a3b8"
-                value={postCompany}
-                onChangeText={setPostCompany}
-              />
+                  <Text style={styles.inputLabel}>Company / Institution Name</Text>
+                  <TextInput
+                    style={[styles.input, isDark && styles.inputDark]}
+                    placeholder="Laboratory or Research Organization"
+                    placeholderTextColor="#94a3b8"
+                    value={postCompany}
+                    onChangeText={setPostCompany}
+                  />
+                </>
+              )}
 
               {/* Submit CTA */}
               <TouchableOpacity
                 style={[styles.modalSubmitBtn, isSubmitting && styles.modalSubmitBtnDisabled]}
                 activeOpacity={0.85}
-                onPress={handlePostWanted}
+                onPress={editingId ? handleSaveEdit : handlePostWanted}
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (
@@ -781,7 +913,9 @@ export default function RequestsScreen() {
                 ) : (
                   <>
                     <PlusCircle size={16} color="#0f172a" />
-                    <Text style={styles.modalSubmitBtnText}>Broadcast Sourcing Request</Text>
+                    <Text style={styles.modalSubmitBtnText}>
+                      {editingId ? "Save Changes" : "Broadcast Sourcing Request"}
+                    </Text>
                   </>
                 )}
               </TouchableOpacity>

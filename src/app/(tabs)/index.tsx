@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   Search,
   MapPin,
@@ -80,6 +80,8 @@ const STATUS_OPTIONS: { label: string; value: "ALL" | "AVAILABLE" | "SOLD" }[] =
   { label: "Sold Out", value: "SOLD" },
 ];
 
+const PAGE_SIZE = 30;
+
 export default function MarketplaceScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -124,15 +126,19 @@ export default function MarketplaceScreen() {
 
   // Query Backend Listings
   const {
-    data,
+    data: pagedData,
     isLoading,
     isRefetching,
     isError,
     refetch,
-  } = useQuery({
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ["listings", selectedType, selectedCategory, selectedStatus, selectedPriceTier, searchQuery],
-    queryFn: async () => {
-      const params: any = {};
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => {
+      const params: any = { page: pageParam, limit: PAGE_SIZE };
       // When status is "ALL", do not restrict status so backend returns both AVAILABLE and SOLD
       if (selectedStatus !== "ALL") {
         params.status = selectedStatus;
@@ -146,9 +152,26 @@ export default function MarketplaceScreen() {
       if (tier.max) params.maxPrice = tier.max;
 
       const res = await api.get("/api/listings", { params });
-      return (res.data?.listings || []) as Listing[];
+      return {
+        listings: (res.data?.listings || []) as Listing[],
+        page: (res.data?.pagination?.page as number) ?? pageParam,
+        totalPages: (res.data?.pagination?.totalPages as number) ?? 1,
+        total: res.data?.pagination?.total as number | undefined,
+      };
     },
+    getNextPageParam: (lastPage) =>
+      lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
   });
+
+  // Flatten loaded pages; skip duplicates if new items shifted page boundaries
+  const data = useMemo(() => {
+    if (!pagedData) return undefined;
+    const seen = new Set<string>();
+    return pagedData.pages
+      .flatMap((p) => p.listings)
+      .filter((item) => (seen.has(item.id) ? false : (seen.add(item.id), true)));
+  }, [pagedData]);
+  const totalCount = pagedData?.pages[0]?.total ?? data?.length ?? 0;
 
   const resetAllFilters = () => {
     setSelectedType("ALL");
@@ -562,10 +585,10 @@ export default function MarketplaceScreen() {
           <Text style={styles.statusAvailableText}>
             {data
               ? selectedStatus === "SOLD"
-                ? `${data.length} RECENTLY SOLD UNITS`
+                ? `${totalCount} RECENTLY SOLD UNITS`
                 : selectedStatus === "AVAILABLE"
-                ? `${data.length} INSTRUMENTS AVAILABLE`
-                : `${data.length} TOTAL INSTRUMENTS CATALOGED`
+                ? `${totalCount} INSTRUMENTS AVAILABLE`
+                : `${totalCount} TOTAL INSTRUMENTS CATALOGED`
               : "CATALOG AVAILABLE"}
           </Text>
         </View>
@@ -608,9 +631,18 @@ export default function MarketplaceScreen() {
           renderItem={renderListingCard}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          onEndReached={() => {
+            if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+          }}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            isFetchingNextPage ? (
+              <ActivityIndicator style={{ marginVertical: 20 }} color={colors.primaryContainer} />
+            ) : undefined
+          }
           refreshControl={
             <RefreshControl
-              refreshing={isRefetching}
+              refreshing={isRefetching && !isFetchingNextPage}
               onRefresh={() => {
                 refetch();
               }}

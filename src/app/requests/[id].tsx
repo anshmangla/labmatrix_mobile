@@ -26,6 +26,7 @@ import {
   FileText,
   Phone,
   Share2,
+  Pencil,
   ChevronLeft,
   Building,
   Send,
@@ -58,13 +59,18 @@ export default function RequirementDetailScreen() {
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data: detail, isLoading } = useQuery({
     queryKey: ["requirement", id],
     queryFn: async () => {
       const res = await api.get(`/api/requirements/${id}`);
-      return res.data?.requirement as Requirement;
+      return {
+        requirement: res.data?.requirement as Requirement,
+        canEdit: Boolean(res.data?.isOwner || res.data?.isAdmin),
+      };
     },
   });
+  const data = detail?.requirement;
+  const canEdit = detail?.canEdit ?? false;
 
   const handleShare = async () => {
     if (!data) return;
@@ -182,13 +188,26 @@ export default function RequirementDetailScreen() {
           Requirement REQ-2026-{shortCode}
         </Text>
 
-        <TouchableOpacity
-          style={styles.headerCircleBtn}
-          activeOpacity={0.8}
-          onPress={handleShare}
-        >
-          <Share2 size={18} color="#0f172a" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          {canEdit && (
+            <TouchableOpacity
+              style={styles.headerCircleBtn}
+              activeOpacity={0.8}
+              onPress={() =>
+                router.push({ pathname: "/(tabs)/requests", params: { edit: data.id } } as any)
+              }
+            >
+              <Pencil size={18} color="#0f172a" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.headerCircleBtn}
+            activeOpacity={0.8}
+            onPress={handleShare}
+          >
+            <Share2 size={18} color="#0f172a" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

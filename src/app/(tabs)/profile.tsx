@@ -1160,6 +1160,20 @@ export default function ProfileScreen() {
 
                         <View style={styles.actionsBtnGroup}>
                           <TouchableOpacity
+                            style={styles.actionPillBtn}
+                            activeOpacity={0.7}
+                            onPress={() =>
+                              router.push({
+                                pathname: "/(tabs)/requests",
+                                params: { edit: req.id },
+                              } as any)
+                            }
+                          >
+                            <Pencil size={12} color="#475569" />
+                            <Text style={styles.actionPillText}>Edit</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
                             style={styles.actionPillBtnPrimary}
                             activeOpacity={0.7}
                             onPress={() =>
