@@ -49,6 +49,8 @@ import { Listing } from "@/types/api";
 import { useAuth } from "@/context/auth-context";
 import { LabMatrixTokens } from "@/constants/theme";
 import { getOptimizedImageUrl, IMAGE_PRESETS } from "@/lib/images";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { ZoomableImage } from "@/components/ZoomableImage";
 
 const { width } = Dimensions.get("window");
 const CAROUSEL_HEIGHT = 280;
@@ -74,7 +76,6 @@ export default function ListingDetailScreen() {
   const [magnifyIndex, setMagnifyIndex] = useState(0);
   const [zoomScale, setZoomScale] = useState(1);
   const carouselScrollRef = useRef<any>(null);
-  const lastTapRef = useRef<number>(0);
 
   const openMagnifier = (index: number) => {
     setMagnifyIndex(index);
@@ -85,14 +86,6 @@ export default function ListingDetailScreen() {
   const handleSelectPhoto = (idx: number) => {
     setActiveImageIndex(idx);
     carouselScrollRef.current?.scrollTo({ x: idx * width, animated: true });
-  };
-
-  const handleImageDoubleTap = () => {
-    const now = Date.now();
-    if (now - lastTapRef.current < 300) {
-      setZoomScale((prev) => (prev > 1 ? 1 : 2.5));
-    }
-    lastTapRef.current = now;
   };
 
   // Inquiry form states
@@ -674,8 +667,8 @@ export default function ListingDetailScreen() {
         transparent={true}
         onRequestClose={() => setInquiryModalVisible(false)}
       >
-        <SafeAreaView style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, isDark && styles.modalSheetDark]}>
+        <View style={[styles.modalOverlay, { paddingTop: insets.top }]}>
+          <View style={[styles.modalSheet, isDark && styles.modalSheetDark, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
             <View style={styles.modalHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.modalSub}>
@@ -764,7 +757,7 @@ export default function ListingDetailScreen() {
               </TouchableOpacity>
             </ScrollView>
           </View>
-        </SafeAreaView>
+        </View>
       </Modal>
 
       {/* Fullscreen Interactive Photo Magnifier & Zoom Modal */}
@@ -778,7 +771,9 @@ export default function ListingDetailScreen() {
           setZoomScale(1);
         }}
       >
-        <SafeAreaView style={styles.magnifyModalContainer}>
+        <GestureHandlerRootView
+          style={[styles.magnifyModalContainer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
+        >
           <StatusBar barStyle="light-content" />
 
           {/* Top Bar with Photo Counter & Zoom Controls */}
@@ -842,49 +837,17 @@ export default function ListingDetailScreen() {
 
           {/* Center Viewport: Zoomable Image with Pan & Double-Tap */}
           <View style={styles.magnifyViewport}>
-            <ScrollView
-              contentContainerStyle={styles.magnifyScrollContent}
-              maximumZoomScale={4}
-              minimumZoomScale={1}
-              pinchGestureEnabled={true}
-              showsHorizontalScrollIndicator={false}
-              showsVerticalScrollIndicator={false}
-              centerContent={true}
-              scrollEnabled={zoomScale > 1}
-              horizontal={zoomScale > 1}
-            >
-              <ScrollView
-                contentContainerStyle={styles.magnifyScrollContent}
-                showsHorizontalScrollIndicator={false}
-                showsVerticalScrollIndicator={false}
-                centerContent={true}
-                scrollEnabled={zoomScale > 1}
-              >
-                <TouchableOpacity
-                  activeOpacity={1}
-                  onPress={handleImageDoubleTap}
-                  style={[
-                    styles.magnifyImageWrapper,
-                    {
-                      width: width * zoomScale,
-                      height: (width * 0.95) * zoomScale,
-                    },
-                  ]}
-                >
-                  <Image
-                    source={{
-                      uri: getOptimizedImageUrl(photos[magnifyIndex], {
-                        width: 1600,
-                        quality: "auto:best",
-                        format: "webp",
-                      }),
-                    }}
-                    style={styles.magnifyImage}
-                    resizeMode="contain"
-                  />
-                </TouchableOpacity>
-              </ScrollView>
-            </ScrollView>
+            <ZoomableImage
+              uri={getOptimizedImageUrl(photos[magnifyIndex], {
+                width: 1600,
+                quality: "auto:best",
+                format: "webp",
+              })}
+              width={width}
+              height={width * 0.95}
+              zoom={zoomScale}
+              onZoomChange={setZoomScale}
+            />
 
             {/* Navigation Arrows for Multiple Photos when not zoomed */}
             {photos.length > 1 && zoomScale === 1 && (
@@ -923,8 +886,8 @@ export default function ListingDetailScreen() {
             <View style={styles.magnifyHintOverlay}>
               <Text style={styles.magnifyHintText}>
                 {zoomScale > 1
-                  ? "Drag to pan • Double-tap or tap reset to fit"
-                  : "Double-tap or tap + to zoom • Swipe thumbnails below"}
+                  ? "Drag to pan • Pinch or double-tap to zoom out"
+                  : "Pinch, double-tap or tap + to zoom • Swipe thumbnails below"}
               </Text>
             </View>
           </View>
@@ -961,7 +924,7 @@ export default function ListingDetailScreen() {
               </ScrollView>
             </View>
           )}
-        </SafeAreaView>
+        </GestureHandlerRootView>
       </Modal>
     </View>
   );
@@ -1733,19 +1696,6 @@ const styles = StyleSheet.create({
     position: "relative",
     justifyContent: "center",
     alignItems: "center",
-  },
-  magnifyScrollContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  magnifyImageWrapper: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  magnifyImage: {
-    width: "100%",
-    height: "100%",
   },
   magnifyPrevArrow: {
     position: "absolute",

@@ -14,7 +14,7 @@ import {
   StatusBar,
   Modal,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { useQueryClient } from "@tanstack/react-query";
@@ -86,6 +86,7 @@ const SPARE_CONDITIONS = [
 ];
 
 export default function SellScreen() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { edit, type } = useLocalSearchParams<{ edit?: string; type?: string }>();
   const isEditMode = !!edit;
@@ -1084,7 +1085,7 @@ export default function SellScreen() {
         onRequestClose={() => setIsCategoryModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContentCard, isDark && styles.modalContentCardDark]}>
+          <View style={[styles.modalContentCard, isDark && styles.modalContentCardDark, { paddingBottom: Math.max(insets.bottom + 8, 18) }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>Select Category</Text>
               <TouchableOpacity onPress={() => setIsCategoryModalVisible(false)}>
@@ -1121,7 +1122,7 @@ export default function SellScreen() {
         onRequestClose={() => setIsConditionModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContentCard, isDark && styles.modalContentCardDark]}>
+          <View style={[styles.modalContentCard, isDark && styles.modalContentCardDark, { paddingBottom: Math.max(insets.bottom + 8, 18) }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>Select Condition</Text>
               <TouchableOpacity onPress={() => setIsConditionModalVisible(false)}>

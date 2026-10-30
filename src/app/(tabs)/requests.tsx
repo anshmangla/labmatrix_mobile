@@ -16,7 +16,7 @@ import {
   StatusBar,
   Alert,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -66,6 +66,7 @@ const CATEGORIES = [
 const PAGE_SIZE = 30;
 
 export default function RequestsScreen() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -748,8 +749,8 @@ export default function RequestsScreen() {
         transparent={true}
         onRequestClose={closePostModal}
       >
-        <SafeAreaView style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, isDark && styles.modalSheetDark]}>
+        <View style={[styles.modalOverlay, { paddingTop: insets.top }]}>
+          <View style={[styles.modalSheet, isDark && styles.modalSheetDark, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
             <View style={styles.modalHeader}>
               <View>
                 <Text style={styles.modalSubHeader}>
@@ -923,7 +924,7 @@ export default function RequestsScreen() {
               </TouchableOpacity>
             </ScrollView>
           </View>
-        </SafeAreaView>
+        </View>
       </Modal>
 
       {/* Global Quick Profile Menu Sheet */}

@@ -15,7 +15,7 @@ import {
   Platform,
   StatusBar,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
@@ -83,6 +83,7 @@ const STATUS_OPTIONS: { label: string; value: "ALL" | "AVAILABLE" | "SOLD" }[] =
 const PAGE_SIZE = 30;
 
 export default function MarketplaceScreen() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -686,8 +687,8 @@ export default function MarketplaceScreen() {
         transparent={true}
         onRequestClose={() => setFilterModalVisible(false)}
       >
-        <SafeAreaView style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, isDark && styles.modalSheetDark]}>
+        <View style={[styles.modalOverlay, { paddingTop: insets.top }]}>
+          <View style={[styles.modalSheet, isDark && styles.modalSheetDark, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
             <View style={styles.modalHeader}>
               <View style={styles.modalHeaderTitleRow}>
                 <SlidersHorizontal size={18} color={colors.primaryContainer} />
@@ -825,7 +826,7 @@ export default function MarketplaceScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </SafeAreaView>
+        </View>
       </Modal>
 
       {/* Global Quick Profile Menu Sheet */}

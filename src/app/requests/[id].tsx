@@ -15,7 +15,7 @@ import {
   Platform,
   StatusBar,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -43,6 +43,7 @@ import { LabMatrixTokens } from "@/constants/theme";
 const LABMATRIX_PHONE = "+917303040804";
 
 export default function RequirementDetailScreen() {
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -171,7 +172,7 @@ export default function RequirementDetailScreen() {
   };
 
   return (
-    <SafeAreaView edges={["top", "bottom"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
+    <SafeAreaView edges={["top"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* Top Header */}
@@ -210,7 +211,10 @@ export default function RequirementDetailScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 110 + insets.bottom }]}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Main Card */}
         <View style={[styles.heroCard, isDark && styles.heroCardDark]}>
           <View style={styles.badgeRow}>
@@ -368,7 +372,7 @@ export default function RequirementDetailScreen() {
       </ScrollView>
 
       {/* Sticky Bottom Action Bar */}
-      <View style={[styles.bottomBar, isDark && styles.bottomBarDark]}>
+      <View style={[styles.bottomBar, isDark && styles.bottomBarDark, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <TouchableOpacity
           style={styles.callDeskBtn}
           activeOpacity={0.8}
@@ -406,8 +410,8 @@ export default function RequirementDetailScreen() {
         transparent={true}
         onRequestClose={() => setModalVisible(false)}
       >
-        <SafeAreaView style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, isDark && styles.modalSheetDark]}>
+        <View style={[styles.modalOverlay, { paddingTop: insets.top }]}>
+          <View style={[styles.modalSheet, isDark && styles.modalSheetDark, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
             <View style={styles.modalHeader}>
               <View style={{ flex: 1, paddingRight: 10 }}>
                 <Text style={styles.modalSub}>Quotation Proposal</Text>
@@ -496,7 +500,7 @@ export default function RequirementDetailScreen() {
               </TouchableOpacity>
             </ScrollView>
           </View>
-        </SafeAreaView>
+        </View>
       </Modal>
     </SafeAreaView>
   );
