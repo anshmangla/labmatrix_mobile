@@ -15,6 +15,7 @@ import {
   Linking,
   Share,
   Platform,
+  StatusBar,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -33,9 +34,13 @@ import {
   Truck,
   FileText,
   ChevronLeft,
+  ChevronRight,
   Building2,
   Mail,
   Layers,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
 } from "lucide-react-native";
 import { api } from "@/lib/api";
 import { Listing } from "@/types/api";
@@ -61,6 +66,32 @@ export default function ListingDetailScreen() {
 
   const [activeTab, setActiveTab] = useState<DetailTab>("Overview");
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  // Photo Magnifier & Lightbox State
+  const [magnifyModalVisible, setMagnifyModalVisible] = useState(false);
+  const [magnifyIndex, setMagnifyIndex] = useState(0);
+  const [zoomScale, setZoomScale] = useState(1);
+  const carouselScrollRef = useRef<any>(null);
+  const lastTapRef = useRef<number>(0);
+
+  const openMagnifier = (index: number) => {
+    setMagnifyIndex(index);
+    setZoomScale(1);
+    setMagnifyModalVisible(true);
+  };
+
+  const handleSelectPhoto = (idx: number) => {
+    setActiveImageIndex(idx);
+    carouselScrollRef.current?.scrollTo({ x: idx * width, animated: true });
+  };
+
+  const handleImageDoubleTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      setZoomScale((prev) => (prev > 1 ? 1 : 2.5));
+    }
+    lastTapRef.current = now;
+  };
 
   // Inquiry form states
   const [inquiryModalVisible, setInquiryModalVisible] = useState(false);
@@ -194,6 +225,7 @@ export default function ListingDetailScreen() {
           {photos.length > 0 ? (
             <>
               <ScrollView
+                ref={carouselScrollRef}
                 horizontal
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
@@ -203,12 +235,18 @@ export default function ListingDetailScreen() {
                 }}
               >
                 {photos.map((photo, idx) => (
-                  <Image
+                  <TouchableOpacity
                     key={idx}
-                    source={{ uri: getOptimizedImageUrl(photo, IMAGE_PRESETS.HERO) }}
-                    style={styles.carouselImage}
-                    resizeMode="cover"
-                  />
+                    activeOpacity={0.92}
+                    onPress={() => openMagnifier(idx)}
+                    style={{ width, height: CAROUSEL_HEIGHT }}
+                  >
+                    <Image
+                      source={{ uri: getOptimizedImageUrl(photo, IMAGE_PRESETS.HERO) }}
+                      style={styles.carouselImage}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
                 ))}
               </ScrollView>
 
@@ -233,6 +271,16 @@ export default function ListingDetailScreen() {
                   {activeImageIndex + 1} / {photos.length}
                 </Text>
               </View>
+
+              {/* Tap to Enlarge / Magnify Pill */}
+              <TouchableOpacity
+                style={styles.magnifyPill}
+                activeOpacity={0.8}
+                onPress={() => openMagnifier(activeImageIndex)}
+              >
+                <ZoomIn size={13} color="#ffffff" />
+                <Text style={styles.magnifyPillText}>Magnify</Text>
+              </TouchableOpacity>
             </>
           ) : (
             <View style={[styles.noImageContainer, isDark && styles.noImageContainerDark]}>
@@ -248,6 +296,38 @@ export default function ListingDetailScreen() {
             </View>
           )}
         </View>
+
+        {/* Thumbnail Gallery Strip (Tap thumbnail to select or tap photo to magnify) */}
+        {photos.length > 1 && (
+          <View style={[styles.thumbnailStrip, isDark && styles.thumbnailStripDark]}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.thumbnailScroll}
+            >
+              {photos.map((photo, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  activeOpacity={0.8}
+                  onPress={() => handleSelectPhoto(idx)}
+                  style={[
+                    styles.thumbnailItem,
+                    activeImageIndex === idx && styles.thumbnailItemActive,
+                  ]}
+                >
+                  <Image
+                    source={{ uri: getOptimizedImageUrl(photo, IMAGE_PRESETS.THUMBNAIL) }}
+                    style={styles.thumbnailImg}
+                    resizeMode="cover"
+                  />
+                  {activeImageIndex === idx && (
+                    <View style={styles.thumbnailActiveOverlay} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Instrument Title & Identification Block */}
         <View style={[styles.mainBlock, isDark && styles.mainBlockDark]}>
@@ -637,6 +717,203 @@ export default function ListingDetailScreen() {
               </TouchableOpacity>
             </ScrollView>
           </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Fullscreen Interactive Photo Magnifier & Zoom Modal */}
+      <Modal
+        visible={magnifyModalVisible}
+        animationType="fade"
+        transparent={false}
+        statusBarTranslucent
+        onRequestClose={() => {
+          setMagnifyModalVisible(false);
+          setZoomScale(1);
+        }}
+      >
+        <SafeAreaView style={styles.magnifyModalContainer}>
+          <StatusBar barStyle="light-content" />
+
+          {/* Top Bar with Photo Counter & Zoom Controls */}
+          <View style={styles.magnifyTopBar}>
+            <View style={styles.magnifyCounterPill}>
+              <Text style={styles.magnifyCounterText}>
+                {magnifyIndex + 1} of {photos.length}
+              </Text>
+              {zoomScale > 1 && (
+                <View style={styles.magnifyZoomBadge}>
+                  <Text style={styles.magnifyZoomBadgeText}>{zoomScale.toFixed(1)}x</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.magnifyControlsRow}>
+              {/* Zoom Out Button */}
+              <TouchableOpacity
+                style={[styles.magnifyControlBtn, zoomScale <= 1 && styles.magnifyControlBtnDisabled]}
+                disabled={zoomScale <= 1}
+                onPress={() => setZoomScale((s) => Math.max(1, Number((s - 0.5).toFixed(1))))}
+                activeOpacity={0.7}
+              >
+                <ZoomOut size={18} color={zoomScale <= 1 ? "#64748b" : "#ffffff"} />
+              </TouchableOpacity>
+
+              {/* Zoom In Button */}
+              <TouchableOpacity
+                style={[styles.magnifyControlBtn, zoomScale >= 4 && styles.magnifyControlBtnDisabled]}
+                disabled={zoomScale >= 4}
+                onPress={() => setZoomScale((s) => Math.min(4, Number((s + 0.5).toFixed(1))))}
+                activeOpacity={0.7}
+              >
+                <ZoomIn size={18} color={zoomScale >= 4 ? "#64748b" : "#ffffff"} />
+              </TouchableOpacity>
+
+              {/* Reset Zoom */}
+              {zoomScale > 1 && (
+                <TouchableOpacity
+                  style={styles.magnifyControlBtn}
+                  onPress={() => setZoomScale(1)}
+                  activeOpacity={0.7}
+                >
+                  <RotateCcw size={17} color="#ffffff" />
+                </TouchableOpacity>
+              )}
+
+              {/* Close Button */}
+              <TouchableOpacity
+                style={styles.magnifyCloseBtn}
+                onPress={() => {
+                  setMagnifyModalVisible(false);
+                  setZoomScale(1);
+                }}
+                activeOpacity={0.7}
+              >
+                <X size={20} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Center Viewport: Zoomable Image with Pan & Double-Tap */}
+          <View style={styles.magnifyViewport}>
+            <ScrollView
+              contentContainerStyle={styles.magnifyScrollContent}
+              maximumZoomScale={4}
+              minimumZoomScale={1}
+              pinchGestureEnabled={true}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+              centerContent={true}
+              scrollEnabled={zoomScale > 1}
+              horizontal={zoomScale > 1}
+            >
+              <ScrollView
+                contentContainerStyle={styles.magnifyScrollContent}
+                showsHorizontalScrollIndicator={false}
+                showsVerticalScrollIndicator={false}
+                centerContent={true}
+                scrollEnabled={zoomScale > 1}
+              >
+                <TouchableOpacity
+                  activeOpacity={1}
+                  onPress={handleImageDoubleTap}
+                  style={[
+                    styles.magnifyImageWrapper,
+                    {
+                      width: width * zoomScale,
+                      height: (width * 0.95) * zoomScale,
+                    },
+                  ]}
+                >
+                  <Image
+                    source={{
+                      uri: getOptimizedImageUrl(photos[magnifyIndex], {
+                        width: 1600,
+                        quality: "auto:best",
+                        format: "webp",
+                      }),
+                    }}
+                    style={styles.magnifyImage}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              </ScrollView>
+            </ScrollView>
+
+            {/* Navigation Arrows for Multiple Photos when not zoomed */}
+            {photos.length > 1 && zoomScale === 1 && (
+              <>
+                {magnifyIndex > 0 && (
+                  <TouchableOpacity
+                    style={styles.magnifyPrevArrow}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setMagnifyIndex((i) => i - 1);
+                      setZoomScale(1);
+                      handleSelectPhoto(magnifyIndex - 1);
+                    }}
+                  >
+                    <ChevronLeft size={24} color="#ffffff" />
+                  </TouchableOpacity>
+                )}
+
+                {magnifyIndex < photos.length - 1 && (
+                  <TouchableOpacity
+                    style={styles.magnifyNextArrow}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setMagnifyIndex((i) => i + 1);
+                      setZoomScale(1);
+                      handleSelectPhoto(magnifyIndex + 1);
+                    }}
+                  >
+                    <ChevronRight size={24} color="#ffffff" />
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+
+            {/* Floating Magnify Hint */}
+            <View style={styles.magnifyHintOverlay}>
+              <Text style={styles.magnifyHintText}>
+                {zoomScale > 1
+                  ? "Drag to pan • Double-tap or tap reset to fit"
+                  : "Double-tap or tap + to zoom • Swipe thumbnails below"}
+              </Text>
+            </View>
+          </View>
+
+          {/* Bottom Thumbnails Strip */}
+          {photos.length > 1 && (
+            <View style={styles.magnifyBottomBar}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.magnifyThumbnailsScroll}
+              >
+                {photos.map((photo, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setMagnifyIndex(idx);
+                      setZoomScale(1);
+                      handleSelectPhoto(idx);
+                    }}
+                    style={[
+                      styles.magnifyThumbItem,
+                      magnifyIndex === idx && styles.magnifyThumbItemActive,
+                    ]}
+                  >
+                    <Image
+                      source={{ uri: getOptimizedImageUrl(photo, IMAGE_PRESETS.THUMBNAIL) }}
+                      style={styles.magnifyThumbImg}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
         </SafeAreaView>
       </Modal>
     </View>
@@ -1233,5 +1510,199 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 14,
     fontWeight: "800",
+  },
+  magnifyPill: {
+    position: "absolute",
+    bottom: 12,
+    left: 14,
+    backgroundColor: "rgba(15, 23, 42, 0.78)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 12,
+    zIndex: 10,
+  },
+  magnifyPillText: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  thumbnailStrip: {
+    backgroundColor: "#ffffff",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  thumbnailStripDark: {
+    backgroundColor: "#0b1329",
+    borderBottomColor: "#1e293b",
+  },
+  thumbnailScroll: {
+    paddingHorizontal: 16,
+    gap: 10,
+    alignItems: "center",
+  },
+  thumbnailItem: {
+    width: 62,
+    height: 62,
+    borderRadius: 10,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    position: "relative",
+  },
+  thumbnailItemActive: {
+    borderColor: "#033a7d",
+  },
+  thumbnailImg: {
+    width: "100%",
+    height: "100%",
+  },
+  thumbnailActiveOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(3, 58, 125, 0.12)",
+  },
+  magnifyModalContainer: {
+    flex: 1,
+    backgroundColor: "#000000",
+  },
+  magnifyTopBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    zIndex: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
+  },
+  magnifyCounterPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  magnifyCounterText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  magnifyZoomBadge: {
+    backgroundColor: "#f59e0b",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  magnifyZoomBadgeText: {
+    color: "#0f172a",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  magnifyControlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  magnifyControlBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  magnifyControlBtnDisabled: {
+    opacity: 0.35,
+  },
+  magnifyCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255, 255, 255, 0.22)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  magnifyViewport: {
+    flex: 1,
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  magnifyScrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  magnifyImageWrapper: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  magnifyImage: {
+    width: "100%",
+    height: "100%",
+  },
+  magnifyPrevArrow: {
+    position: "absolute",
+    left: 14,
+    top: "50%",
+    transform: [{ translateY: -22 }],
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(15, 23, 42, 0.7)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 15,
+  },
+  magnifyNextArrow: {
+    position: "absolute",
+    right: 14,
+    top: "50%",
+    transform: [{ translateY: -22 }],
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(15, 23, 42, 0.7)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 15,
+  },
+  magnifyHintOverlay: {
+    position: "absolute",
+    bottom: 14,
+    backgroundColor: "rgba(15, 23, 42, 0.75)",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    zIndex: 15,
+  },
+  magnifyHintText: {
+    color: "#cbd5e1",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  magnifyBottomBar: {
+    paddingVertical: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
+  },
+  magnifyThumbnailsScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
+    alignItems: "center",
+  },
+  magnifyThumbItem: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "rgba(255, 255, 255, 0.25)",
+  },
+  magnifyThumbItemActive: {
+    borderColor: "#38bdf8",
+  },
+  magnifyThumbImg: {
+    width: "100%",
+    height: "100%",
   },
 });

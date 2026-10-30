@@ -160,7 +160,7 @@ export default function LoginLandingScreen() {
             <View style={[styles.statusPill, isDark && styles.statusPillDark]}>
               <View style={styles.statusDotGreen} />
               <Text style={styles.statusPillText}>
-                India's B2B Exchange • Refurbished Machinery
+                India's B2B Marketplace • Refurbished Machinery
               </Text>
             </View>
           </View>
@@ -168,10 +168,10 @@ export default function LoginLandingScreen() {
           {/* 3. Hero Headline & Subtitle */}
           <View style={styles.heroBlock}>
             <Text style={[styles.heroHeading, isDark && styles.heroHeadingDark]}>
-              Buy & Sell Refurbished Analytical Instruments
+              Buy & Sell Refurbished Analytical Instruments and Spare Parts
             </Text>
             <Text style={styles.heroSubtitle}>
-              India's verified exchange for pre-owned HPLC, GC-MS & OEM replacement parts.
+              The dedicated marketplace for laboratories, pharma facilities, and research centers to buy and sell high-precision analytical instruments and certified spare parts with verified equipment specifications.
             </Text>
           </View>
 
