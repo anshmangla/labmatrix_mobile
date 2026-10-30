@@ -19,12 +19,23 @@ export const api = axios.create({
   },
 });
 
+// Helper to set or clear Authorization header immediately in memory
+export const setAuthHeader = (token: string | null) => {
+  if (token) {
+    api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+  } else {
+    delete api.defaults.headers.common["Authorization"];
+  }
+};
+
 // Attach Authorization header if token exists
 api.interceptors.request.use(async (config) => {
   try {
-    const token = await getAuthToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    if (!config.headers.Authorization && !config.headers.authorization) {
+      const token = await getAuthToken();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
   } catch (error) {
     console.warn("Error reading auth token for request:", error);
@@ -32,11 +43,13 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-// Auto-cleanup on 401 Unauthorized
+// Only clear token if session verification endpoint specifically returns 401
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401) {
+    const isVerifyEndpoint = error.config?.url?.includes("/api/auth/mobile/me");
+    if (error.response?.status === 401 && isVerifyEndpoint) {
+      setAuthHeader(null);
       await removeAuthToken();
       await removeCachedUser();
     }

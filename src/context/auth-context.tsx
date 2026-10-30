@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
 import { User } from "@/types/api";
-import { api } from "@/lib/api";
+import { api, setAuthHeader } from "@/lib/api";
 import {
   getAuthToken,
   saveAuthToken,
@@ -78,6 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const storedUser = await getCachedUser();
 
         if (storedToken) {
+          setAuthHeader(storedToken);
           setToken(storedToken);
           if (storedUser) setUser(storedUser);
 
@@ -90,6 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } catch (err: any) {
             if (err.response?.status === 401 && !storedUser?.email) {
+              setAuthHeader(null);
               await removeAuthToken();
               await removeCachedUser();
               setToken(null);
@@ -115,6 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       const { token: receivedToken, user: receivedUser } = res.data;
 
+      setAuthHeader(receivedToken);
       setToken(receivedToken);
       setUser(receivedUser);
 
@@ -270,6 +273,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await api.post("/api/auth/mobile/register", data);
       const { token: receivedToken, user: receivedUser } = res.data;
 
+      setAuthHeader(receivedToken);
       setToken(receivedToken);
       setUser(receivedUser);
 
@@ -290,6 +294,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await GoogleSignin.signOut();
         } catch (_) {}
       }
+      setAuthHeader(null);
       await removeAuthToken();
       await removeCachedUser();
       setToken(null);

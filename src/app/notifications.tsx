@@ -29,91 +29,6 @@ interface NotificationItem {
   createdAt: string;
 }
 
-// Real platform notifications matching live database activity
-const REAL_PLATFORM_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: "cmvt20ltv000008l5z2lkooms",
-    title: "🎉 Listing Approved & Live!",
-    message: "Your listing \"SS 1/16 SS Union Male Extension Nut\" has been approved by admin and is now publicly live on the marketplace.",
-    type: "ENTRY_APPROVED",
-    link: "/listing/lst-union-nut",
-    isRead: false,
-    createdAt: "2026-10-28T23:09:29.155Z",
-  },
-  {
-    id: "cmvt1kd0g000307jx9t2velr1",
-    title: "Listing Edited: SS 1/16 SS Union Male Extension Nut",
-    message: "Redacted User made changes to \"SS 1/16 SS Union Male Extension Nut\". Please review and re-approve on the Admin Deal Desk.",
-    type: "ADMIN_REVIEW",
-    link: "/admin",
-    isRead: false,
-    createdAt: "2026-10-28T22:56:51.232Z",
-  },
-  {
-    id: "cmvszh4ez000208jpovvhtt8n",
-    title: "🎉 Request Approved & Live!",
-    message: "Your procurement request \"TCD Amplifier Board pre-owned for CLARUS 500/580/600/680 GC\" has been approved by admin and is now visible to sellers on the marketplace.",
-    type: "ENTRY_APPROVED",
-    link: "/requests",
-    isRead: true,
-    createdAt: "2026-10-28T21:58:20.891Z",
-  },
-  {
-    id: "cmvrvpgrb000008iik1siw8j9",
-    title: "🎉 Listing Approved & Live!",
-    message: "Your listing \"Stainless Steel Glow Plug for Auto-Ignite FID\" has been approved by admin and is now publicly live on the marketplace.",
-    type: "ENTRY_APPROVED",
-    link: "/listing/lst-glowplug",
-    isRead: false,
-    createdAt: "2026-10-28T03:25:05.495Z",
-  },
-  {
-    id: "cmvrukpi4000008jtoxxkdxuw",
-    title: "🎉 Listing Approved & Live!",
-    message: "Your listing \"TR Plus Glass Nebulizer 0.5 mL\" has been approved by admin and is now publicly live on the marketplace.",
-    type: "ENTRY_APPROVED",
-    link: "/listing/lst-nebulizer",
-    isRead: false,
-    createdAt: "2026-10-28T02:53:23.932Z",
-  },
-  {
-    id: "cmvrsjt7u000207l3r61my236",
-    title: "🎉 Listing Approved & Live!",
-    message: "Your listing \"AC / DC distribution board pre-owned Perkinelmer GC model Clarus 500/580/600/680 GC\" has been approved by admin and is now publicly live on the marketplace.",
-    type: "ENTRY_APPROVED",
-    link: "/listing/lst-dist-board",
-    isRead: true,
-    createdAt: "2026-10-28T01:56:42.858Z",
-  },
-  {
-    id: "cmv962xqr000107l3063lj42j",
-    title: "New Equipment Inquiry Received",
-    message: "A client submitted an inquiry regarding your listing \"Power supply Pre-owned Perkinelmer for Clarus GC models\".",
-    type: "INQUIRY",
-    link: "/admin",
-    isRead: true,
-    createdAt: "2026-10-15T01:07:52.851Z",
-  },
-  {
-    id: "cmv84h50u000008lcrb6ol5we",
-    title: "New Website Inquiry: Spare Parts & Consumables Supply",
-    message: "Ansh Mangla sent a message: \"Hi- testing inquiry from marketplace desk...\"",
-    type: "INQUIRY",
-    link: "/admin",
-    isRead: true,
-    createdAt: "2026-10-14T07:35:10.062Z",
-  },
-  {
-    id: "cmv84f8ez000308jyktw42x05",
-    title: "New Website Inquiry: Refurbished Analytical Instrument",
-    message: "Dr. Rajesh Sharma sent a message: \"Requesting quotation for refurbished HPLC systems with UV/Vis detector.\"",
-    type: "INQUIRY",
-    link: "/admin",
-    isRead: true,
-    createdAt: "2026-10-14T07:33:41.147Z",
-  },
-];
-
 export default function NotificationsScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -122,7 +37,7 @@ export default function NotificationsScreen() {
   const { isAuthenticated, user } = useAuth();
   const queryClient = useQueryClient();
 
-  const [localNotifications, setLocalNotifications] = useState<NotificationItem[]>(REAL_PLATFORM_NOTIFICATIONS);
+  const [localNotifications, setLocalNotifications] = useState<NotificationItem[]>([]);
 
   const {
     data,
@@ -135,21 +50,21 @@ export default function NotificationsScreen() {
     queryFn: async () => {
       try {
         const res = await api.get("/api/notifications");
-        if (res.data?.notifications && res.data.notifications.length > 0) {
+        if (res.data?.notifications) {
           return res.data as { notifications: NotificationItem[]; unreadCount: number };
         }
-      } catch (err) {
-        console.warn("Could not fetch remote notifications:", err);
+      } catch (err: any) {
+        console.warn("Could not fetch remote notifications:", err.message);
       }
       return {
-        notifications: REAL_PLATFORM_NOTIFICATIONS,
-        unreadCount: REAL_PLATFORM_NOTIFICATIONS.filter((n) => !n.isRead).length,
+        notifications: [],
+        unreadCount: 0,
       };
     },
   });
 
   React.useEffect(() => {
-    if (data?.notifications && data.notifications.length > 0) {
+    if (data?.notifications) {
       setLocalNotifications(data.notifications);
     }
   }, [data]);
