@@ -128,17 +128,8 @@ export default function AdminConsoleScreen() {
       try {
         const res = await api.get("/api/admin/stats");
         return res.data?.stats;
-      } catch (err) {
-        return {
-          pendingApprovals: 0,
-          pendingListings: 0,
-          pendingRequirements: 0,
-          newInquiries: 2,
-          totalInquiries: 2,
-          totalListings: 34,
-          totalRequirements: 2,
-          totalUsers: 12,
-        };
+      } catch {
+        return null;
       }
     },
   });
@@ -206,18 +197,6 @@ export default function AdminConsoleScreen() {
         }
       } catch (err) {}
 
-      // Fallback to public listings API which always works and returns all 34 real items
-      try {
-        const publicRes = await api.get("/api/listings?limit=100");
-        if (publicRes.data?.listings && publicRes.data.listings.length > 0) {
-          // Public listings API only returns approved items (where: { isApproved: true })
-          return publicRes.data.listings.map((l: any) => ({
-            ...l,
-            isApproved: l.isApproved !== false,
-          }));
-        }
-      } catch (err) {}
-
       return [];
     },
   });
@@ -273,18 +252,6 @@ export default function AdminConsoleScreen() {
       setLocalRequirementsList(fetchedRequirementsData);
     }
   }, [fetchedRequirementsData]);
-
-  // Combined stats
-  const stats = statsData || {
-    pendingApprovals: 0,
-    pendingListings: 0,
-    pendingRequirements: 0,
-    newInquiries: 2,
-    totalInquiries: 2,
-    totalListings: localListingsList.length || 34,
-    totalRequirements: localRequirementsList.length || 2,
-    totalUsers: localUsersList.length || 12,
-  };
 
   const inquiries = inquiriesData || [];
 
@@ -374,7 +341,7 @@ export default function AdminConsoleScreen() {
   // Email launcher
   const handleEmail = (email?: string, subject?: string) => {
     if (!email) return;
-    Linking.openURL(`mailto:${email}?subject=${encodeURIComponent(subject || "LabMatrix Operations Desk")}`).catch(
+    Linking.openURL(`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject || "LabMatrix Operations Desk")}`).catch(
       () => {}
     );
   };
@@ -384,6 +351,7 @@ export default function AdminConsoleScreen() {
   // ==========================================
   const handleToggleListingApproval = async (id: string, currentApproved: boolean) => {
     const newApproved = !currentApproved;
+    const previous = localListingsList;
     // Optimistic update
     setLocalListingsList((prev) =>
       prev.map((l) => (l.id === id ? { ...l, isApproved: newApproved } : l))
@@ -400,11 +368,13 @@ export default function AdminConsoleScreen() {
           : "This machine has been revoked and hidden from public catalog."
       );
     } catch (err: any) {
-      Alert.alert("Status Updated", `Listing is now ${newApproved ? "Approved" : "Revoked"}.`);
+      setLocalListingsList(previous);
+      Alert.alert("Update Failed", err?.response?.data?.error || "Could not update the listing. Please try again.");
     }
   };
 
   const handleUpdateListingStatus = async (id: string, newStatus: string) => {
+    const previous = localListingsList;
     setLocalListingsList((prev) =>
       prev.map((l) => (l.id === id ? { ...l, status: newStatus } : l))
     );
@@ -415,7 +385,10 @@ export default function AdminConsoleScreen() {
         await api.patch(`/api/listings/${id}`, { status: newStatus });
       });
       Alert.alert("Status Updated", `Listing status set to ${newStatus}.`);
-    } catch {}
+    } catch (err: any) {
+      setLocalListingsList(previous);
+      Alert.alert("Update Failed", err?.response?.data?.error || "Could not update the listing status. Please try again.");
+    }
   };
 
   const handleCopyListing = async (item: any) => {
@@ -438,12 +411,16 @@ export default function AdminConsoleScreen() {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
+            const previous = localListingsList;
             setLocalListingsList((prev) => prev.filter((l) => l.id !== id));
             try {
-              await api.delete(`/api/admin/listings?id=${id}`).catch(async () => {
-                await api.delete(`/api/listings/${id}`);
+              await api.delete(`/api/admin/listings?id=${encodeURIComponent(id)}`).catch(async () => {
+                await api.delete(`/api/listings/${encodeURIComponent(id)}`);
               });
-            } catch {}
+            } catch (err: any) {
+              setLocalListingsList(previous);
+              Alert.alert("Delete Failed", err?.response?.data?.error || "Could not delete the listing. Please try again.");
+            }
           },
         },
       ]
@@ -455,6 +432,7 @@ export default function AdminConsoleScreen() {
   // ==========================================
   const handleToggleRequirementApproval = async (id: string, currentApproved: boolean) => {
     const newApproved = !currentApproved;
+    const previous = localRequirementsList;
     setLocalRequirementsList((prev) =>
       prev.map((r) => (r.id === id ? { ...r, isApproved: newApproved } : r))
     );
@@ -469,10 +447,14 @@ export default function AdminConsoleScreen() {
           ? "Procurement request is now live for laboratory suppliers."
           : "Request has been revoked."
       );
-    } catch {}
+    } catch (err: any) {
+      setLocalRequirementsList(previous);
+      Alert.alert("Update Failed", err?.response?.data?.error || "Could not update the request. Please try again.");
+    }
   };
 
   const handleUpdateRequirementStatus = async (id: string, newStatus: string) => {
+    const previous = localRequirementsList;
     setLocalRequirementsList((prev) =>
       prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r))
     );
@@ -482,7 +464,10 @@ export default function AdminConsoleScreen() {
       await api.patch("/api/admin/requirements", { id, status: newStatus }).catch(async () => {
         await api.patch(`/api/requirements/${id}`, { status: newStatus });
       });
-    } catch {}
+    } catch (err: any) {
+      setLocalRequirementsList(previous);
+      Alert.alert("Update Failed", err?.response?.data?.error || "Could not update the request status. Please try again.");
+    }
   };
 
   const handleDeleteRequirement = (id: string, title: string) => {
@@ -495,12 +480,16 @@ export default function AdminConsoleScreen() {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
+            const previous = localRequirementsList;
             setLocalRequirementsList((prev) => prev.filter((r) => r.id !== id));
             try {
-              await api.delete(`/api/admin/requirements?id=${id}`).catch(async () => {
-                await api.delete(`/api/requirements/${id}`);
+              await api.delete(`/api/admin/requirements?id=${encodeURIComponent(id)}`).catch(async () => {
+                await api.delete(`/api/requirements/${encodeURIComponent(id)}`);
               });
-            } catch {}
+            } catch (err: any) {
+              setLocalRequirementsList(previous);
+              Alert.alert("Delete Failed", err?.response?.data?.error || "Could not delete the request. Please try again.");
+            }
           },
         },
       ]
@@ -521,10 +510,18 @@ export default function AdminConsoleScreen() {
           text: isCurrentlyAdmin ? "Revoke" : "Make Admin",
           style: isCurrentlyAdmin ? "destructive" : "default",
           onPress: async () => {
-            setLocalUsersList((prev) =>
-              prev.map((u) => (u.id === targetUser.id ? { ...u, role: nextRole } : u))
-            );
-            Alert.alert("Role Updated", `${targetUser.name} is now ${nextRole}.`);
+            try {
+              await api.patch("/api/admin/users", { userId: targetUser.id, role: nextRole });
+              setLocalUsersList((prev) =>
+                prev.map((u) => (u.id === targetUser.id ? { ...u, role: nextRole } : u))
+              );
+              Alert.alert("Role Updated", `${targetUser.name} is now ${nextRole}.`);
+            } catch (err: any) {
+              Alert.alert(
+                "Role Update Failed",
+                err?.response?.data?.error || "Could not change this user's role. Please try again."
+              );
+            }
           },
         },
       ]
@@ -532,16 +529,23 @@ export default function AdminConsoleScreen() {
   };
 
   // Delete user handler
-  const handleConfirmDeleteUser = () => {
+  const handleConfirmDeleteUser = async () => {
     if (!deleteTargetUser) return;
     setIsDeletingUser(true);
-    setTimeout(() => {
+    try {
+      await api.delete("/api/admin/users", { data: { userId: deleteTargetUser.id } });
       setLocalUsersList((prev) => prev.filter((u) => u.id !== deleteTargetUser.id));
-      setIsDeletingUser(false);
       setDeleteTargetUser(null);
       setDeleteConfirmText("");
-      Alert.alert("Account Deactivated", "User has been archived and session revoked.");
-    }, 400);
+      Alert.alert("Account Deactivated", "User has been archived and their sessions revoked.");
+    } catch (err: any) {
+      Alert.alert(
+        "Deactivation Failed",
+        err?.response?.data?.error || "Could not deactivate this account. Please try again."
+      );
+    } finally {
+      setIsDeletingUser(false);
+    }
   };
 
   // Role Protection

@@ -104,7 +104,7 @@ export default function InquiriesScreen() {
       return;
     }
     const subject = encodeURIComponent(`Inquiry re: ${targetTitle || "LabMatrix Equipment"}`);
-    Linking.openURL(`mailto:${email}?subject=${subject}`).catch(() => {
+    Linking.openURL(`mailto:${encodeURIComponent(email)}?subject=${subject}`).catch(() => {
       Alert.alert("Unable to Email", `Could not open mail client for ${email}.`);
     });
   };

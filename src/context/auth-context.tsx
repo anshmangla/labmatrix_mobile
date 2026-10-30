@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
 import { User } from "@/types/api";
@@ -66,6 +67,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -297,6 +299,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await removeCachedUser();
       setToken(null);
       setUser(null);
+      // Drop cached inquiries, items, notifications and admin data so the next account can't see them
+      queryClient.clear();
     } catch (e) {
       console.error("Logout error:", e);
     }
