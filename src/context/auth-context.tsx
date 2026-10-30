@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               await saveCachedUser(res.data.user);
             }
           } catch (err: any) {
-            if (err.response?.status === 401 && !storedUser?.email) {
+            if (err.response?.status === 401) {
               setAuthHeader(null);
               await removeAuthToken();
               await removeCachedUser();
@@ -155,6 +155,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const exchangeGoogleCredential = async (
+    credential: { idToken: string } | { accessToken: string }
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await api.post("/api/auth/mobile/google", credential);
+      const { token: receivedToken, user: receivedUser } = res.data;
+
+      setAuthHeader(receivedToken);
+      setToken(receivedToken);
+      setUser(receivedUser);
+
+      await saveAuthToken(receivedToken);
+      await saveCachedUser(receivedUser);
+
+      return { success: true };
+    } catch (error: any) {
+      console.warn("Google sign-in exchange failed with status:", error.response?.status);
+      if (error.response?.data?.error) {
+        return { success: false, error: error.response.data.error };
+      }
+      if (error.message === "Network Error" || !error.response) {
+        return {
+          success: false,
+          error: "Network error: Unable to reach server. Please check your internet connection.",
+        };
+      }
+      return { success: false, error: "Google sign-in failed. Please try again." };
+    }
+  };
+
   const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
     try {
       // 1. Try Native Google Sign-In first (standalone APK / custom dev clients)
@@ -170,28 +200,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const signInResult = await GoogleSignin.signIn();
 
         if (signInResult.type === "success" && signInResult.data?.user) {
-          const gUser = signInResult.data.user;
-          const cleanEmail = (gUser.email || "").toLowerCase().trim();
-          const isAdmin =
-            cleanEmail.endsWith("@labmatrixindia.com") ||
-            cleanEmail === "manish.mangla@labmatrixindia.com" ||
-            cleanEmail === "pradeep.sharma@labmatrixindia.com";
-
-          const authenticatedUser: User = {
-            id: gUser.id || `google_${Date.now()}`,
-            name: gUser.name || "Verified Researcher",
-            email: cleanEmail,
-            role: isAdmin ? "ADMIN" : "USER",
-          };
-
-          const authToken = signInResult.data.idToken || `gtoken_${Date.now()}`;
-          setToken(authToken);
-          setUser(authenticatedUser);
-
-          await saveAuthToken(authToken);
-          await saveCachedUser(authenticatedUser);
-
-          return { success: true };
+          const idToken = signInResult.data.idToken;
+          if (!idToken) {
+            return { success: false, error: "Google did not return a sign-in token. Please try again." };
+          }
+          return await exchangeGoogleCredential({ idToken });
         } else if (signInResult.type === "cancelled") {
           return { success: false, error: "Google sign-in was cancelled." };
         }
@@ -224,28 +237,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const accessToken = params.get("access_token");
 
         if (accessToken) {
-          // Fetch Google user profile
-          const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-
-          if (userRes.ok) {
-            const googleProfile = await userRes.json();
-            const authenticatedUser: User = {
-              id: googleProfile.sub || `google_${Date.now()}`,
-              name: googleProfile.name || "Verified Researcher",
-              email: googleProfile.email,
-              role: "USER",
-            };
-
-            setToken(accessToken);
-            setUser(authenticatedUser);
-
-            await saveAuthToken(accessToken);
-            await saveCachedUser(authenticatedUser);
-
-            return { success: true };
-          }
+          return await exchangeGoogleCredential({ accessToken });
         }
         return { success: false, error: "Could not retrieve Google profile tokens." };
       }
