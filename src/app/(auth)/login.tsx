@@ -28,7 +28,6 @@ import {
   AlertCircle,
   X,
   HelpCircle,
-  User as UserIcon,
   Microscope,
   CheckCircle2,
 } from "lucide-react-native";
@@ -139,10 +138,6 @@ export default function LoginLandingScreen() {
           >
             <HelpCircle size={21} color={isDark ? "#cbd5e1" : "#475569"} />
           </TouchableOpacity>
-
-          <View style={styles.userAvatarCircle}>
-            <UserIcon size={16} color="#ffffff" />
-          </View>
         </View>
       </View>
 
@@ -175,7 +170,7 @@ export default function LoginLandingScreen() {
             </Text>
           </View>
 
-          {/* 4. Dual Value Proposition Cards (FOR BUYERS & FOR SELLERS) */}
+          {/* 4. Dual Value Proposition Cards (Option B: Machines & Spares + Monetize Assets) */}
           <View style={styles.valuePropsRow}>
             {/* For Buyers Card */}
             <View style={[styles.valueCard, isDark && styles.valueCardDark]}>
@@ -184,9 +179,9 @@ export default function LoginLandingScreen() {
                 <Text style={styles.buyerLabel}>FOR BUYERS</Text>
               </View>
               <Text style={[styles.valueMetric, isDark && styles.valueMetricDark]}>
-                40–70% Off OEM
+                Machines & Spare Parts
               </Text>
-              <Text style={styles.valueSubtext}>Tested bench reports</Text>
+              <Text style={styles.valueSubtext}>Ready dispatch & verified specs</Text>
             </View>
 
             {/* For Sellers Card */}
@@ -196,9 +191,9 @@ export default function LoginLandingScreen() {
                 <Text style={styles.sellerLabel}>FOR SELLERS</Text>
               </View>
               <Text style={[styles.valueMetric, isDark && styles.valueMetricDark]}>
-                1,200+ Lab Network
+                Monetize Surplus Assets
               </Text>
-              <Text style={styles.valueSubtext}>Zero-spam escrow</Text>
+              <Text style={styles.valueSubtext}>List machines & parts in 2 mins</Text>
             </View>
           </View>
 
@@ -461,14 +456,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  userAvatarCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#011936",
-    alignItems: "center",
-    justifyContent: "center",
-  },
 
   scrollContent: {
     paddingHorizontal: 18,
@@ -568,10 +555,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   valueMetric: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: "800",
     color: "#0f172a",
     marginTop: 5,
+    lineHeight: 17,
   },
   valueMetricDark: {
     color: "#f8fafc",
@@ -579,7 +567,8 @@ const styles = StyleSheet.create({
   valueSubtext: {
     fontSize: 10.5,
     color: "#64748b",
-    marginTop: 1,
+    marginTop: 2,
+    lineHeight: 14,
   },
 
   // Floating Sign-In Form Card
