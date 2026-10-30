@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   StyleSheet,
   useColorScheme,
-  Linking,
   Alert,
   Image,
   StatusBar,
@@ -18,8 +17,6 @@ import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   MessageSquare,
-  Mail,
-  Phone,
   Building2,
   Clock,
   ArrowRight,
@@ -85,28 +82,6 @@ export default function InquiriesScreen() {
   const formatINR = (amount?: number | null) => {
     if (amount === undefined || amount === null) return "N/A";
     return amount.toLocaleString("en-IN");
-  };
-
-  const handleCall = (phone?: string | null) => {
-    if (!phone) {
-      Alert.alert("No Phone Number", "No contact telephone number was provided with this inquiry.");
-      return;
-    }
-    const cleanNumber = phone.replace(/[^0-9+]/g, "");
-    Linking.openURL(`tel:${cleanNumber}`).catch(() => {
-      Alert.alert("Unable to Dial", `Could not dial ${cleanNumber} from this device.`);
-    });
-  };
-
-  const handleEmail = (email?: string | null, targetTitle?: string) => {
-    if (!email) {
-      Alert.alert("No Email", "No email address was provided with this inquiry.");
-      return;
-    }
-    const subject = encodeURIComponent(`Inquiry re: ${targetTitle || "LabMatrix Equipment"}`);
-    Linking.openURL(`mailto:${encodeURIComponent(email)}?subject=${subject}`).catch(() => {
-      Alert.alert("Unable to Email", `Could not open mail client for ${email}.`);
-    });
   };
 
   const formatRelativeTime = (dateStr: string) => {
@@ -297,30 +272,6 @@ export default function InquiriesScreen() {
 
           {/* Quick Contact Action Buttons */}
           <View style={styles.actionsRow}>
-            {item.phone ? (
-              <TouchableOpacity
-                style={styles.callActionBtn}
-                activeOpacity={0.8}
-                onPress={() => handleCall(item.phone)}
-              >
-                <Phone size={13} color="#ffffff" />
-                <Text style={styles.callActionText}>Call {item.phone}</Text>
-              </TouchableOpacity>
-            ) : null}
-
-            {item.email ? (
-              <TouchableOpacity
-                style={styles.emailActionBtn}
-                activeOpacity={0.8}
-                onPress={() => handleEmail(item.email, targetTitle)}
-              >
-                <Mail size={13} color="#033a7d" />
-                <Text style={styles.emailActionText} numberOfLines={1}>
-                  Email
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-
             <TouchableOpacity
               style={styles.viewItemActionBtn}
               activeOpacity={0.8}
@@ -909,36 +860,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     marginTop: 2,
-  },
-  callActionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "#033a7d",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  callActionText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  emailActionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#dbeaf7",
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  emailActionText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#033a7d",
   },
   viewItemActionBtn: {
     flexDirection: "row",

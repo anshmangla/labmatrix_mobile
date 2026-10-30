@@ -70,6 +70,25 @@ const getInitials = (name?: string, email?: string) => {
 };
 
 
+/**
+ * Loads every page of an admin list (the API returns at most 100 per page) so search
+ * and filters on this screen cover all records, not just the first page.
+ */
+async function fetchAllAdminPages(url: string, key: string): Promise<any[]> {
+  const items: any[] = [];
+  let page = 1;
+  let totalPages = 1;
+  do {
+    const res = await api.get(url, { params: { page, limit: 100 } });
+    const pageItems = res.data?.[key];
+    if (!Array.isArray(pageItems)) break;
+    items.push(...pageItems);
+    totalPages = res.data?.pagination?.totalPages ?? 1;
+    page += 1;
+  } while (page <= totalPages && page <= 100);
+  return items;
+}
+
 export default function AdminConsoleScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -144,13 +163,10 @@ export default function AdminConsoleScreen() {
     enabled: isAuthenticated && user?.role === "ADMIN",
     queryFn: async () => {
       try {
-        const res = await api.get("/api/admin/inquiries");
-        if (res.data?.inquiries && res.data.inquiries.length > 0) {
-          return res.data.inquiries;
-        }
-      } catch (err) {}
-
-      return [];
+        return await fetchAllAdminPages("/api/admin/inquiries", "inquiries");
+      } catch (err) {
+        return [];
+      }
     },
   });
 
@@ -166,13 +182,10 @@ export default function AdminConsoleScreen() {
     enabled: isAuthenticated && user?.role === "ADMIN",
     queryFn: async () => {
       try {
-        const res = await api.get("/api/admin/users");
-        if (res.data?.users && res.data.users.length > 0) {
-          return res.data.users;
-        }
-      } catch (err) {}
-
-      return [];
+        return await fetchAllAdminPages("/api/admin/users", "users");
+      } catch (err) {
+        return [];
+      }
     },
   });
 
@@ -188,16 +201,14 @@ export default function AdminConsoleScreen() {
     enabled: isAuthenticated && user?.role === "ADMIN",
     queryFn: async () => {
       try {
-        const res = await api.get("/api/admin/listings");
-        if (res.data?.listings && res.data.listings.length > 0) {
-          return res.data.listings.map((l: any) => ({
-            ...l,
-            isApproved: l.isApproved !== false,
-          }));
-        }
-      } catch (err) {}
-
-      return [];
+        const listings = await fetchAllAdminPages("/api/admin/listings", "listings");
+        return listings.map((l: any) => ({
+          ...l,
+          isApproved: l.isApproved !== false,
+        }));
+      } catch (err) {
+        return [];
+      }
     },
   });
 
@@ -213,20 +224,10 @@ export default function AdminConsoleScreen() {
     enabled: isAuthenticated && user?.role === "ADMIN",
     queryFn: async () => {
       try {
-        const res = await api.get("/api/admin/requirements");
-        if (res.data?.requirements && res.data.requirements.length > 0) {
-          return res.data.requirements;
-        }
-      } catch (err) {}
-
-      try {
-        const publicRes = await api.get("/api/requirements");
-        if (publicRes.data?.requirements && publicRes.data.requirements.length > 0) {
-          return publicRes.data.requirements;
-        }
-      } catch (err) {}
-
-      return [];
+        return await fetchAllAdminPages("/api/admin/requirements", "requirements");
+      } catch (err) {
+        return [];
+      }
     },
   });
 

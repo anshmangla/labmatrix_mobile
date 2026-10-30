@@ -45,19 +45,21 @@ import { LabMatrixTokens } from "@/constants/theme";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 
+// Same categories and order as the website's buyer requests page
 const CATEGORIES = [
   "ALL",
   "HPLC & UHPLC",
-  "ICP-OES & ICP-MS",
   "GC & GC-MS",
   "UV-Vis & FTIR",
   "AAS",
+  "ICP-OES & ICP-MS",
   "DSC-TGA & DMA",
   "Dissolution Testers",
   "Stability Chambers",
   "Particle Analyzers",
   "Centrifuges & Shakers",
   "Karl Fischer & Titrators",
+  "Spare Parts & Consumables",
   "Other Lab Equipment",
 ];
 

@@ -67,7 +67,7 @@ export default function ProfileScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const { colors } = LabMatrixTokens;
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
 
   // Active Tab: "listings" | "requests" | "inquiries" | "settings"
@@ -101,6 +101,13 @@ export default function ProfileScreen() {
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deletePassword, setDeletePassword] = useState("");
+
+  // Profile editing
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editCompany, setEditCompany] = useState("");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Fetch user's listings and requirements
@@ -180,6 +187,32 @@ export default function ProfileScreen() {
         },
       ]
     );
+  };
+
+  const startEditingProfile = () => {
+    setEditName(user?.name || "");
+    setEditPhone(user?.phoneNumber || "");
+    setEditCompany(user?.companyName || "");
+    setIsEditingProfile(true);
+  };
+
+  const handleSaveProfile = async () => {
+    setIsSavingProfile(true);
+    try {
+      await api.patch("/api/user/profile", {
+        name: editName,
+        phoneNumber: editPhone,
+        companyName: editCompany,
+      });
+      await refreshProfile();
+      queryClient.invalidateQueries({ queryKey: ["userProfile"] });
+      setIsEditingProfile(false);
+      Alert.alert("Profile Updated", "Your account details have been saved.");
+    } catch (err: any) {
+      Alert.alert("Update Failed", err.response?.data?.error || "Could not update your profile. Please try again.");
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   const handleDeleteAccount = async () => {
@@ -1378,7 +1411,7 @@ export default function ProfileScreen() {
                 <View style={styles.settingsIconCircle}>
                   <UserIcon size={18} color="#033a7d" />
                 </View>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text
                     style={[
                       styles.settingsCardTitle,
@@ -1391,9 +1424,80 @@ export default function ProfileScreen() {
                     Your verified marketplace credentials
                   </Text>
                 </View>
+                {!isEditingProfile && (
+                  <TouchableOpacity
+                    style={styles.actionPillBtn}
+                    activeOpacity={0.7}
+                    onPress={startEditingProfile}
+                  >
+                    <Pencil size={12} color="#475569" />
+                    <Text style={styles.actionPillText}>Edit</Text>
+                  </TouchableOpacity>
+                )}
               </View>
 
-              {/* 2x2 Grid of Profile Info */}
+              {isEditingProfile ? (
+                <View style={styles.profileEditForm}>
+                  <Text style={styles.profileGridLabel}>Full Name</Text>
+                  <TextInput
+                    value={editName}
+                    onChangeText={setEditName}
+                    maxLength={100}
+                    placeholder="Your name"
+                    placeholderTextColor="#94a3b8"
+                    style={[styles.profileEditInput, isDark && styles.profileEditInputDark]}
+                  />
+
+                  <Text style={styles.profileGridLabel}>Email Address</Text>
+                  <TextInput
+                    value={user.email}
+                    editable={false}
+                    style={[styles.profileEditInput, styles.profileEditInputDisabled]}
+                  />
+
+                  <Text style={styles.profileGridLabel}>Phone / Mobile</Text>
+                  <TextInput
+                    value={editPhone}
+                    onChangeText={setEditPhone}
+                    maxLength={20}
+                    keyboardType="phone-pad"
+                    placeholder="+91-XXXXXXXXXX"
+                    placeholderTextColor="#94a3b8"
+                    style={[styles.profileEditInput, isDark && styles.profileEditInputDark]}
+                  />
+
+                  <Text style={styles.profileGridLabel}>Company / Lab</Text>
+                  <TextInput
+                    value={editCompany}
+                    onChangeText={setEditCompany}
+                    maxLength={100}
+                    placeholder="Laboratory or organization"
+                    placeholderTextColor="#94a3b8"
+                    style={[styles.profileEditInput, isDark && styles.profileEditInputDark]}
+                  />
+
+                  <View style={styles.deleteModalActions}>
+                    <TouchableOpacity
+                      style={styles.cancelDeleteBtn}
+                      onPress={() => setIsEditingProfile(false)}
+                      disabled={isSavingProfile}
+                    >
+                      <Text style={styles.cancelDeleteBtnText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.profileSaveBtn, isSavingProfile && { opacity: 0.6 }]}
+                      onPress={handleSaveProfile}
+                      disabled={isSavingProfile}
+                    >
+                      {isSavingProfile ? (
+                        <ActivityIndicator size="small" color="#ffffff" />
+                      ) : (
+                        <Text style={styles.profileSaveBtnText}>Save Changes</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
               <View style={styles.profileGrid}>
                 <View
                   style={[
@@ -1464,6 +1568,7 @@ export default function ProfileScreen() {
                   </Text>
                 </View>
               </View>
+              )}
 
               {/* Seller Verification Tier 1 Badge Card */}
               <View style={styles.tierVerifiedCard}>
@@ -3005,6 +3110,44 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#475569",
     marginBottom: 6,
+  },
+  profileEditForm: {
+    gap: 6,
+    marginTop: 14,
+  },
+  profileEditInput: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 14,
+    color: "#0f172a",
+    marginBottom: 8,
+  },
+  profileEditInputDark: {
+    backgroundColor: "#0b1320",
+    borderColor: "#334155",
+    color: "#f8fafc",
+  },
+  profileEditInputDisabled: {
+    color: "#64748b",
+    backgroundColor: "#f1f5f9",
+  },
+  profileSaveBtn: {
+    backgroundColor: "#033a7d",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    minWidth: 120,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profileSaveBtnText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "700",
   },
   deleteTextInput: {
     backgroundColor: "#f8fafc",

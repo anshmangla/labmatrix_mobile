@@ -86,9 +86,7 @@ export default function NotificationsScreen() {
         prev.map((n: NotificationItem) => (n.id === item.id ? { ...n, isRead: true } : n))
       );
       try {
-        await api.patch(`/api/notifications/${item.id}`, { isRead: true }).catch(async () => {
-          await api.patch("/api/notifications", { id: item.id });
-        });
+        await api.patch("/api/notifications", { id: item.id });
         queryClient.invalidateQueries({ queryKey: ["notifications"] });
       } catch (e) {
         // Silent fail
