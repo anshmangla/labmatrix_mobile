@@ -393,7 +393,7 @@ export default function AdminConsoleScreen() {
 
   const handleCopyListing = async (item: any) => {
     try {
-      const shareUrl = `https://labmatrixindia.com/listing/${item.id}`;
+      const shareUrl = `https://surplus.labmatrixindia.com/listings/${item.id}`;
       await Share.share({
         title: item.title,
         message: `${item.title}\n${shareUrl}`,
@@ -494,6 +494,23 @@ export default function AdminConsoleScreen() {
         },
       ]
     );
+  };
+
+  // Update inquiry pipeline status
+  const handleUpdateInquiryStatus = async (id: string, newStatus: string) => {
+    setInquiryStatusModalItem(null);
+    try {
+      await api.patch(`/api/admin/inquiries/${encodeURIComponent(id)}`, { status: newStatus });
+      queryClient.setQueryData(["adminInquiries"], (old: any) =>
+        Array.isArray(old) ? old.map((inq: any) => (inq.id === id ? { ...inq, status: newStatus } : inq)) : old
+      );
+      Alert.alert("Status Updated", `Inquiry updated to ${newStatus}.`);
+    } catch (err: any) {
+      Alert.alert(
+        "Update Failed",
+        err?.response?.data?.error || "Could not update the inquiry status. Please try again."
+      );
+    }
   };
 
   // Toggle user role
@@ -1629,8 +1646,7 @@ export default function AdminConsoleScreen() {
                 ]}
                 onPress={() => {
                   if (inquiryStatusModalItem) {
-                    Alert.alert("Status Updated", `Inquiry updated to ${st}.`);
-                    setInquiryStatusModalItem(null);
+                    handleUpdateInquiryStatus(inquiryStatusModalItem.id, st);
                   }
                 }}
               >

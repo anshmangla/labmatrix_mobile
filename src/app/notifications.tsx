@@ -96,17 +96,30 @@ export default function NotificationsScreen() {
     }
 
     if (item.link) {
-      if (item.link === "/admin") {
+      // Links are website paths written by the server; map each one to the matching app screen
+      const [path, query = ""] = item.link.split("?");
+      const segments = path.split("/").filter(Boolean);
+      const [section, id] = segments;
+
+      if (section === "admin") {
         router.push("/admin" as any);
-      } else if (item.link.includes("listing")) {
-        const parts = item.link.split("/");
-        const id = parts[parts.length - 1];
-        if (id) router.push(`/listing/${id}` as any);
-      } else if (item.link.includes("requests") || item.link.includes("wanted")) {
+      } else if (section === "listings" && id) {
+        router.push(`/listing/${encodeURIComponent(id)}` as any);
+      } else if (section === "requests" && id) {
+        router.push(`/requests/${encodeURIComponent(id)}` as any);
+      } else if (section === "requests" || query.includes("tab=wanted")) {
         router.push("/(tabs)/requests" as any);
-      } else if (item.link.includes("inquiries")) {
+      } else if (section === "inquiries" || item.type === "INQUIRY_RECEIVED") {
         router.push("/(tabs)/inquiries" as any);
+      } else if (section === "dashboard") {
+        // Titles are server-written ("Request Submitted…", "Listing Edits…"); messages contain user text
+        const isRequest = /request|requirement/i.test(item.title);
+        router.push({
+          pathname: "/(tabs)/profile",
+          params: { tab: isRequest ? "requests" : "listings" },
+        } as any);
       } else {
+        // "/", "/listings", "/spare-parts" and "/new-instruments" all live on the catalog tab
         router.push("/(tabs)" as any);
       }
     }

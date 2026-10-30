@@ -100,6 +100,7 @@ export default function ProfileScreen() {
   // Self-deletion modal state
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Fetch user's listings and requirements
@@ -115,6 +116,17 @@ export default function ProfileScreen() {
       return res.data as { listings: any[]; requirements: any[] };
     },
   });
+
+  // Fetch account profile (hasPassword decides how account deletion is confirmed)
+  const { data: accountProfile } = useQuery({
+    queryKey: ["userProfile"],
+    enabled: isAuthenticated,
+    queryFn: async () => {
+      const res = await api.get("/api/user/profile");
+      return res.data?.user as { hasPassword?: boolean } | undefined;
+    },
+  });
+  const requiresPassword = accountProfile?.hasPassword === true;
 
   // Fetch inquiries (received & sent)
   const {
@@ -179,10 +191,19 @@ export default function ProfileScreen() {
       return;
     }
 
+    if (requiresPassword && !deletePassword) {
+      Alert.alert("Password Required", "Please enter your account password to confirm deactivation.");
+      return;
+    }
+
     setIsDeleting(true);
     try {
-      await api.post("/api/user/delete-account", { confirmation: "DELETE" });
+      await api.post("/api/user/delete-account", {
+        confirmation: "DELETE",
+        ...(deletePassword ? { password: deletePassword } : {}),
+      });
       setIsDeleteModalVisible(false);
+      setDeletePassword("");
       Alert.alert(
         "Account Deactivated",
         "Your account and listed inventory have been deactivated."
@@ -1647,7 +1668,10 @@ export default function ProfileScreen() {
         visible={isDeleteModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setIsDeleteModalVisible(false)}
+        onRequestClose={() => {
+          setIsDeleteModalVisible(false);
+          setDeletePassword("");
+        }}
       >
         <View style={styles.modalOverlay}>
           <View
@@ -1661,7 +1685,10 @@ export default function ProfileScreen() {
                 <AlertTriangle size={24} color="#ba1a1a" />
               </View>
               <TouchableOpacity
-                onPress={() => setIsDeleteModalVisible(false)}
+                onPress={() => {
+                  setIsDeleteModalVisible(false);
+                  setDeletePassword("");
+                }}
                 style={styles.closeModalBtn}
               >
                 <X size={20} color="#64748b" />
@@ -1699,12 +1726,31 @@ export default function ProfileScreen() {
               />
             </View>
 
+            {requiresPassword && (
+              <View style={styles.deleteInputWrapper}>
+                <Text style={styles.deleteInputLabel}>Enter your account password:</Text>
+                <TextInput
+                  value={deletePassword}
+                  onChangeText={setDeletePassword}
+                  placeholder="Password"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={[
+                    styles.deleteTextInput,
+                    isDark && styles.deleteTextInputDark,
+                  ]}
+                />
+              </View>
+            )}
+
             <View style={styles.deleteModalActions}>
               <TouchableOpacity
                 style={styles.cancelDeleteBtn}
                 onPress={() => {
                   setIsDeleteModalVisible(false);
                   setDeleteConfirmation("");
+                  setDeletePassword("");
                 }}
               >
                 <Text style={styles.cancelDeleteBtnText}>Cancel</Text>
@@ -1713,13 +1759,15 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 style={[
                   styles.confirmDeleteBtn,
-                  deleteConfirmation.trim().toUpperCase() !== "DELETE" && {
+                  (deleteConfirmation.trim().toUpperCase() !== "DELETE" ||
+                    (requiresPassword && !deletePassword)) && {
                     opacity: 0.5,
                   },
                 ]}
                 disabled={
                   isDeleting ||
-                  deleteConfirmation.trim().toUpperCase() !== "DELETE"
+                  deleteConfirmation.trim().toUpperCase() !== "DELETE" ||
+                  (requiresPassword && !deletePassword)
                 }
                 onPress={handleDeleteAccount}
               >
