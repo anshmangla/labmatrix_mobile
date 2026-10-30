@@ -95,6 +95,7 @@ function RootNavigation() {
           }}
         />
         <Stack.Screen name="admin" options={{ headerShown: false }} />
+        <Stack.Screen name="contact" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>
   );

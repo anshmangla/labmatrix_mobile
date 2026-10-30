@@ -351,6 +351,29 @@ export function ProfileQuickMenuModal({
                     <ChevronRight size={16} color="#94a3b8" />
                   </TouchableOpacity>
 
+                  {/* Contact form (same as the website's /contact) */}
+                  <TouchableOpacity
+                    style={[styles.menuItem, isDark && styles.menuItemDark]}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      onClose();
+                      router.push("/contact" as any);
+                    }}
+                  >
+                    <View style={[styles.menuIconBox, { backgroundColor: "#eff5fb" }]}>
+                      <Mail size={18} color="#033a7d" />
+                    </View>
+                    <View style={styles.menuTextCol}>
+                      <Text style={[styles.menuItemTitle, isDark && styles.menuItemTitleDark]}>
+                        Send an Inquiry
+                      </Text>
+                      <Text style={styles.menuItemSub}>
+                        Message our sales desk • reply within business hours
+                      </Text>
+                    </View>
+                    <ChevronRight size={16} color="#94a3b8" />
+                  </TouchableOpacity>
+
                   {/* 6. Engineering Support */}
                   <TouchableOpacity
                     style={[styles.menuItem, isDark && styles.menuItemDark]}

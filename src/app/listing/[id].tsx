@@ -29,6 +29,8 @@ import {
   Calendar,
   Phone,
   Share2,
+  Pencil,
+  Copy,
   Video,
   CheckCircle2,
   Truck,
@@ -103,13 +105,21 @@ export default function ListingDetailScreen() {
   const [isSendingInquiry, setIsSendingInquiry] = useState(false);
 
   // Query single listing
-  const { data, isLoading } = useQuery({
+  const { data: detail, isLoading } = useQuery({
     queryKey: ["listing", id],
     queryFn: async () => {
       const res = await api.get(`/api/listings/${id}`);
-      return res.data?.listing as Listing;
+      return {
+        listing: res.data?.listing as Listing,
+        isOwner: Boolean(res.data?.isOwner),
+        isAdmin: Boolean(res.data?.isAdmin),
+      };
     },
   });
+
+  const data = detail?.listing;
+  const isOwner = detail?.isOwner ?? false;
+  const isAdmin = detail?.isAdmin ?? false;
 
   const handleShare = async () => {
     if (!data) return;
@@ -346,6 +356,43 @@ export default function ListingDetailScreen() {
           </View>
 
           <Text style={[styles.title, isDark && styles.titleDark]}>{data.title}</Text>
+
+          {(isOwner || isAdmin) && (
+            <View style={[styles.manageCard, isDark && styles.manageCardDark]}>
+              <View style={styles.manageHeader}>
+                <Text style={[styles.manageTitle, isDark && styles.titleDark]}>
+                  {isAdmin ? "Administrator Controls Active" : "You are the owner of this listing"}
+                </Text>
+                <View style={[styles.manageBadge, data.isApproved ? styles.manageBadgeLive : styles.manageBadgePending]}>
+                  <Text style={[styles.manageBadgeText, data.isApproved ? styles.manageBadgeTextLive : styles.manageBadgeTextPending]}>
+                    {data.isApproved ? "Approved & Live" : "Pending Admin Approval"}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.manageActions}>
+                <TouchableOpacity
+                  style={styles.manageSecondaryBtn}
+                  activeOpacity={0.8}
+                  onPress={() =>
+                    router.push({ pathname: "/(tabs)/sell", params: { duplicate: data.id } } as any)
+                  }
+                >
+                  <Copy size={14} color="#475569" />
+                  <Text style={styles.manageSecondaryText}>Duplicate</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.managePrimaryBtn}
+                  activeOpacity={0.8}
+                  onPress={() =>
+                    router.push({ pathname: "/(tabs)/sell", params: { edit: data.id } } as any)
+                  }
+                >
+                  <Pencil size={14} color="#0f172a" />
+                  <Text style={styles.managePrimaryText}>Edit Listing</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* Price Box */}
           <View style={styles.priceContainer}>
@@ -1099,6 +1146,65 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#15803d",
   },
+  manageCard: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#ffffff",
+    gap: 10,
+  },
+  manageCardDark: {
+    backgroundColor: "#0b1320",
+    borderColor: "#1e3a5f",
+  },
+  manageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  manageTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1e293b",
+  },
+  manageBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  manageBadgeLive: { backgroundColor: "#ecfdf5", borderColor: "#a7f3d0" },
+  manageBadgePending: { backgroundColor: "#fffbeb", borderColor: "#fde68a" },
+  manageBadgeText: { fontSize: 11, fontWeight: "700" },
+  manageBadgeTextLive: { color: "#047857" },
+  manageBadgeTextPending: { color: "#92400e" },
+  manageActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  manageSecondaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "#f1f5f9",
+  },
+  manageSecondaryText: { fontSize: 12, fontWeight: "700", color: "#1e293b" },
+  managePrimaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "#fbc634",
+  },
+  managePrimaryText: { fontSize: 12, fontWeight: "700", color: "#0f172a" },
   title: {
     fontSize: 20,
     fontWeight: "800",
