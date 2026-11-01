@@ -32,6 +32,7 @@ import {
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
 import { LabMatrixTokens } from "@/constants/theme";
+import { openPrivacyPolicy } from "@/lib/links";
 
 function GoogleLogo() {
   return (
@@ -409,6 +410,14 @@ export default function RegisterScreen() {
                 </>
               )}
             </TouchableOpacity>
+
+            <Text style={styles.privacyConsentText}>
+              By creating an account, you agree to our{" "}
+              <Text style={styles.privacyConsentLink} onPress={openPrivacyPolicy}>
+                Privacy Policy
+              </Text>
+              .
+            </Text>
           </View>
 
           {/* Already have account prompt */}
@@ -680,6 +689,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#ffffff",
+  },
+  privacyConsentText: {
+    fontSize: 12,
+    color: "#64748b",
+    textAlign: "center",
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  privacyConsentLink: {
+    color: "#033a7d",
+    fontWeight: "700",
+    textDecorationLine: "underline",
   },
   signInBlock: {
     alignItems: "center",

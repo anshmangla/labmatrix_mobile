@@ -32,6 +32,7 @@ import {
   ExternalLink,
 } from "lucide-react-native";
 import { useAuth } from "@/context/auth-context";
+import { openPrivacyPolicy } from "@/lib/links";
 
 interface ProfileQuickMenuModalProps {
   visible: boolean;
@@ -372,6 +373,29 @@ export function ProfileQuickMenuModal({
                       </Text>
                     </View>
                     <ChevronRight size={16} color="#94a3b8" />
+                  </TouchableOpacity>
+
+                  {/* Privacy Policy (required in-app for Google Play) */}
+                  <TouchableOpacity
+                    style={[styles.menuItem, isDark && styles.menuItemDark]}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      onClose();
+                      openPrivacyPolicy();
+                    }}
+                  >
+                    <View style={[styles.menuIconBox, { backgroundColor: "#f1f5f9" }]}>
+                      <ShieldCheck size={18} color="#475569" />
+                    </View>
+                    <View style={styles.menuTextCol}>
+                      <Text style={[styles.menuItemTitle, isDark && styles.menuItemTitleDark]}>
+                        Privacy Policy
+                      </Text>
+                      <Text style={styles.menuItemSub}>
+                        How we handle your data • delete your account
+                      </Text>
+                    </View>
+                    <ExternalLink size={16} color="#94a3b8" />
                   </TouchableOpacity>
 
                   {/* 6. Engineering Support */}
