@@ -32,6 +32,10 @@ import {
   PlusCircle,
   ArrowRight,
   MessageSquare,
+  LayoutGrid,
+  Microscope,
+  PackageCheck,
+  Wrench,
   CheckCircle2,
 } from "lucide-react-native";
 import { api } from "@/lib/api";
@@ -42,12 +46,32 @@ import { getOptimizedImageUrl, IMAGE_PRESETS } from "@/lib/images";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 
+// Marketplace sections, shown as the tab bar and (for the three item types) as entry tiles
 const ITEM_TYPES = [
-  { label: "All Items", value: "ALL" },
-  { label: "Pre-Owned", value: "MACHINE" },
-  { label: "Brand New", value: "NEW_INSTRUMENT" },
-  { label: "Spare Parts", value: "SPARE_PART" },
+  { label: "All", title: "All listings", value: "ALL", icon: LayoutGrid, description: "" },
+  {
+    label: "Pre-Owned",
+    title: "Pre-Owned Instruments",
+    value: "MACHINE",
+    icon: Microscope,
+    description: "Used & refurbished lab instruments",
+  },
+  {
+    label: "Brand New",
+    title: "Brand New Instruments",
+    value: "NEW_INSTRUMENT",
+    icon: PackageCheck,
+    description: "Factory-sealed new instruments",
+  },
+  {
+    label: "Spare Parts",
+    title: "Spare Parts",
+    value: "SPARE_PART",
+    icon: Wrench,
+    description: "Boards, lamps, modules & consumables",
+  },
 ];
+const SECTION_TILES = ITEM_TYPES.filter((t) => t.value !== "ALL");
 
 const CATEGORIES = [
   "ALL",
@@ -172,6 +196,9 @@ export default function MarketplaceScreen() {
       .filter((item) => (seen.has(item.id) ? false : (seen.add(item.id), true)));
   }, [pagedData]);
   const totalCount = pagedData?.pages[0]?.total ?? data?.length ?? 0;
+
+  const currentSection = ITEM_TYPES.find((t) => t.value === selectedType) ?? ITEM_TYPES[0];
+  const showSectionTiles = selectedType === "ALL" && !searchQuery.trim();
 
   const resetAllFilters = () => {
     setSelectedType("ALL");
@@ -421,39 +448,35 @@ export default function MarketplaceScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 3. Row 1: Item Type Tabs (Pills) */}
-      <View style={[styles.pillsRowWrapper, isDark && styles.pillsRowWrapperDark]}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.pillsScroll}
-        >
-          {ITEM_TYPES.map((t) => {
-            const isSelected = selectedType === t.value;
-            return (
-              <TouchableOpacity
-                key={t.value}
+      {/* 3. Section Tab Bar (stays above the feed) */}
+      <View style={[styles.sectionTabs, isDark && styles.sectionTabsDark]} accessibilityRole="tablist">
+        {ITEM_TYPES.map((t) => {
+          const isSelected = selectedType === t.value;
+          const Icon = t.icon;
+          return (
+            <TouchableOpacity
+              key={t.value}
+              style={styles.sectionTab}
+              activeOpacity={0.7}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isSelected }}
+              onPress={() => setSelectedType(t.value)}
+            >
+              <Icon size={18} color={isSelected ? colors.primaryContainer : "#64748b"} />
+              <Text
                 style={[
-                  styles.itemTypePill,
-                  isDark && styles.itemTypePillDark,
-                  isSelected && styles.itemTypePillSelected,
+                  styles.sectionTabText,
+                  isDark && styles.sectionTabTextDark,
+                  isSelected && styles.sectionTabTextActive,
                 ]}
-                activeOpacity={0.75}
-                onPress={() => setSelectedType(t.value)}
+                numberOfLines={1}
               >
-                <Text
-                  style={[
-                    styles.itemTypePillText,
-                    isDark && styles.itemTypePillTextDark,
-                    isSelected && styles.itemTypePillTextSelected,
-                  ]}
-                >
-                  {t.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+                {t.label}
+              </Text>
+              <View style={[styles.sectionTabIndicator, isSelected && styles.sectionTabIndicatorActive]} />
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {/* 6. Live Status / Available Instruments Bar */}
@@ -466,13 +489,13 @@ export default function MarketplaceScreen() {
             ]}
           />
           <Text style={styles.statusAvailableText}>
-            {data
-              ? selectedStatus === "SOLD"
-                ? `${totalCount} RECENTLY SOLD UNITS`
-                : selectedStatus === "AVAILABLE"
-                ? `${totalCount} INSTRUMENTS AVAILABLE`
-                : `${totalCount} TOTAL INSTRUMENTS CATALOGED`
-              : "CATALOG AVAILABLE"}
+            {`${currentSection.title.toUpperCase()}${
+              data
+                ? ` · ${totalCount} ${
+                    selectedStatus === "SOLD" ? "SOLD" : selectedStatus === "AVAILABLE" ? "AVAILABLE" : "ITEMS"
+                  }`
+                : ""
+            }`}
           </Text>
         </View>
 
@@ -510,6 +533,37 @@ export default function MarketplaceScreen() {
           renderItem={renderListingCard}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            showSectionTiles ? (
+              <View style={styles.tilesSection}>
+                <Text style={[styles.tilesTitle, isDark && styles.tilesTitleDark]}>What are you looking for?</Text>
+                <View style={styles.tilesRow}>
+                  {SECTION_TILES.map((t) => {
+                    const Icon = t.icon;
+                    return (
+                      <TouchableOpacity
+                        key={t.value}
+                        style={[styles.tile, isDark && styles.tileDark]}
+                        activeOpacity={0.8}
+                        onPress={() => setSelectedType(t.value)}
+                      >
+                        <View style={styles.tileIconCircle}>
+                          <Icon size={22} color={colors.primaryContainer} />
+                        </View>
+                        <Text style={[styles.tileTitle, isDark && styles.tileTitleDark]} numberOfLines={2}>
+                          {t.label}
+                        </Text>
+                        <Text style={styles.tileDescription} numberOfLines={3}>
+                          {t.description}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={[styles.latestTitle, isDark && styles.tilesTitleDark]}>Latest listings</Text>
+              </View>
+            ) : undefined
+          }
           onEndReached={() => {
             if (hasNextPage && !isFetchingNextPage) fetchNextPage();
           }}
@@ -535,15 +589,25 @@ export default function MarketplaceScreen() {
                   <Search size={32} color={colors.textMuted} />
                 </View>
                 <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>
-                  No laboratory equipment found
+                  {selectedType !== "ALL" && activeFilterCount === 0 && !searchQuery.trim()
+                    ? `No ${currentSection.title.toLowerCase()} listed yet`
+                    : "No laboratory equipment found"}
                 </Text>
                 <Text style={styles.emptySubtitle}>
-                  No listings matched your criteria. Try adjusting your search query or reset your filters.
+                  {selectedType !== "ALL" && activeFilterCount === 0 && !searchQuery.trim()
+                    ? "Check back soon, or browse everything on the marketplace."
+                    : "No listings matched your criteria. Try adjusting your search query or reset your filters."}
                 </Text>
                 <View style={styles.emptyActionRow}>
-                  <TouchableOpacity style={styles.resetFiltersBtn} onPress={resetAllFilters}>
-                    <Text style={styles.resetFiltersBtnText}>Reset All Filters</Text>
-                  </TouchableOpacity>
+                  {selectedType !== "ALL" && activeFilterCount === 0 && !searchQuery.trim() ? (
+                    <TouchableOpacity style={styles.resetFiltersBtn} onPress={() => setSelectedType("ALL")}>
+                      <Text style={styles.resetFiltersBtnText}>Browse All Listings</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity style={styles.resetFiltersBtn} onPress={resetAllFilters}>
+                      <Text style={styles.resetFiltersBtnText}>Reset All Filters</Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
                     style={styles.listMachineBtn}
                     onPress={() => router.push("/sell" as any)}
@@ -857,45 +921,100 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#0f172a",
   },
-  pillsRowWrapper: {
-    backgroundColor: "#ffffff",
-    paddingBottom: 6,
-  },
-  pillsRowWrapperDark: {
-    backgroundColor: "#0b1329",
-  },
-  pillsScroll: {
+  sectionTabs: {
     flexDirection: "row",
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  itemTypePill: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 20,
     backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
   },
-  itemTypePillDark: {
-    backgroundColor: "#16203a",
-    borderColor: "#1e293b",
+  sectionTabsDark: {
+    backgroundColor: "#0b1329",
+    borderBottomColor: "#1e293b",
   },
-  itemTypePillSelected: {
-    backgroundColor: "#002555",
-    borderColor: "#002555",
+  sectionTab: {
+    flex: 1,
+    alignItems: "center",
+    paddingTop: 10,
+    gap: 4,
   },
-  itemTypePillText: {
-    fontSize: 13,
+  sectionTabText: {
+    fontSize: 12,
     fontWeight: "600",
-    color: "#475569",
+    color: "#64748b",
   },
-  itemTypePillTextDark: {
+  sectionTabTextDark: {
     color: "#94a3b8",
   },
-  itemTypePillTextSelected: {
-    color: "#ffffff",
-    fontWeight: "700",
+  sectionTabTextActive: {
+    color: "#033a7d",
+    fontWeight: "800",
+  },
+  sectionTabIndicator: {
+    alignSelf: "stretch",
+    height: 3,
+    marginTop: 6,
+    marginHorizontal: 14,
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
+    backgroundColor: "transparent",
+  },
+  sectionTabIndicatorActive: {
+    backgroundColor: "#033a7d",
+  },
+  tilesSection: {
+    gap: 10,
+  },
+  tilesTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  tilesTitleDark: {
+    color: "#f8fafc",
+  },
+  tilesRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  tile: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#dbeaf7",
+    padding: 12,
+    gap: 6,
+  },
+  tileDark: {
+    backgroundColor: "#0b1329",
+    borderColor: "#1e293b",
+  },
+  tileIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#eff5fb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tileTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  tileTitleDark: {
+    color: "#f8fafc",
+  },
+  tileDescription: {
+    fontSize: 11,
+    lineHeight: 15,
+    color: "#64748b",
+  },
+  latestTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginTop: 8,
   },
   statusChipDot: {
     width: 6,
