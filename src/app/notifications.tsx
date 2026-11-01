@@ -184,6 +184,23 @@ export default function NotificationsScreen() {
         <View style={{ width: 36 }} />
       </View>
 
+      {!isAuthenticated ? (
+        <View style={styles.emptyContainer}>
+          <Bell size={36} color="#94a3b8" />
+          <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>Sign in to see notifications</Text>
+          <Text style={styles.emptySubtitle}>
+            Get alerts when your listings are approved and when buyers send inquiries.
+          </Text>
+          <TouchableOpacity
+            style={styles.signInPromptBtn}
+            activeOpacity={0.85}
+            onPress={() => router.push("/(auth)/login" as any)}
+          >
+            <Text style={styles.signInPromptBtnText}>Sign In</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+      <>
       {/* Control Bar */}
       {unreadCount > 0 && (
         <View style={[styles.controlBar, isDark && styles.controlBarDark]}>
@@ -235,6 +252,8 @@ export default function NotificationsScreen() {
             </View>
           }
         />
+      )}
+      </>
       )}
     </SafeAreaView>
   );
@@ -405,6 +424,18 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 13,
     color: "#64748b",
+  },
+  signInPromptBtn: {
+    marginTop: 8,
+    backgroundColor: "#033a7d",
+    paddingHorizontal: 22,
+    paddingVertical: 11,
+    borderRadius: 10,
+  },
+  signInPromptBtnText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "700",
   },
   emptyContainer: {
     alignItems: "center",

@@ -505,7 +505,7 @@ export default function InquiriesScreen() {
 function SparklesIcon() {
   return (
     <View style={{ width: 10, height: 10, justifyContent: "center", alignItems: "center" }}>
-      <Text style={{ fontSize: 9, color: "#1d4ed8" }}>✦</Text>
+      <Text style={{ fontSize: 11, color: "#1d4ed8" }}>✦</Text>
     </View>
   );
 }
@@ -704,7 +704,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   itemTypeBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     letterSpacing: 0.2,
   },
@@ -806,7 +806,7 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   messageQuoteLabel: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: "#64748b",
     letterSpacing: 0.4,

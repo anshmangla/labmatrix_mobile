@@ -929,7 +929,7 @@ export default function AdminConsoleScreen() {
                           <Text style={styles.partyBoxTitle}>INTERESTED PARTY (INQUIRER)</Text>
                         </View>
                         <View style={styles.verifiedBuyerBadge}>
-                          <Text style={styles.verifiedBuyerText}>VERIFIED BUYER</Text>
+                          <Text style={styles.verifiedBuyerText}>BUYER</Text>
                         </View>
                       </View>
 
@@ -977,7 +977,7 @@ export default function AdminConsoleScreen() {
                             <Text style={styles.partyBoxTitle}>MACHINE SELLER</Text>
                           </View>
                           <View style={styles.consignorBadge}>
-                            <Text style={styles.consignorBadgeText}>DIRECT CONSIGNOR</Text>
+                            <Text style={styles.consignorBadgeText}>SELLER</Text>
                           </View>
                         </View>
 
@@ -2020,7 +2020,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   kpiLabel: {
-    fontSize: 9.5,
+    fontSize: 11,
     fontWeight: "800",
     color: "#64748b",
     letterSpacing: 0.5,
@@ -2321,7 +2321,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   verifiedBuyerText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: "#059669",
   },
@@ -2332,7 +2332,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   consignorBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: "#1d4ed8",
   },
@@ -2536,7 +2536,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f1f5f9",
   },
   roleBadgeText: {
-    fontSize: 9.5,
+    fontSize: 11,
     fontWeight: "900",
   },
   roleBadgeTextAdmin: {
@@ -2751,7 +2751,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   spareBadgeText: {
-    fontSize: 9.5,
+    fontSize: 11,
     fontWeight: "800",
     color: "#b45309",
   },
@@ -2762,7 +2762,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   newInstBadgeText: {
-    fontSize: 9.5,
+    fontSize: 11,
     fontWeight: "800",
     color: "#059669",
   },
@@ -2773,7 +2773,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   machineBadgeText: {
-    fontSize: 9.5,
+    fontSize: 11,
     fontWeight: "800",
     color: "#1d4ed8",
   },
@@ -2784,7 +2784,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   qtyBadgeText: {
-    fontSize: 9.5,
+    fontSize: 11,
     fontWeight: "700",
     color: "#475569",
   },
@@ -2859,7 +2859,7 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   adminSellerLabel: {
-    fontSize: 9.5,
+    fontSize: 11,
     fontWeight: "800",
     color: "#64748b",
     letterSpacing: 0.5,
@@ -2871,7 +2871,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   whatsAppPillSmallText: {
-    fontSize: 9.5,
+    fontSize: 11,
     fontWeight: "800",
     color: "#ffffff",
   },
@@ -2905,7 +2905,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   controlMicroLabel: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: "#94a3b8",
     marginBottom: 4,

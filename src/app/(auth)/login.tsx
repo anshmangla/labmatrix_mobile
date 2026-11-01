@@ -379,6 +379,12 @@ export default function LoginLandingScreen() {
                 Create an account
               </Text>
             </Text>
+            <Text
+              style={styles.browseAsGuestLink}
+              onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)"))}
+            >
+              Browse without signing in
+            </Text>
           </View>
 
           {/* 7. Footer Trust Seals matching Mockup */}
@@ -647,7 +653,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#1e293b",
   },
   dividerText: {
-    fontSize: 9.5,
+    fontSize: 11,
     fontWeight: "800",
     color: "#94a3b8",
     letterSpacing: 0.8,
@@ -789,6 +795,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 18,
     marginBottom: 22,
+    gap: 12,
+  },
+  browseAsGuestLink: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#64748b",
+    textDecorationLine: "underline",
   },
   registerPrompt: {
     fontSize: 13,

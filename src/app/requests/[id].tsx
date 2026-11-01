@@ -53,10 +53,7 @@ export default function RequirementDetailScreen() {
 
   // Offer modal state
   const [modalVisible, setModalVisible] = useState(false);
-  const [name, setName] = useState(user?.name || "");
-  const [email, setEmail] = useState(user?.email || "");
   const [phone, setPhone] = useState(user?.phoneNumber || "");
-  const [company, setCompany] = useState(user?.companyName || "");
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
 
@@ -98,8 +95,8 @@ export default function RequirementDetailScreen() {
   };
 
   const handleSendFulfillment = async () => {
-    if (!name.trim() || !email.trim() || !phone.trim()) {
-      Alert.alert("Validation Error", "Name, email, and phone number are required.");
+    if (!phone.trim()) {
+      Alert.alert("Phone Number Required", "Please enter a phone number so our deal desk can reach you.");
       return;
     }
     if (!message.trim() || message.length < 10) {
@@ -111,10 +108,7 @@ export default function RequirementDetailScreen() {
     try {
       await api.post("/api/inquiries", {
         requirementId: id,
-        name: name.trim(),
-        email: email.trim(),
-        phone: phone.trim(),
-        company: company.trim() || undefined,
+        phoneNumber: phone.trim(),
         message: message.trim(),
       });
 
@@ -452,15 +446,7 @@ export default function RequirementDetailScreen() {
               contentContainerStyle={styles.modalFormContent}
               showsVerticalScrollIndicator={false}
             >
-              <Text style={styles.inputLabel}>Your Name *</Text>
-              <TextInput
-                style={[styles.input, isDark && styles.inputDark]}
-                value={name}
-                onChangeText={setName}
-                placeholder="Full Name"
-                placeholderTextColor="#94a3b8"
-              />
-
+              {/* Inquiries are sent from the signed-in account, so only the phone (for the deal desk) and the message are asked for */}
               <Text style={styles.inputLabel}>Phone / WhatsApp *</Text>
               <TextInput
                 style={[styles.input, isDark && styles.inputDark]}
@@ -468,26 +454,6 @@ export default function RequirementDetailScreen() {
                 onChangeText={setPhone}
                 keyboardType="phone-pad"
                 placeholder="+91-XXXXXXXXXX"
-                placeholderTextColor="#94a3b8"
-              />
-
-              <Text style={styles.inputLabel}>Email Address *</Text>
-              <TextInput
-                style={[styles.input, isDark && styles.inputDark]}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                placeholder="name@company.com"
-                placeholderTextColor="#94a3b8"
-              />
-
-              <Text style={styles.inputLabel}>Company / Institution</Text>
-              <TextInput
-                style={[styles.input, isDark && styles.inputDark]}
-                value={company}
-                onChangeText={setCompany}
-                placeholder="Facility or Supplier Company"
                 placeholderTextColor="#94a3b8"
               />
 

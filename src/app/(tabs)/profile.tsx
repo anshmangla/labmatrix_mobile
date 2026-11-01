@@ -29,7 +29,6 @@ import {
   LogIn,
   Package,
   ClipboardList,
-  MessageSquare,
   ChevronRight,
   ExternalLink,
   CheckCircle2,
@@ -44,13 +43,11 @@ import {
   X,
   Share2,
   Bookmark,
-  CheckCheck,
   Settings,
   Plus,
   Wrench,
   FileQuestion,
   ShieldAlert,
-  Inbox,
   Send,
   AlertCircle,
   HelpCircle,
@@ -80,7 +77,7 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (tab === "settings") setActiveTab("settings");
     else if (tab === "requests") setActiveTab("requests");
-    else if (tab === "inquiries") setActiveTab("inquiries");
+    else if (tab === "inquiries") router.push("/(tabs)/inquiries" as any);
     else if (tab === "listings") setActiveTab("listings");
   }, [tab]);
 
@@ -137,25 +134,9 @@ export default function ProfileScreen() {
   });
   const requiresPassword = accountProfile?.hasPassword === true;
 
-  // Fetch inquiries (received & sent)
-  const {
-    data: inquiriesData,
-    isLoading: isLoadingInquiries,
-    isError: isInquiriesError,
-    refetch: refetchInquiries,
-  } = useQuery({
-    queryKey: ["inquiries"],
-    enabled: isAuthenticated,
-    queryFn: async () => {
-      const res = await api.get("/api/inquiries");
-      return res.data as { received: any[]; sent: any[] };
-    },
-  });
-
   // Fetch notifications
   const {
     data: notificationsData,
-    refetch: refetchNotifications,
   } = useQuery({
     queryKey: ["notifications"],
     enabled: isAuthenticated,
@@ -312,13 +293,6 @@ export default function ProfileScreen() {
     } finally {
       setUpdatingId(null);
     }
-  };
-
-  const handleMarkAllNotificationsRead = async () => {
-    try {
-      await api.patch("/api/notifications", { all: true });
-      refetchNotifications();
-    } catch {}
   };
 
   const handleCallSupport = () => {
@@ -500,12 +474,7 @@ export default function ProfileScreen() {
   // ==========================================
   const listings = myItems?.listings || [];
   const requirements = myItems?.requirements || [];
-  const receivedInquiries = inquiriesData?.received || [];
-  const sentInquiries = inquiriesData?.sent || [];
-  const notifications = notificationsData?.notifications || [];
   const unreadCount = notificationsData?.unreadCount || 0;
-  const totalInquiriesAndNotifications =
-    receivedInquiries.length + sentInquiries.length + notifications.length;
 
   const userInitials = getInitials(user.name, user.email);
 
@@ -750,30 +719,6 @@ export default function ProfileScreen() {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[
-              styles.tabPill,
-              activeTab === "inquiries" && styles.tabPillActive,
-            ]}
-            activeOpacity={0.75}
-            onPress={() => setActiveTab("inquiries")}
-          >
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <Text
-                style={[
-                  styles.tabPillText,
-                  activeTab === "inquiries" && styles.tabPillTextActive,
-                ]}
-              >
-                Inquiries & Messages ({totalInquiriesAndNotifications})
-              </Text>
-              {unreadCount > 0 && (
-                <View style={styles.tabBadgeRed}>
-                  <Text style={styles.tabBadgeRedText}>{unreadCount}</Text>
-                </View>
-              )}
-            </View>
-          </TouchableOpacity>
 
           <TouchableOpacity
             style={[
@@ -821,7 +766,7 @@ export default function ProfileScreen() {
                 </Text>
                 <Text style={styles.emptySubtitle}>
                   Have surplus HPLC, GC-MS, or testing instruments? List them on
-                  LabMatrix and connect with verified buyers across India.
+                  LabMatrix and connect with buyers across India.
                 </Text>
                 <TouchableOpacity
                   style={styles.emptyActionBtn}
@@ -1230,179 +1175,6 @@ export default function ProfileScreen() {
                 })}
               </View>
             )}
-          </View>
-        )}
-
-        {/* ==================================================== */}
-        {/* TAB 3: INQUIRIES & MESSAGES                          */}
-        {/* ==================================================== */}
-        {activeTab === "inquiries" && (
-          <View style={styles.tabContentContainer}>
-            {/* Header with Mark all read button */}
-            <View
-              style={[
-                styles.inquiriesHeaderCard,
-                isDark && styles.inquiriesHeaderCardDark,
-              ]}
-            >
-              <View style={{ flex: 1 }}>
-                <View style={styles.inquiriesHeaderTitleRow}>
-                  <MessageSquare size={16} color="#033a7d" />
-                  <Text
-                    style={[
-                      styles.inquiriesHeaderTitle,
-                      isDark && styles.inquiriesHeaderTitleDark,
-                    ]}
-                  >
-                    Inquiries & Activity
-                  </Text>
-                </View>
-                <Text style={styles.inquiriesHeaderSub}>
-                  Direct inquiries on your equipment and system deal alerts.
-                </Text>
-              </View>
-
-              {unreadCount > 0 && (
-                <TouchableOpacity
-                  style={styles.markAllReadBtn}
-                  activeOpacity={0.7}
-                  onPress={handleMarkAllNotificationsRead}
-                >
-                  <CheckCheck size={14} color="#033a7d" />
-                  <Text style={styles.markAllReadBtnText}>Mark read</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Quick Link to Dedicated Inquiries Tab */}
-            <TouchableOpacity
-              style={styles.openFullDealsBanner}
-              activeOpacity={0.85}
-              onPress={() => router.push("/(tabs)/inquiries" as any)}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.openFullDealsTitle}>
-                  Open Full Deal Desk Tab
-                </Text>
-                <Text style={styles.openFullDealsSubtitle}>
-                  View all received & sent B2B inquiries with direct dials
-                </Text>
-              </View>
-              <ArrowRight size={18} color="#033a7d" />
-            </TouchableOpacity>
-
-            {/* Inquiries Received */}
-            {isInquiriesError && (
-              <LoadErrorState message="Couldn't load your inquiries. Please try again." onRetry={() => refetchInquiries()} />
-            )}
-
-            {receivedInquiries.length > 0 && (
-              <View style={styles.sectionBlock}>
-                <View style={styles.sectionHeaderRow}>
-                  <Inbox size={15} color="#033a7d" />
-                  <Text
-                    style={[
-                      styles.sectionHeaderText,
-                      isDark && styles.sectionHeaderTextDark,
-                    ]}
-                  >
-                    Inquiries Received ({receivedInquiries.length})
-                  </Text>
-                </View>
-
-                {receivedInquiries.map((inq: any) => (
-                  <View
-                    key={inq.id}
-                    style={[styles.inquiryCard, isDark && styles.inquiryCardDark]}
-                  >
-                    <View style={styles.inquiryCardTop}>
-                      <Text
-                        style={[
-                          styles.inquiryItemTitle,
-                          isDark && styles.inquiryItemTitleDark,
-                        ]}
-                      >
-                        {inq.listing?.title || "Equipment Inquiry"}
-                      </Text>
-                      <View style={styles.inquiryStatusPill}>
-                        <Text style={styles.inquiryStatusPillText}>
-                          {inq.status}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={styles.inquiryInquirer}>
-                      From: {inq.inquirer?.name || inq.inquirer?.email || "Buyer"}
-                    </Text>
-                    <View style={styles.inquiryMessageQuote}>
-                      <Text style={styles.inquiryMessageQuoteText} numberOfLines={2}>
-                        "{inq.message}"
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* Notifications Feed */}
-            <View style={styles.sectionBlock}>
-              <View style={styles.sectionHeaderRow}>
-                <Bell size={15} color="#033a7d" />
-                <Text
-                  style={[
-                    styles.sectionHeaderText,
-                    isDark && styles.sectionHeaderTextDark,
-                  ]}
-                >
-                  Activity & Verification Alerts ({notifications.length})
-                </Text>
-              </View>
-
-              {notifications.length === 0 ? (
-                <View
-                  style={[styles.emptyCardSmall, isDark && styles.emptyCardDark]}
-                >
-                  <Text style={styles.emptySubtitle}>
-                    No platform alerts right now.
-                  </Text>
-                </View>
-              ) : (
-                notifications.slice(0, 5).map((item: any) => {
-                  const isApproved = item.type === "ENTRY_APPROVED";
-                  return (
-                    <View
-                      key={item.id}
-                      style={[
-                        styles.notifCard,
-                        !item.isRead && styles.notifCardUnread,
-                        isDark && styles.notifCardDark,
-                      ]}
-                    >
-                      <View style={styles.notifIconCircle}>
-                        {isApproved ? (
-                          <CheckCircle2 size={16} color="#15803d" />
-                        ) : (
-                          <Bell size={16} color="#033a7d" />
-                        )}
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={[
-                            styles.notifTitle,
-                            isDark && styles.notifTitleDark,
-                          ]}
-                        >
-                          {item.title}
-                        </Text>
-                        <Text style={styles.notifMessage}>{item.message}</Text>
-                        <Text style={styles.notifDate}>
-                          {new Date(item.createdAt).toLocaleDateString()}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })
-              )}
-            </View>
           </View>
         )}
 
@@ -2246,18 +2018,6 @@ const styles = StyleSheet.create({
   tabPillTextActive: {
     color: "#ffffff",
   },
-  tabBadgeRed: {
-    backgroundColor: "#ef4444",
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 8,
-    marginLeft: 5,
-  },
-  tabBadgeRedText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#ffffff",
-  },
 
   tabContentContainer: {
     marginTop: 2,
@@ -2565,14 +2325,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#131d2e",
     borderColor: "#1e293b",
   },
-  emptyCardSmall: {
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 18,
-    alignItems: "center",
-  },
   emptyTitle: {
     fontSize: 15,
     fontWeight: "800",
@@ -2607,197 +2359,11 @@ const styles = StyleSheet.create({
   },
 
   // Inquiries Tab Styles
-  inquiriesHeaderCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    marginBottom: 10,
-  },
-  inquiriesHeaderCardDark: {
-    backgroundColor: "#131d2e",
-    borderColor: "#1e293b",
-  },
-  inquiriesHeaderTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  inquiriesHeaderTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  inquiriesHeaderTitleDark: {
-    color: "#f8fafc",
-  },
-  inquiriesHeaderSub: {
-    fontSize: 11,
-    color: "#64748b",
-    marginTop: 2,
-  },
-  markAllReadBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#eff5fb",
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-    gap: 4,
-  },
-  markAllReadBtnText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#033a7d",
-  },
 
-  openFullDealsBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#eff5fb",
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 14,
-  },
-  openFullDealsTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#033a7d",
-  },
-  openFullDealsSubtitle: {
-    fontSize: 11,
-    color: "#475569",
-    marginTop: 2,
-  },
 
-  sectionBlock: {
-    marginTop: 10,
-    gap: 8,
-  },
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 4,
-  },
-  sectionHeaderText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  sectionHeaderTextDark: {
-    color: "#f8fafc",
-  },
 
-  inquiryCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  inquiryCardDark: {
-    backgroundColor: "#131d2e",
-    borderColor: "#1e293b",
-  },
-  inquiryCardTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  inquiryItemTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#0f172a",
-    flex: 1,
-  },
-  inquiryItemTitleDark: {
-    color: "#f8fafc",
-  },
-  inquiryStatusPill: {
-    backgroundColor: "#eff5fb",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  inquiryStatusPillText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#033a7d",
-  },
-  inquiryInquirer: {
-    fontSize: 11,
-    color: "#64748b",
-    marginTop: 3,
-  },
-  inquiryMessageQuote: {
-    backgroundColor: "#f8fafc",
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#f1f5f9",
-    marginTop: 6,
-  },
-  inquiryMessageQuoteText: {
-    fontSize: 11.5,
-    fontStyle: "italic",
-    color: "#334155",
-  },
 
   // Notification Cards
-  notifCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    gap: 10,
-  },
-  notifCardDark: {
-    backgroundColor: "#131d2e",
-    borderColor: "#1e293b",
-  },
-  notifCardUnread: {
-    backgroundColor: "#f0f7ff",
-    borderColor: "#bfdbfe",
-  },
-  notifIconCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#f1f5f9",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 2,
-  },
-  notifTitle: {
-    fontSize: 12.5,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  notifTitleDark: {
-    color: "#f8fafc",
-  },
-  notifMessage: {
-    fontSize: 11,
-    color: "#64748b",
-    marginTop: 2,
-    lineHeight: 15,
-  },
-  notifDate: {
-    fontSize: 10,
-    color: "#94a3b8",
-    marginTop: 4,
-  },
 
   // Settings Tab Styles
   settingsCard: {

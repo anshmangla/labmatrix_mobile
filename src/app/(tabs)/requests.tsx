@@ -702,7 +702,16 @@ export default function RequestsScreen() {
               </Text>
               <TouchableOpacity
                 style={styles.emptyPostBtn}
-                onPress={() => setPostModalVisible(true)}
+                onPress={() => {
+                  if (!isAuthenticated) {
+                    Alert.alert("Sign In Required", "Please sign in to post a requirement.", [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Sign In", onPress: () => router.push("/(auth)/login" as any) },
+                    ]);
+                    return;
+                  }
+                  setPostModalVisible(true);
+                }}
               >
                 <PlusCircle size={15} color="#0f172a" />
                 <Text style={styles.emptyPostBtnText}>Post First Requirement</Text>
@@ -1407,7 +1416,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   specsLabel: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: "#64748b",
     letterSpacing: 0.5,

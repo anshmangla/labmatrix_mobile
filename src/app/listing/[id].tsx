@@ -90,10 +90,7 @@ export default function ListingDetailScreen() {
 
   // Inquiry form states
   const [inquiryModalVisible, setInquiryModalVisible] = useState(false);
-  const [inquiryName, setInquiryName] = useState(user?.name || "");
-  const [inquiryEmail, setInquiryEmail] = useState(user?.email || "");
   const [inquiryPhone, setInquiryPhone] = useState(user?.phoneNumber || "");
-  const [inquiryCompany, setInquiryCompany] = useState(user?.companyName || "");
   const [inquiryMessage, setInquiryMessage] = useState("");
   const [isSendingInquiry, setIsSendingInquiry] = useState(false);
 
@@ -142,8 +139,8 @@ export default function ListingDetailScreen() {
   };
 
   const handleSendInquiry = async () => {
-    if (!inquiryName.trim() || !inquiryEmail.trim() || !inquiryPhone.trim()) {
-      Alert.alert("Validation", "Name, email, and phone number are required.");
+    if (!inquiryPhone.trim()) {
+      Alert.alert("Phone Number Required", "Please enter a phone number so our deal desk can reach you.");
       return;
     }
     if (!inquiryMessage.trim() || inquiryMessage.length < 10) {
@@ -155,10 +152,7 @@ export default function ListingDetailScreen() {
     try {
       await api.post("/api/inquiries", {
         listingId: id,
-        name: inquiryName.trim(),
-        email: inquiryEmail.trim(),
-        phone: inquiryPhone.trim(),
-        company: inquiryCompany.trim() || undefined,
+        phoneNumber: inquiryPhone.trim(),
         message: inquiryMessage.trim(),
       });
 
@@ -714,15 +708,7 @@ export default function ListingDetailScreen() {
               contentContainerStyle={styles.modalFormContent}
               showsVerticalScrollIndicator={false}
             >
-              <Text style={styles.inputLabel}>Your Name *</Text>
-              <TextInput
-                style={[styles.input, isDark && styles.inputDark]}
-                value={inquiryName}
-                onChangeText={setInquiryName}
-                placeholder="Full Name"
-                placeholderTextColor="#94a3b8"
-              />
-
+              {/* Inquiries are sent from the signed-in account, so only the phone (for the deal desk) and the message are asked for */}
               <Text style={styles.inputLabel}>Phone / WhatsApp *</Text>
               <TextInput
                 style={[styles.input, isDark && styles.inputDark]}
@@ -730,26 +716,6 @@ export default function ListingDetailScreen() {
                 onChangeText={setInquiryPhone}
                 keyboardType="phone-pad"
                 placeholder="+91-XXXXXXXXXX"
-                placeholderTextColor="#94a3b8"
-              />
-
-              <Text style={styles.inputLabel}>Email Address *</Text>
-              <TextInput
-                style={[styles.input, isDark && styles.inputDark]}
-                value={inquiryEmail}
-                onChangeText={setInquiryEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                placeholder="name@company.com"
-                placeholderTextColor="#94a3b8"
-              />
-
-              <Text style={styles.inputLabel}>Company / Laboratory Name</Text>
-              <TextInput
-                style={[styles.input, isDark && styles.inputDark]}
-                value={inquiryCompany}
-                onChangeText={setInquiryCompany}
-                placeholder="Organization or Research Institution"
                 placeholderTextColor="#94a3b8"
               />
 

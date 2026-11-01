@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -27,12 +27,10 @@ import {
   Phone,
   Building2,
   ArrowRight,
-  ArrowLeft,
   Clock,
   CheckCircle2,
   Bell,
   User,
-  Search,
   Sparkles,
   Wrench,
   Microscope,
@@ -140,6 +138,40 @@ export default function SellScreen() {
   const [companyName, setCompanyName] = useState(user?.companyName || "");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Inline validation: every problem is shown under its field, and the form scrolls to the first one
+  type FieldKey = "title" | "price" | "description" | "phone";
+  const FIELD_ORDER: FieldKey[] = ["title", "price", "description", "phone"];
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
+  const [scrollToErrorToken, setScrollToErrorToken] = useState(0);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const scrollYRef = useRef(0);
+  const titleErrorRef = useRef<React.ComponentRef<typeof View>>(null);
+  const priceErrorRef = useRef<React.ComponentRef<typeof View>>(null);
+  const descriptionErrorRef = useRef<React.ComponentRef<typeof View>>(null);
+  const phoneErrorRef = useRef<React.ComponentRef<typeof View>>(null);
+
+  const clearFieldError = (key: FieldKey) => {
+    if (fieldErrors[key]) setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
+  };
+
+  useEffect(() => {
+    if (!scrollToErrorToken) return;
+    const first = FIELD_ORDER.find((key) => fieldErrors[key]);
+    if (!first) return;
+    const refs = { title: titleErrorRef, price: priceErrorRef, description: descriptionErrorRef, phone: phoneErrorRef };
+    const target = refs[first].current;
+    const scrollView = scrollRef.current;
+    if (!target || !scrollView) return;
+    target.measureInWindow((_x, errorY) => {
+      scrollView.measureInWindow((_sx, scrollTop) => {
+        // Leave room above the message so the field itself is visible too
+        const y = Math.max(0, scrollYRef.current + (errorY - scrollTop) - 140);
+        scrollRef.current?.scrollTo({ y, animated: true });
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollToErrorToken]);
   const [isLoadingEdit, setIsLoadingEdit] = useState(false);
   const [submittedData, setSubmittedData] = useState<{ id: string; title: string; itemType: string } | null>(null);
 
@@ -353,27 +385,24 @@ export default function SellScreen() {
   };
 
   const handleSubmit = async () => {
+    const errors: Partial<Record<FieldKey, string>> = {};
     if (!title.trim() || title.trim().length < 3) {
-      Alert.alert("Validation Error", "Please provide a valid equipment title (at least 3 characters).");
-      return;
-    }
-    if (!description.trim() || description.trim().length < 10) {
-      Alert.alert("Validation Error", "Please provide detailed specifications (at least 10 characters).");
-      return;
+      errors.title = "Enter a title of at least 3 characters.";
     }
     if (!minPrice.trim() || !maxPrice.trim()) {
-      Alert.alert("Validation Error", "Please provide your expected price range (Min and Max price).");
-      return;
+      errors.price = "Enter both a minimum and a maximum price.";
+    } else if (parseFloat(minPrice.replace(/[^0-9.]/g, "")) > parseFloat(maxPrice.replace(/[^0-9.]/g, ""))) {
+      errors.price = "Minimum price can't be higher than the maximum price.";
     }
-    if (parseFloat(minPrice.replace(/[^0-9.]/g, "")) > parseFloat(maxPrice.replace(/[^0-9.]/g, ""))) {
-      Alert.alert("Validation Error", "Minimum price cannot be greater than maximum price.");
-      return;
+    if (!description.trim() || description.trim().length < 10) {
+      errors.description = "Describe the item in at least 10 characters.";
     }
     if (!phoneNumber.trim()) {
-      Alert.alert(
-        "Contact Required",
-        "Your mobile/WhatsApp number is required for deal notifications and buyer verification."
-      );
+      errors.phone = "Enter your mobile / WhatsApp number for deal notifications.";
+    }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setScrollToErrorToken((token) => token + 1);
       return;
     }
 
@@ -581,14 +610,6 @@ export default function SellScreen() {
           <TouchableOpacity
             style={styles.iconBtn}
             activeOpacity={0.7}
-            onPress={() => router.push("/(tabs)")}
-          >
-            <Search size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.iconBtn}
-            activeOpacity={0.7}
             onPress={() => router.push("/notifications" as any)}
           >
             <Bell size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
@@ -624,16 +645,16 @@ export default function SellScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Back Link & Title */}
-          <TouchableOpacity
-            style={styles.backLinkRow}
-            activeOpacity={0.7}
-            onPress={() => router.push("/(tabs)")}
-          >
-            <ArrowLeft size={16} color="#033a7d" />
-            <Text style={styles.backLinkText}>Back to All Listings</Text>
-          </TouchableOpacity>
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          scrollEventThrottle={32}
+          onScroll={(e) => {
+            scrollYRef.current = e.nativeEvent.contentOffset.y;
+          }}
+        >
+          {/* Title */}
 
           <View style={styles.pageHeader}>
             <Text style={[styles.pageTitle, isDark && styles.pageTitleDark]}>
@@ -745,12 +766,20 @@ export default function SellScreen() {
               <Text style={{ color: "#ba1a1a" }}>*</Text>
             </Text>
             <TextInput
-              style={[styles.input, isDark && styles.inputDark]}
+              style={[styles.input, isDark && styles.inputDark, fieldErrors.title && styles.inputError]}
               placeholder="Waters Acquity UPLC System with PDA Detector"
               placeholderTextColor="#94a3b8"
               value={title}
-              onChangeText={setTitle}
+              onChangeText={(value) => {
+                setTitle(value);
+                clearFieldError("title");
+              }}
             />
+            {fieldErrors.title ? (
+              <View ref={titleErrorRef}>
+                <Text style={styles.fieldErrorText}>{fieldErrors.title}</Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Spare Part Specific Fields */}
@@ -880,7 +909,10 @@ export default function SellScreen() {
                     placeholderTextColor="#94a3b8"
                     keyboardType="numeric"
                     value={minPrice}
-                    onChangeText={setMinPrice}
+                    onChangeText={(value) => {
+                      setMinPrice(value);
+                      clearFieldError("price");
+                    }}
                   />
                 </View>
               </View>
@@ -894,11 +926,19 @@ export default function SellScreen() {
                     placeholderTextColor="#94a3b8"
                     keyboardType="numeric"
                     value={maxPrice}
-                    onChangeText={setMaxPrice}
+                    onChangeText={(value) => {
+                      setMaxPrice(value);
+                      clearFieldError("price");
+                    }}
                   />
                 </View>
               </View>
             </View>
+            {fieldErrors.price ? (
+              <View ref={priceErrorRef}>
+                <Text style={styles.fieldErrorText}>{fieldErrors.price}</Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Detailed Description & Specifications */}
@@ -907,15 +947,23 @@ export default function SellScreen() {
               Detailed Description & Specifications <Text style={{ color: "#ba1a1a" }}>*</Text>
             </Text>
             <TextInput
-              style={[styles.textArea, isDark && styles.textAreaDark]}
+              style={[styles.textArea, isDark && styles.textAreaDark, fieldErrors.description && styles.inputError]}
               placeholder="Waters Acquity UPLC H-Class configured with Sample Manager FTN, Quaternary Solvent Manager (QSM), and PDA detector. Decommissioned directly from pharma analytical laboratory. Last calibrated October..."
               placeholderTextColor="#94a3b8"
               multiline
               numberOfLines={4}
               textAlignVertical="top"
               value={description}
-              onChangeText={setDescription}
+              onChangeText={(value) => {
+                setDescription(value);
+                clearFieldError("description");
+              }}
             />
+            {fieldErrors.description ? (
+              <View ref={descriptionErrorRef}>
+                <Text style={styles.fieldErrorText}>{fieldErrors.description}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -990,7 +1038,7 @@ export default function SellScreen() {
               <View style={styles.verifiedPhotosLine}>
                 <CheckCircle2 size={15} color="#15803d" />
                 <Text style={styles.verifiedPhotosText}>
-                  {photos.length} photo{photos.length > 1 ? "s" : ""} added • Serial plate verified
+                  {photos.length} photo{photos.length > 1 ? "s" : ""} added
                 </Text>
               </View>
             </View>
@@ -1021,9 +1069,17 @@ export default function SellScreen() {
                 placeholderTextColor="#94a3b8"
                 keyboardType="phone-pad"
                 value={phoneNumber}
-                onChangeText={setPhoneNumber}
+                onChangeText={(value) => {
+                  setPhoneNumber(value);
+                  clearFieldError("phone");
+                }}
               />
             </View>
+            {fieldErrors.phone ? (
+              <View ref={phoneErrorRef}>
+                <Text style={[styles.fieldErrorText, styles.fieldErrorTextOnDark]}>{fieldErrors.phone}</Text>
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.inputGroup}>
@@ -1044,7 +1100,7 @@ export default function SellScreen() {
           <View style={styles.darkCardFooter}>
             <ShieldCheck size={16} color="#fdc836" />
             <Text style={styles.darkCardFooterText}>
-              Phone on file: Verified for instant RFQ alerts
+              Phone on file: used for inquiry alerts
             </Text>
           </View>
         </View>
@@ -1071,7 +1127,7 @@ export default function SellScreen() {
         <View style={styles.reassuranceRow}>
           <CheckCircle2 size={16} color="#033a7d" style={{ marginTop: 1 }} />
           <Text style={styles.reassuranceText}>
-            Listing is verified by LabMatrix Technical Desk within 2-4 business hours before appearing live to verified buyers.
+            Your listing is reviewed by the LabMatrix team before it appears live on the marketplace.
           </Text>
         </View>
       </ScrollView>
@@ -1242,17 +1298,6 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingBottom: 40,
   },
-  backLinkRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 2,
-  },
-  backLinkText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#033a7d",
-  },
   pageHeader: {
     gap: 4,
   },
@@ -1368,6 +1413,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#0f172a",
+  },
+  inputError: {
+    borderColor: "#dc2626",
+  },
+  fieldErrorText: {
+    marginTop: 6,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#b91c1c",
+  },
+  fieldErrorTextOnDark: {
+    color: "#fca5a5",
   },
   input: {
     borderWidth: 1,
@@ -1565,7 +1622,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   primaryBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "700",
     color: "#ffffff",
   },

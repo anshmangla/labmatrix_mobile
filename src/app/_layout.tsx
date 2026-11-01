@@ -34,17 +34,19 @@ function RootNavigation() {
   useEffect(() => {
     if (isLoading) return;
 
-    // Check if currently on an authentication route: (auth)/login, (auth)/register, etc.
+    // Guests can browse the marketplace and requests; screens that need an account
+    // (Sell, Inquiries, Profile, Notifications, Admin) show their own sign-in prompt.
     const inAuthGroup = segments[0] === "(auth)";
 
-    if (!isAuthenticated && !inAuthGroup) {
-      // 1. Not logged in: Gate all screens and redirect to landing / login page
-      router.replace("/(auth)/login");
-    } else if (isAuthenticated && inAuthGroup) {
-      // 2. Logged in: Automatically route to main marketplace tabs
-      router.replace("/(tabs)");
+    if (isAuthenticated && inAuthGroup) {
+      // Just signed in: go back to where sign-in was started (e.g. a listing), else the marketplace
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace("/(tabs)");
+      }
     }
-  }, [isAuthenticated, isLoading, segments]);
+  }, [isAuthenticated, isLoading, segments, router]);
 
   // Branded splash while restoring secure session
   if (isLoading) {

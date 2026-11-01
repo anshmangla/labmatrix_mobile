@@ -577,7 +577,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   adminPillText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: "#033a7d",
     letterSpacing: 0.4,
@@ -594,7 +594,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   verifiedPillText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: "800",
     color: "#059669",
     letterSpacing: 0.3,
