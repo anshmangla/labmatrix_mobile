@@ -70,30 +70,10 @@ function RootNavigation() {
 
         {/* Authenticated Application */}
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="listing/[id]"
-          options={{
-            headerShown: true,
-            title: "Instrument Details",
-            headerBackTitle: "Back",
-          }}
-        />
-        <Stack.Screen
-          name="requests/[id]"
-          options={{
-            headerShown: true,
-            title: "Requirement Details",
-            headerBackTitle: "Back",
-          }}
-        />
-        <Stack.Screen
-          name="notifications"
-          options={{
-            headerShown: true,
-            title: "Notifications",
-            headerBackTitle: "Back",
-          }}
-        />
+        {/* These screens draw their own header with a back button */}
+        <Stack.Screen name="listing/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="requests/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="notifications" options={{ headerShown: false }} />
         <Stack.Screen name="admin" options={{ headerShown: false }} />
         <Stack.Screen name="contact" options={{ headerShown: false }} />
       </Stack>

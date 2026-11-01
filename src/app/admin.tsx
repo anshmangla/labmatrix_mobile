@@ -50,6 +50,7 @@ import {
 } from "lucide-react-native";
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
+import { LoadErrorState } from "@/components/LoadErrorState";
 import { LabMatrixTokens } from "@/constants/theme";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
@@ -157,16 +158,13 @@ export default function AdminConsoleScreen() {
   const {
     data: inquiriesData,
     isLoading: isLoadingInquiries,
+    isError: isInquiriesError,
     refetch: refetchInquiries,
   } = useQuery({
     queryKey: ["adminInquiries"],
     enabled: isAuthenticated && user?.role === "ADMIN",
     queryFn: async () => {
-      try {
-        return await fetchAllAdminPages("/api/admin/inquiries", "inquiries");
-      } catch (err) {
-        return [];
-      }
+      return fetchAllAdminPages("/api/admin/inquiries", "inquiries");
     },
   });
 
@@ -176,16 +174,13 @@ export default function AdminConsoleScreen() {
   const {
     data: fetchedUsersData,
     isLoading: isLoadingUsers,
+    isError: isUsersError,
     refetch: refetchUsers,
   } = useQuery({
     queryKey: ["adminUsers"],
     enabled: isAuthenticated && user?.role === "ADMIN",
     queryFn: async () => {
-      try {
-        return await fetchAllAdminPages("/api/admin/users", "users");
-      } catch (err) {
-        return [];
-      }
+      return fetchAllAdminPages("/api/admin/users", "users");
     },
   });
 
@@ -195,20 +190,17 @@ export default function AdminConsoleScreen() {
   const {
     data: fetchedListingsData,
     isLoading: isLoadingListings,
+    isError: isListingsError,
     refetch: refetchListings,
   } = useQuery({
     queryKey: ["adminListings"],
     enabled: isAuthenticated && user?.role === "ADMIN",
     queryFn: async () => {
-      try {
-        const listings = await fetchAllAdminPages("/api/admin/listings", "listings");
-        return listings.map((l: any) => ({
-          ...l,
-          isApproved: l.isApproved !== false,
-        }));
-      } catch (err) {
-        return [];
-      }
+      const listings = await fetchAllAdminPages("/api/admin/listings", "listings");
+      return listings.map((l: any) => ({
+        ...l,
+        isApproved: l.isApproved !== false,
+      }));
     },
   });
 
@@ -218,16 +210,13 @@ export default function AdminConsoleScreen() {
   const {
     data: fetchedRequirementsData,
     isLoading: isLoadingRequirements,
+    isError: isRequirementsError,
     refetch: refetchRequirements,
   } = useQuery({
     queryKey: ["adminRequirements"],
     enabled: isAuthenticated && user?.role === "ADMIN",
     queryFn: async () => {
-      try {
-        return await fetchAllAdminPages("/api/admin/requirements", "requirements");
-      } catch (err) {
-        return [];
-      }
+      return fetchAllAdminPages("/api/admin/requirements", "requirements");
     },
   });
 
@@ -299,6 +288,18 @@ export default function AdminConsoleScreen() {
   const pendingListingsCount = useMemo(() => {
     return localListingsList.filter((l) => l.isApproved === false).length;
   }, [localListingsList]);
+
+  const pendingRequirementsCount = useMemo(() => {
+    return localRequirementsList.filter((r) => r.isApproved === false).length;
+  }, [localRequirementsList]);
+
+  const newInquiriesCount = useMemo(() => {
+    return inquiries.filter((inq: any) => inq.status === "NEW").length;
+  }, [inquiries]);
+
+  // Counts show "…" until their data has loaded, never a misleading 0
+  const countOrDots = (count: number, loading: boolean) => (loading ? "…" : String(count));
+  const hasLoadError = isInquiriesError || isUsersError || isListingsError || isRequirementsError;
 
   // Global Refresh
   const handleRefreshAll = async () => {
@@ -685,10 +686,11 @@ export default function AdminConsoleScreen() {
               </View>
             </View>
             <Text style={[styles.kpiValue, isDark && styles.kpiValueDark]}>
-              {pendingListingsCount}
+              {countOrDots(pendingListingsCount + pendingRequirementsCount, isLoadingListings || isLoadingRequirements)}
             </Text>
             <Text style={styles.kpiSub}>
-              {pendingListingsCount} listings • 0 reqs
+              {countOrDots(pendingListingsCount, isLoadingListings)} listings •{" "}
+              {countOrDots(pendingRequirementsCount, isLoadingRequirements)} reqs
             </Text>
           </View>
 
@@ -700,8 +702,10 @@ export default function AdminConsoleScreen() {
                 <Inbox size={16} color="#b45309" />
               </View>
             </View>
-            <Text style={[styles.kpiValue, isDark && styles.kpiValueDark]}>2</Text>
-            <Text style={styles.kpiSub}>2 total deals</Text>
+            <Text style={[styles.kpiValue, isDark && styles.kpiValueDark]}>
+              {countOrDots(newInquiriesCount, isLoadingInquiries)}
+            </Text>
+            <Text style={styles.kpiSub}>{countOrDots(inquiries.length, isLoadingInquiries)} total deals</Text>
           </View>
 
           {/* Card 3: Active Machines */}
@@ -713,7 +717,7 @@ export default function AdminConsoleScreen() {
               </View>
             </View>
             <Text style={[styles.kpiValue, isDark && styles.kpiValueDark]}>
-              {localListingsList.length}
+              {countOrDots(localListingsList.length, isLoadingListings)}
             </Text>
             <Text style={styles.kpiSub}>Equipment listed</Text>
           </View>
@@ -727,7 +731,7 @@ export default function AdminConsoleScreen() {
               </View>
             </View>
             <Text style={[styles.kpiValue, isDark && styles.kpiValueDark]}>
-              {localRequirementsList.length}
+              {countOrDots(localRequirementsList.length, isLoadingRequirements)}
             </Text>
             <Text style={styles.kpiSub}>Wanted instruments</Text>
           </View>
@@ -742,14 +746,21 @@ export default function AdminConsoleScreen() {
             <View>
               <Text style={styles.totalUsersLabel}>TOTAL PLATFORM USERS</Text>
               <Text style={styles.totalUsersSub}>
-                {localUsersList.length} registered enterprise clients & verified labs
+                {countOrDots(localUsersList.length, isLoadingUsers)} registered users
               </Text>
             </View>
           </View>
           <Text style={[styles.totalUsersValue, isDark && styles.totalUsersValueDark]}>
-            {localUsersList.length}
+            {countOrDots(localUsersList.length, isLoadingUsers)}
           </Text>
         </View>
+
+        {hasLoadError && (
+          <LoadErrorState
+            message="Some admin data couldn't load. Please try again."
+            onRetry={handleRefreshAll}
+          />
+        )}
 
         {/* 5. FOUR SEGMENTED TABS (EXACT MATCH TO WEBSITE CONSOLE) */}
         <ScrollView
@@ -783,7 +794,7 @@ export default function AdminConsoleScreen() {
                 activeTab === "users" && styles.segmentTabBtnTextActive,
               ]}
             >
-              Registered Users & Contacts ({localUsersList.length})
+              Registered Users & Contacts ({countOrDots(localUsersList.length, isLoadingUsers)})
             </Text>
           </TouchableOpacity>
 
@@ -798,7 +809,7 @@ export default function AdminConsoleScreen() {
                 activeTab === "listings" && styles.segmentTabBtnTextActive,
               ]}
             >
-              Manage Listings ({localListingsList.length})
+              Manage Listings ({countOrDots(localListingsList.length, isLoadingListings)})
             </Text>
             {pendingListingsCount > 0 && (
               <View style={styles.tabBadge}>
@@ -1506,7 +1517,7 @@ export default function AdminConsoleScreen() {
                     <View style={[styles.adminSellerBox, isDark && styles.adminSellerBoxDark]}>
                       <Text style={styles.adminSellerLabel}>BUYER (PRIVATE UNMASKED):</Text>
                       <Text style={[styles.adminSellerName, isDark && styles.adminSellerNameDark]}>
-                        {req.buyer?.name || req.buyer?.email || "Verified Lab Buyer"}
+                        {req.buyer?.name || req.buyer?.email || "Unknown buyer"}
                       </Text>
                       <Text style={styles.adminSellerPhone}>
                         {req.buyer?.phoneNumber || req.phoneNumber || "No phone registered"}

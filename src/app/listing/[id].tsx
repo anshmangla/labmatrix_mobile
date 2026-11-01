@@ -98,7 +98,7 @@ export default function ListingDetailScreen() {
   const [isSendingInquiry, setIsSendingInquiry] = useState(false);
 
   // Query single listing
-  const { data: detail, isLoading } = useQuery({
+  const { data: detail, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ["listing", id],
     queryFn: async () => {
       const res = await api.get(`/api/listings/${id}`);
@@ -176,11 +176,34 @@ export default function ListingDetailScreen() {
   };
 
   if (isLoading || !data) {
+    const loadError =
+      (isError || !isLoading) && !isFetching
+        ? (error as any)?.response?.data?.error || "We couldn't load this listing. Please check your connection and try again."
+        : null;
     return (
-      <View style={[styles.loadingContainer, isDark && styles.loadingContainerDark]}>
-        <ActivityIndicator size="large" color={colors.primaryContainer} />
-        <Text style={styles.loadingText}>Loading instrument details & verified specs...</Text>
-      </View>
+      <SafeAreaView
+        edges={["top", "bottom"]}
+        style={[styles.loadingContainer, isDark && styles.loadingContainerDark, { paddingHorizontal: 24 }]}
+      >
+        {loadError ? (
+          <>
+            <Text style={[styles.loadingText, { textAlign: "center" }]}>{loadError}</Text>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <TouchableOpacity style={styles.stateSecondaryBtn} onPress={() => router.back()}>
+                <Text style={styles.stateSecondaryBtnText}>Go Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.statePrimaryBtn} onPress={() => refetch()}>
+                <Text style={styles.statePrimaryBtnText}>Try Again</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          <>
+            <ActivityIndicator size="large" color={colors.primaryContainer} />
+            <Text style={styles.loadingText}>Loading instrument details & verified specs...</Text>
+          </>
+        )}
+      </SafeAreaView>
     );
   }
 
@@ -338,7 +361,7 @@ export default function ListingDetailScreen() {
             <Text style={styles.categorySubtitle}>{data.category}</Text>
             {data.itemType === "SPARE_PART" && (
               <View style={styles.spareBadge}>
-                <Text style={styles.spareBadgeText}>Tested Spare Part</Text>
+                <Text style={styles.spareBadgeText}>Spare Part</Text>
               </View>
             )}
             {data.itemType === "NEW_INSTRUMENT" && (
@@ -980,6 +1003,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 12,
     backgroundColor: LabMatrixTokens.colors.surface,
+  },
+  statePrimaryBtn: {
+    backgroundColor: "#033a7d",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  statePrimaryBtnText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  stateSecondaryBtn: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  stateSecondaryBtnText: {
+    color: "#334155",
+    fontSize: 14,
+    fontWeight: "600",
   },
   loadingContainerDark: {
     backgroundColor: LabMatrixTokens.colors.brandBlue950,

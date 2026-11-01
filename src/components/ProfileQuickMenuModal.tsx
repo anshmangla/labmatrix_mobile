@@ -181,7 +181,7 @@ export function ProfileQuickMenuModal({
                           ) : (
                             <View style={styles.verifiedPill}>
                               <CheckCircle2 size={11} color="#059669" />
-                              <Text style={styles.verifiedPillText}>VERIFIED LAB</Text>
+                              <Text style={styles.verifiedPillText}>MEMBER</Text>
                             </View>
                           )}
                         </View>

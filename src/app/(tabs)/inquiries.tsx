@@ -34,6 +34,7 @@ import {
 } from "lucide-react-native";
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
+import { LoadErrorState } from "@/components/LoadErrorState";
 import { Inquiry } from "@/types/api";
 import { LabMatrixTokens } from "@/constants/theme";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
@@ -68,6 +69,7 @@ export default function InquiriesScreen() {
   const {
     data,
     isLoading,
+    isError,
     isRefetching,
     refetch,
   } = useQuery({
@@ -265,7 +267,7 @@ export default function InquiriesScreen() {
                   </Text>
                 </View>
               ) : (
-                <Text style={styles.counterpartyCompany}>Verified Lab Facility</Text>
+                <Text style={styles.counterpartyCompany}>Via LabMatrix Deal Desk</Text>
               )}
             </View>
           </View>
@@ -440,6 +442,9 @@ export default function InquiriesScreen() {
             />
           }
           ListEmptyComponent={
+            isError ? (
+              <LoadErrorState message="Couldn't load your inquiries. Please try again." onRetry={() => refetch()} />
+            ) : (
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIconCircle}>
                 <MessageSquare size={36} color="#033a7d" />
@@ -473,6 +478,7 @@ export default function InquiriesScreen() {
                 </TouchableOpacity>
               )}
             </View>
+            )
           }
         />
       )}

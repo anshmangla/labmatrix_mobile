@@ -57,6 +57,7 @@ import {
 } from "lucide-react-native";
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
+import { LoadErrorState } from "@/components/LoadErrorState";
 import { LabMatrixTokens } from "@/constants/theme";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
@@ -114,6 +115,7 @@ export default function ProfileScreen() {
   const {
     data: myItems,
     isLoading: isLoadingItems,
+    isError: isItemsError,
     refetch: refetchMyItems,
   } = useQuery({
     queryKey: ["myItems"],
@@ -139,6 +141,7 @@ export default function ProfileScreen() {
   const {
     data: inquiriesData,
     isLoading: isLoadingInquiries,
+    isError: isInquiriesError,
     refetch: refetchInquiries,
   } = useQuery({
     queryKey: ["inquiries"],
@@ -808,6 +811,8 @@ export default function ProfileScreen() {
                 <ActivityIndicator size="small" color="#033a7d" />
                 <Text style={styles.tabLoadingText}>Loading your equipment...</Text>
               </View>
+            ) : isItemsError ? (
+              <LoadErrorState message="Couldn't load your listings. Please try again." onRetry={() => refetchMyItems()} />
             ) : listings.length === 0 ? (
               <View style={[styles.emptyCard, isDark && styles.emptyCardDark]}>
                 <Package size={36} color="#94a3b8" />
@@ -1050,6 +1055,8 @@ export default function ProfileScreen() {
                 <ActivityIndicator size="small" color="#033a7d" />
                 <Text style={styles.tabLoadingText}>Loading your requests...</Text>
               </View>
+            ) : isItemsError ? (
+              <LoadErrorState message="Couldn't load your requests. Please try again." onRetry={() => refetchMyItems()} />
             ) : requirements.length === 0 ? (
               <View style={[styles.emptyCard, isDark && styles.emptyCardDark]}>
                 <FileQuestion size={36} color="#94a3b8" />
@@ -1285,6 +1292,10 @@ export default function ProfileScreen() {
             </TouchableOpacity>
 
             {/* Inquiries Received */}
+            {isInquiriesError && (
+              <LoadErrorState message="Couldn't load your inquiries. Please try again." onRetry={() => refetchInquiries()} />
+            )}
+
             {receivedInquiries.length > 0 && (
               <View style={styles.sectionBlock}>
                 <View style={styles.sectionHeaderRow}>
@@ -1570,22 +1581,6 @@ export default function ProfileScreen() {
               </View>
               )}
 
-              {/* Seller Verification Tier 1 Badge Card */}
-              <View style={styles.tierVerifiedCard}>
-                <View style={styles.tierVerifiedHeader}>
-                  <ShieldCheck size={18} color="#15803d" />
-                  <Text style={styles.tierVerifiedTitle}>
-                    Tier 1 Verified Seller
-                  </Text>
-                  <View style={styles.tierActivePill}>
-                    <Text style={styles.tierActivePillText}>ACTIVE</Text>
-                  </View>
-                </View>
-                <Text style={styles.tierVerifiedDesc}>
-                  Identity and lab authorization verified. Authorized to list
-                  clinical analyzers, chromatography systems, and spare parts.
-                </Text>
-              </View>
             </View>
 
             {/* Sign Out Action Button */}
@@ -1632,7 +1627,7 @@ export default function ProfileScreen() {
 
         {/* App Version Stamp */}
         <Text style={styles.appVersionText}>
-          LabMatrix Surplus Mobile v1.0.0 • Verified Clinical Network
+          LabMatrix Market v1.0.0
         </Text>
       </ScrollView>
 
@@ -2884,42 +2879,6 @@ const styles = StyleSheet.create({
     color: "#f8fafc",
   },
 
-  tierVerifiedCard: {
-    backgroundColor: "#f0fdf4",
-    borderWidth: 1,
-    borderColor: "#bbf7d0",
-    borderRadius: 14,
-    padding: 14,
-    marginTop: 14,
-  },
-  tierVerifiedHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  tierVerifiedTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#166534",
-    flex: 1,
-  },
-  tierActivePill: {
-    backgroundColor: "#dcfce7",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  tierActivePillText: {
-    fontSize: 9.5,
-    fontWeight: "800",
-    color: "#15803d",
-  },
-  tierVerifiedDesc: {
-    fontSize: 11,
-    color: "#166534",
-    lineHeight: 16,
-    marginTop: 4,
-  },
 
   signOutBtn: {
     flexDirection: "row",

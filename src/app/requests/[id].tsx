@@ -60,7 +60,7 @@ export default function RequirementDetailScreen() {
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
 
-  const { data: detail, isLoading } = useQuery({
+  const { data: detail, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ["requirement", id],
     queryFn: async () => {
       const res = await api.get(`/api/requirements/${id}`);
@@ -132,11 +132,34 @@ export default function RequirementDetailScreen() {
   };
 
   if (isLoading || !data) {
+    const loadError =
+      (isError || !isLoading) && !isFetching
+        ? (error as any)?.response?.data?.error || "We couldn't load this request. Please check your connection and try again."
+        : null;
     return (
-      <View style={[styles.loadingContainer, isDark && styles.loadingContainerDark]}>
-        <ActivityIndicator size="large" color={colors.primaryContainer} />
-        <Text style={styles.loadingText}>Loading procurement requirement details...</Text>
-      </View>
+      <SafeAreaView
+        edges={["top", "bottom"]}
+        style={[styles.loadingContainer, isDark && styles.loadingContainerDark, { paddingHorizontal: 24 }]}
+      >
+        {loadError ? (
+          <>
+            <Text style={[styles.loadingText, { textAlign: "center" }]}>{loadError}</Text>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <TouchableOpacity style={styles.stateSecondaryBtn} onPress={() => router.back()}>
+                <Text style={styles.stateSecondaryBtnText}>Go Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.statePrimaryBtn} onPress={() => refetch()}>
+                <Text style={styles.statePrimaryBtnText}>Try Again</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          <>
+            <ActivityIndicator size="large" color={colors.primaryContainer} />
+            <Text style={styles.loadingText}>Loading procurement requirement details...</Text>
+          </>
+        )}
+      </SafeAreaView>
     );
   }
 
@@ -146,12 +169,8 @@ export default function RequirementDetailScreen() {
   const getTargetBudget = () => {
     const desc = data.description;
     const match = desc.match(/₹[\d,]+(\s*-\s*₹[\d,]+)?/i) || desc.match(/budget:?\s*₹?[\d,]+/i);
-    if (match) return match[0];
-    if (data.category.includes("ICP") || data.category.includes("GC-MS")) return "₹18,00,000 – ₹25,00,000";
-    if (data.category.includes("HPLC")) return "₹4,00,000 – ₹7,50,000";
-    if (data.category.includes("FTIR") || data.category.includes("UV")) return "₹3,50,000 – ₹6,00,000";
-    if (data.itemType === "SPARE_PART") return "₹50,000 – ₹1,50,000";
-    return "Budget Upon Quotation";
+    // Only a budget the buyer wrote in the description; never guessed from the category
+    return match ? match[0] : "Budget upon quotation";
   };
 
   const getPreferredOEM = () => {
@@ -167,8 +186,7 @@ export default function RequirementDetailScreen() {
     if (combined.includes("thermo")) brands.push("Thermo Fisher");
     if (combined.includes("metrohm")) brands.push("Metrohm");
 
-    if (brands.length > 0) return brands.join(", ");
-    return "Verified Lab OEMs";
+    return brands.length > 0 ? brands.join(", ") : null;
   };
 
   return (
@@ -299,10 +317,12 @@ export default function RequirementDetailScreen() {
               </Text>
             </View>
 
-            <View style={styles.specTableRow}>
-              <Text style={styles.specKey}>Preferred OEMs</Text>
-              <Text style={[styles.specVal, isDark && styles.specValDark]}>{getPreferredOEM()}</Text>
-            </View>
+            {getPreferredOEM() && (
+              <View style={styles.specTableRow}>
+                <Text style={styles.specKey}>Preferred OEMs</Text>
+                <Text style={[styles.specVal, isDark && styles.specValDark]}>{getPreferredOEM()}</Text>
+              </View>
+            )}
 
             {data.partNumber && (
               <View style={styles.specTableRow}>
@@ -327,15 +347,15 @@ export default function RequirementDetailScreen() {
           </View>
         </View>
 
-        {/* Verified Procurement Request Callout Banner */}
+        {/* Reviewed Procurement Request Callout Banner */}
         <View style={styles.assuranceBanner}>
           <View style={styles.assuranceHeader}>
             <ShieldCheck size={22} color={colors.goldAccent} />
-            <Text style={styles.assuranceTitle}>Verified Laboratory Procurement Request</Text>
+            <Text style={styles.assuranceTitle}>Reviewed Procurement Request</Text>
           </View>
           <Text style={styles.assuranceText}>
-            This procurement request is actively posted by a verified testing, pharmaceutical, or research laboratory.
-            If you own, inventory, or represent equivalent refurbished equipment or spare parts, submit your proposal below.
+            This request was reviewed by the LabMatrix team before being published. If you own, inventory, or
+            represent equivalent refurbished equipment or spare parts, submit your proposal below.
           </Text>
         </View>
 
@@ -559,6 +579,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 12,
     backgroundColor: "#ffffff",
+  },
+  statePrimaryBtn: {
+    backgroundColor: "#033a7d",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  statePrimaryBtnText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  stateSecondaryBtn: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  stateSecondaryBtnText: {
+    color: "#334155",
+    fontSize: 14,
+    fontWeight: "600",
   },
   loadingContainerDark: {
     backgroundColor: LabMatrixTokens.colors.brandBlue950,

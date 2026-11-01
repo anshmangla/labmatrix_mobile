@@ -37,8 +37,10 @@ import {
   CheckCircle2,
   Building,
   Check,
+  SlidersHorizontal,
 } from "lucide-react-native";
 import { api } from "@/lib/api";
+import { LoadErrorState } from "@/components/LoadErrorState";
 import { Requirement } from "@/types/api";
 import { useAuth } from "@/context/auth-context";
 import { LabMatrixTokens } from "@/constants/theme";
@@ -96,6 +98,7 @@ export default function RequestsScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<"ALL" | "URGENT" | "SPARE_PART">("ALL");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
+  const [categorySheetVisible, setCategorySheetVisible] = useState(false);
 
   // Post Wanted Modal State
   const [postModalVisible, setPostModalVisible] = useState(false);
@@ -116,6 +119,7 @@ export default function RequestsScreen() {
   const {
     data: pagedData,
     isLoading,
+    isError,
     isRefetching,
     refetch,
     fetchNextPage,
@@ -170,13 +174,11 @@ export default function RequestsScreen() {
     }
 
     if (selectedTypeFilter === "URGENT") {
-      // Urgent sourcing: items with urgent keywords or open status
+      // Urgent sourcing: requests whose buyer marked them urgent
       return list.filter(
         (r) =>
           r.description.toLowerCase().includes("urgent") ||
-          r.title.toLowerCase().includes("urgent") ||
-          r.category.includes("ICP") ||
-          r.category.includes("HPLC")
+          r.title.toLowerCase().includes("urgent")
       );
     }
     return list;
@@ -187,9 +189,7 @@ export default function RequestsScreen() {
     return data.filter(
       (r) =>
         r.description.toLowerCase().includes("urgent") ||
-        r.title.toLowerCase().includes("urgent") ||
-        r.category.includes("ICP") ||
-        r.category.includes("HPLC")
+        r.title.toLowerCase().includes("urgent")
     ).length;
   }, [data]);
 
@@ -330,15 +330,11 @@ export default function RequestsScreen() {
     }
   };
 
+  // Budget the buyer wrote in the description (e.g. "₹4,00,000 - ₹6,00,000"); never guessed
   const getTargetBudget = (item: Requirement) => {
     const desc = item.description;
     const match = desc.match(/₹[\d,]+(\s*-\s*₹[\d,]+)?/i) || desc.match(/budget:?\s*₹?[\d,]+/i);
-    if (match) return match[0];
-    if (item.category.includes("ICP") || item.category.includes("GC-MS")) return "₹18,00,000 – ₹25,00,000";
-    if (item.category.includes("HPLC")) return "₹4,00,000 – ₹7,50,000";
-    if (item.category.includes("FTIR") || item.category.includes("UV")) return "₹3,50,000 – ₹6,00,000";
-    if (item.itemType === "SPARE_PART") return "₹50,000 – ₹1,50,000";
-    return "Budget Upon Quotation";
+    return match ? match[0] : "On quotation";
   };
 
   const getPreferredOEM = (item: Requirement) => {
@@ -354,18 +350,7 @@ export default function RequestsScreen() {
     if (combined.includes("thermo")) brands.push("Thermo Fisher");
     if (combined.includes("metrohm")) brands.push("Metrohm");
 
-    if (brands.length > 0) return brands.join(", ");
-    return "Verified Lab OEMs";
-  };
-
-  const getDestinationLab = (item: Requirement) => {
-    const desc = item.description;
-    if (desc.includes("Ahmedabad") || desc.includes("Gujarat")) return "Ahmedabad, Gujarat (Pharma Facility)";
-    if (desc.includes("Mumbai") || desc.includes("Maharashtra")) return "Mumbai, Maharashtra (Analytical Lab)";
-    if (desc.includes("Hyderabad") || desc.includes("Telangana")) return "Hyderabad, Telangana (R&D Center)";
-    if (desc.includes("Delhi") || desc.includes("NCR")) return "New Delhi NCR (Testing Facility)";
-    if (desc.includes("Bangalore") || desc.includes("Karnataka")) return "Bengaluru, Karnataka (Biotech Lab)";
-    return "Accredited Research Facility (India)";
+    return brands.length > 0 ? brands.join(", ") : null;
   };
 
   const renderRequirementCard = ({ item }: { item: Requirement }) => {
@@ -373,7 +358,6 @@ export default function RequestsScreen() {
     const shortCode = item.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 5).toUpperCase();
     const targetBudget = getTargetBudget(item);
     const preferredOEM = getPreferredOEM(item);
-    const destinationLab = getDestinationLab(item);
 
     return (
       <TouchableOpacity
@@ -387,10 +371,6 @@ export default function RequestsScreen() {
             <Text style={styles.categoryBadgeText}>{item.category}</Text>
           </View>
 
-          <View style={styles.adminProtectedBadge}>
-            <Shield size={12} color="#033a7d" />
-            <Text style={styles.adminProtectedText}>ADMIN PROTECTED BUYER</Text>
-          </View>
         </View>
 
         {/* Row 2: Status Pill */}
@@ -434,12 +414,14 @@ export default function RequestsScreen() {
         {/* Row 6: Structured Specs Grid (Gray Box) */}
         <View style={[styles.specsBox, isDark && styles.specsBoxDark]}>
           <View style={styles.specsGrid}>
-            <View style={styles.specsCol}>
-              <Text style={styles.specsLabel}>PREFERRED OEM</Text>
-              <Text style={[styles.specsValue, isDark && styles.specsValueDark]} numberOfLines={1}>
-                {preferredOEM}
-              </Text>
-            </View>
+            {preferredOEM ? (
+              <View style={styles.specsCol}>
+                <Text style={styles.specsLabel}>PREFERRED OEM</Text>
+                <Text style={[styles.specsValue, isDark && styles.specsValueDark]} numberOfLines={1}>
+                  {preferredOEM}
+                </Text>
+              </View>
+            ) : null}
 
             <View style={styles.specsCol}>
               <Text style={styles.specsLabel}>TARGET BUDGET</Text>
@@ -449,15 +431,6 @@ export default function RequestsScreen() {
             </View>
           </View>
 
-          <View style={styles.destLabRow}>
-            <Text style={styles.specsLabel}>DESTINATION LABORATORY</Text>
-            <View style={styles.destLabValueRow}>
-              <MapPin size={12} color="#64748b" />
-              <Text style={[styles.destLabText, isDark && styles.destLabTextDark]} numberOfLines={1}>
-                {destinationLab}
-              </Text>
-            </View>
-          </View>
         </View>
 
         {/* Row 7: Action CTA */}
@@ -610,8 +583,9 @@ export default function RequestsScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Search Input */}
-            <View style={[styles.searchInputWrapper, isDark && styles.searchInputWrapperDark]}>
+            {/* Search Input + Category Filter */}
+            <View style={styles.searchRow}>
+            <View style={[styles.searchInputWrapper, isDark && styles.searchInputWrapperDark, { flex: 1, marginBottom: 0 }]}>
               <Search size={16} color={isDark ? "#94a3b8" : colors.textMuted} />
               <TextInput
                 ref={searchInputRef}
@@ -627,6 +601,19 @@ export default function RequestsScreen() {
                   <X size={15} color={colors.textMuted} />
                 </TouchableOpacity>
               )}
+            </View>
+            <TouchableOpacity
+              style={styles.filterTriggerBtn}
+              activeOpacity={0.7}
+              onPress={() => setCategorySheetVisible(true)}
+            >
+              <SlidersHorizontal size={17} color={colors.primaryContainer} />
+              {selectedCategory !== "ALL" && (
+                <View style={styles.filterCountBadge}>
+                  <Text style={styles.filterCountText}>1</Text>
+                </View>
+              )}
+            </TouchableOpacity>
             </View>
 
             {/* Filter Chips Row 1 (scrolls sideways when the chips don't fit) */}
@@ -653,23 +640,25 @@ export default function RequestsScreen() {
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[
-                  styles.typeChip,
-                  selectedTypeFilter === "URGENT" && styles.typeChipActive,
-                ]}
-                onPress={() => setSelectedTypeFilter("URGENT")}
-              >
-                <View style={styles.urgentDot} />
-                <Text
+              {(urgentCount > 0 || selectedTypeFilter === "URGENT") && (
+                <TouchableOpacity
                   style={[
-                    styles.typeChipText,
-                    selectedTypeFilter === "URGENT" && styles.typeChipTextActive,
+                    styles.typeChip,
+                    selectedTypeFilter === "URGENT" && styles.typeChipActive,
                   ]}
+                  onPress={() => setSelectedTypeFilter("URGENT")}
                 >
-                  Urgent Sourcing ({urgentCount})
-                </Text>
-              </TouchableOpacity>
+                  <View style={styles.urgentDot} />
+                  <Text
+                    style={[
+                      styles.typeChipText,
+                      selectedTypeFilter === "URGENT" && styles.typeChipTextActive,
+                    ]}
+                  >
+                    Urgent Sourcing ({urgentCount})
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity
                 style={[
@@ -690,32 +679,6 @@ export default function RequestsScreen() {
               </TouchableOpacity>
             </ScrollView>
 
-            {/* Filter Chips Row 2 (Categories) */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.categoryPillsScroll}
-            >
-              {CATEGORIES.map((cat) => {
-                const isSelected = selectedCategory === cat;
-                return (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[styles.categoryPill, isSelected && styles.categoryPillActive]}
-                    onPress={() => setSelectedCategory(cat)}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryPillText,
-                        isSelected && styles.categoryPillTextActive,
-                      ]}
-                    >
-                      {cat}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
           </View>
         }
         ListEmptyComponent={
@@ -724,6 +687,8 @@ export default function RequestsScreen() {
               <ActivityIndicator size="large" color="#002555" />
               <Text style={styles.loadingText}>Loading procurement requirements...</Text>
             </View>
+          ) : isError ? (
+            <LoadErrorState message="Couldn't load buyer requests. Please try again." onRetry={() => refetch()} />
           ) : (
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIconCircle}>
@@ -746,6 +711,52 @@ export default function RequestsScreen() {
           )
         }
       />
+
+      {/* Category Filter Sheet */}
+      <Modal
+        visible={categorySheetVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setCategorySheetVisible(false)}
+      >
+        <View style={[styles.modalOverlay, { paddingTop: insets.top }]}>
+          <View style={[styles.modalSheet, isDark && styles.modalSheetDark, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>Filter by Category</Text>
+              <TouchableOpacity onPress={() => setCategorySheetVisible(false)} style={styles.closeModalBtn}>
+                <X size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.categorySheetList} contentContainerStyle={styles.categorySheetListContent}>
+              {CATEGORIES.map((cat) => {
+                const isSelected = selectedCategory === cat;
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.categorySheetRow, isSelected && styles.categorySheetRowActive]}
+                    activeOpacity={0.75}
+                    onPress={() => {
+                      setSelectedCategory(cat);
+                      setCategorySheetVisible(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.categorySheetText,
+                        isDark && styles.modalTitleDark,
+                        isSelected && styles.categorySheetTextActive,
+                      ]}
+                    >
+                      {cat === "ALL" ? "All Categories" : cat}
+                    </Text>
+                    {isSelected ? <Check size={18} color="#033a7d" /> : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Post Wanted Equipment Modal Form */}
       <Modal
@@ -1124,6 +1135,65 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#0f172a",
   },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 14,
+  },
+  filterTriggerBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#eff5fb",
+    borderWidth: 1,
+    borderColor: "#dbeaf7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterCountBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    backgroundColor: "#fbc634",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterCountText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  categorySheetList: {
+    flexShrink: 1,
+  },
+  categorySheetListContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+  },
+  categorySheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  categorySheetRowActive: {
+    backgroundColor: "#eff5fb",
+  },
+  categorySheetText: {
+    fontSize: 15,
+    color: "#0f172a",
+  },
+  categorySheetTextActive: {
+    color: "#033a7d",
+    fontWeight: "700",
+  },
   searchInputWrapper: {
     flexDirection: "row",
     alignItems: "center",
@@ -1188,28 +1258,6 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: "#ef4444",
   },
-  categoryPillsScroll: {
-    flexDirection: "row",
-    gap: 8,
-    paddingBottom: 6,
-  },
-  categoryPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#f1f5f9",
-  },
-  categoryPillActive: {
-    backgroundColor: "#002555",
-  },
-  categoryPillText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#64748b",
-  },
-  categoryPillTextActive: {
-    color: "#ffffff",
-  },
   listContent: {
     paddingBottom: 24,
     backgroundColor: "#f8fafc",
@@ -1246,21 +1294,6 @@ const styles = StyleSheet.create({
   },
   categoryBadgeText: {
     fontSize: 11,
-    fontWeight: "800",
-    color: "#033a7d",
-    letterSpacing: 0.3,
-  },
-  adminProtectedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#eff5fb",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  adminProtectedText: {
-    fontSize: 10,
     fontWeight: "800",
     color: "#033a7d",
     letterSpacing: 0.3,
@@ -1392,23 +1425,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "900",
     color: "#002555",
-  },
-  destLabRow: {
-    paddingTop: 2,
-  },
-  destLabValueRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 2,
-  },
-  destLabText: {
-    fontSize: 12,
-    color: "#475569",
-    fontWeight: "600",
-  },
-  destLabTextDark: {
-    color: "#cbd5e1",
   },
   cardFooter: {
     paddingTop: 2,

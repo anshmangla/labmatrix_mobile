@@ -148,7 +148,7 @@ export default function RegisterScreen() {
     if (res.success) {
       Alert.alert(
         "Facility Registered Successfully",
-        "Your verified laboratory account has been created. Welcome to LabMatrix!",
+        "Your LabMatrix account has been created. Welcome to LabMatrix!",
         [
           {
             text: "Proceed to Marketplace",

@@ -33,7 +33,6 @@ import {
   ArrowRight,
   MessageSquare,
   CheckCircle2,
-  ShieldCheck,
 } from "lucide-react-native";
 import { api } from "@/lib/api";
 import { Listing } from "@/types/api";
@@ -182,19 +181,6 @@ export default function MarketplaceScreen() {
     setSearchQuery("");
   };
 
-  const getLogisticsBadge = (item: Listing) => {
-    if (item.status === "SOLD") {
-      return { label: "Verified Transfer", bg: "#eff5fb", text: "#033a7d" };
-    }
-    if (item.itemType === "SPARE_PART") {
-      return { label: "Tested 100% OK", bg: "#dcfce7", text: "#15803d" };
-    }
-    if (item.category.includes("HPLC") || item.category.includes("GC")) {
-      return { label: "Inspection Open", bg: "#ffffff", text: "#475569", border: "#e2e8f0" };
-    }
-    return { label: "Self-Pickup Ready", bg: "#ffffff", text: "#475569", border: "#e2e8f0" };
-  };
-
   const renderListingCard = ({ item }: { item: Listing }) => {
     const hasPhoto = item.photos && item.photos.length > 0;
     const isSold = item.status === "SOLD";
@@ -212,10 +198,7 @@ export default function MarketplaceScreen() {
         : `₹${formattedMinPrice}`
       : "Contact for Price";
 
-    const logistics = getLogisticsBadge(item);
-    const itemCode = item.partNumber
-      ? `OEM Part: ${item.partNumber}`
-      : `ID: ${item.id.replace(/-/g, "").slice(0, 10).toUpperCase()}`;
+    const itemCode = item.partNumber ? `OEM Part: ${item.partNumber}` : null;
 
     return (
       <TouchableOpacity
@@ -224,7 +207,7 @@ export default function MarketplaceScreen() {
         onPress={() => router.push(`/listing/${item.id}`)}
       >
         {/* 4:3 Image Container with Stitch Badges */}
-        <View style={styles.imageContainer}>
+        <View style={[styles.imageContainer, !hasPhoto && styles.imageContainerNoPhoto]}>
           {hasPhoto ? (
             <Image
               source={{ uri: getOptimizedImageUrl(item.photos[0], IMAGE_PRESETS.CARD) }}
@@ -233,8 +216,8 @@ export default function MarketplaceScreen() {
             />
           ) : (
             <View style={[styles.placeholderImage, isDark && styles.placeholderImageDark]}>
-              <Tag size={32} color={isDark ? "#64748b" : "#94a3b8"} />
-              <Text style={styles.placeholderText}>Laboratory Equipment</Text>
+              <Tag size={22} color={isDark ? "#64748b" : "#94a3b8"} />
+              <Text style={styles.placeholderText}>No photo yet</Text>
             </View>
           )}
 
@@ -273,9 +256,11 @@ export default function MarketplaceScreen() {
                 {item.condition || "Used - Good Working Condition"}
               </Text>
             </View>
-            <Text style={styles.itemCodeText} numberOfLines={1}>
-              {itemCode}
-            </Text>
+            {itemCode ? (
+              <Text style={styles.itemCodeText} numberOfLines={1}>
+                {itemCode}
+              </Text>
+            ) : null}
           </View>
 
           {/* Instrument Title */}
@@ -292,7 +277,7 @@ export default function MarketplaceScreen() {
             </View>
           ) : null}
 
-          {/* Price & Logistics Box (Gray Container) */}
+          {/* Price Box (Gray Container) */}
           <View style={styles.priceLogisticsBox}>
             <View style={{ flex: 1, paddingRight: 8 }}>
               <Text style={styles.priceSubtext}>
@@ -303,18 +288,6 @@ export default function MarketplaceScreen() {
               </Text>
             </View>
 
-            {/* Logistics Status Badge */}
-            <View
-              style={[
-                styles.logisticsBadge,
-                { backgroundColor: logistics.bg },
-                logistics.border ? { borderWidth: 1, borderColor: logistics.border } : null,
-              ]}
-            >
-              <Text style={[styles.logisticsBadgeText, { color: logistics.text }]}>
-                {logistics.label}
-              </Text>
-            </View>
           </View>
 
           {/* Card Footer: Location & Action Button */}
@@ -440,7 +413,11 @@ export default function MarketplaceScreen() {
           onPress={() => setFilterModalVisible(true)}
         >
           <SlidersHorizontal size={17} color={colors.primaryContainer} />
-          <View style={styles.filterGoldDot} />
+          {activeFilterCount > 0 && (
+            <View style={styles.filterCountBadge}>
+              <Text style={styles.filterCountText}>{activeFilterCount}</Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -479,101 +456,6 @@ export default function MarketplaceScreen() {
         </ScrollView>
       </View>
 
-      {/* 4. Row 2: Category Filter Sub-Pills */}
-      <View style={[styles.categoryRowWrapper, isDark && styles.categoryRowWrapperDark]}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryScroll}
-        >
-          {CATEGORIES.map((cat) => {
-            const isCatSelected = selectedCategory === cat;
-            return (
-              <TouchableOpacity
-                key={cat}
-                style={[
-                  styles.categoryPill,
-                  isCatSelected && styles.categoryPillSelected,
-                ]}
-                activeOpacity={0.7}
-                onPress={() => setSelectedCategory(cat)}
-              >
-                <Text
-                  style={[
-                    styles.categoryPillText,
-                    isCatSelected && styles.categoryPillTextSelected,
-                  ]}
-                >
-                  {cat}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-
-      {/* 5. Row 3: Availability / Status Filter Bar (Matching Website) */}
-      <View style={[styles.statusFilterRowWrapper, isDark && styles.statusFilterRowWrapperDark]}>
-        <View style={styles.statusFilterLabelRow}>
-          <Text style={[styles.statusFilterLabel, isDark && styles.statusFilterLabelDark]}>
-            STATUS:
-          </Text>
-        </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.statusFilterScroll}
-        >
-          {STATUS_OPTIONS.map((opt) => {
-            const isSelected = selectedStatus === opt.value;
-            return (
-              <TouchableOpacity
-                key={opt.value}
-                style={[
-                  styles.statusChip,
-                  isDark && styles.statusChipDark,
-                  isSelected && (
-                    opt.value === "AVAILABLE"
-                      ? styles.statusChipAvailableSelected
-                      : opt.value === "SOLD"
-                      ? styles.statusChipSoldSelected
-                      : styles.statusChipAllSelected
-                  ),
-                ]}
-                activeOpacity={0.75}
-                onPress={() => setSelectedStatus(opt.value)}
-              >
-                {opt.value === "AVAILABLE" && (
-                  <View
-                    style={[
-                      styles.statusChipDot,
-                      { backgroundColor: isSelected ? "#ffffff" : "#16a34a" },
-                    ]}
-                  />
-                )}
-                {opt.value === "SOLD" && (
-                  <View
-                    style={[
-                      styles.statusChipDot,
-                      { backgroundColor: isSelected ? "#ffffff" : "#f43f5e" },
-                    ]}
-                  />
-                )}
-                <Text
-                  style={[
-                    styles.statusChipText,
-                    isDark && styles.statusChipTextDark,
-                    isSelected && styles.statusChipTextSelected,
-                  ]}
-                >
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-
       {/* 6. Live Status / Available Instruments Bar */}
       <View style={[styles.statusBarRow, isDark && styles.statusBarRowDark]}>
         <View style={styles.statusLeft}>
@@ -594,10 +476,6 @@ export default function MarketplaceScreen() {
           </Text>
         </View>
 
-        <View style={styles.statusRight}>
-          <ShieldCheck size={13} color="#64748b" />
-          <Text style={styles.statusAuditedText}>100% Audited</Text>
-        </View>
       </View>
 
       {/* Connection / Network Error Banner */}
@@ -962,14 +840,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     position: "relative",
   },
-  filterGoldDot: {
+  filterCountBadge: {
     position: "absolute",
-    top: 9,
-    right: 9,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    top: 4,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
     backgroundColor: "#fbc634",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterCountText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#0f172a",
   },
   pillsRowWrapper: {
     backgroundColor: "#ffffff",
@@ -1011,109 +897,10 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontWeight: "700",
   },
-  categoryRowWrapper: {
-    backgroundColor: "#ffffff",
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
-  },
-  categoryRowWrapperDark: {
-    backgroundColor: "#0b1329",
-    borderBottomColor: "#1e293b",
-  },
-  categoryScroll: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    gap: 12,
-    alignItems: "center",
-  },
-  categoryPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  categoryPillSelected: {
-    backgroundColor: "#dbeaf7",
-  },
-  categoryPillText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#64748b",
-  },
-  categoryPillTextSelected: {
-    color: "#033a7d",
-    fontWeight: "800",
-  },
-  statusFilterRowWrapper: {
-    backgroundColor: "#ffffff",
-    paddingVertical: 7,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  statusFilterRowWrapperDark: {
-    backgroundColor: "#0b1329",
-    borderBottomColor: "#1e293b",
-  },
-  statusFilterLabelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingLeft: 16,
-    paddingRight: 8,
-  },
-  statusFilterLabel: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#64748b",
-    letterSpacing: 0.5,
-  },
-  statusFilterLabelDark: {
-    color: "#94a3b8",
-  },
-  statusFilterScroll: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingRight: 16,
-  },
-  statusChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 4.5,
-    borderRadius: 8,
-    backgroundColor: "#f1f5f9",
-    gap: 5,
-  },
-  statusChipDark: {
-    backgroundColor: "#16203a",
-  },
-  statusChipAllSelected: {
-    backgroundColor: "#033a7d",
-  },
-  statusChipAvailableSelected: {
-    backgroundColor: "#16a34a",
-  },
-  statusChipSoldSelected: {
-    backgroundColor: "#e11d48",
-  },
   statusChipDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-  },
-  statusChipText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#475569",
-  },
-  statusChipTextDark: {
-    color: "#cbd5e1",
-  },
-  statusChipTextSelected: {
-    color: "#ffffff",
-    fontWeight: "700",
   },
   statusBarRow: {
     flexDirection: "row",
@@ -1143,16 +930,6 @@ const styles = StyleSheet.create({
     color: "#475569",
     letterSpacing: 0.3,
   },
-  statusRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  statusAuditedText: {
-    fontSize: 11,
-    color: "#64748b",
-    fontWeight: "500",
-  },
   listContent: {
     padding: 16,
     gap: 18,
@@ -1180,6 +957,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#f1f5f9",
     position: "relative",
     overflow: "hidden",
+  },
+  imageContainerNoPhoto: {
+    aspectRatio: undefined,
+    height: 96,
   },
   cardImage: {
     width: "100%",
@@ -1368,15 +1149,6 @@ const styles = StyleSheet.create({
   },
   cardPriceSold: {
     color: "#475569",
-  },
-  logisticsBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  logisticsBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
   },
   cardFooter: {
     flexDirection: "row",
