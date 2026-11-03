@@ -18,8 +18,15 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 2,
+      // Retry network and server errors, but not 4xx answers (unauthorized, not found,
+      // pending review): repeating those only delays the error screen.
+      retry: (failureCount, error: any) => {
+        const status = error?.response?.status;
+        if (status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
+        return failureCount < 2;
+      },
       staleTime: 1000 * 60 * 2, // 2 minutes
+      gcTime: 1000 * 60 * 10, // Keep screens' data for instant back-navigation
     },
   },
 });
@@ -48,7 +55,13 @@ function RootNavigation() {
     }
   }, [isAuthenticated, isLoading, segments, router]);
 
-  // Branded splash while restoring secure session
+  // Keep the native splash up while the session is read from the device (a few ms),
+  // then reveal the first screen directly instead of showing a second, JS-drawn splash.
+  useEffect(() => {
+    if (!isLoading) SplashScreen.hide();
+  }, [isLoading]);
+
+  // Branded splash while restoring secure session (normally hidden behind the native splash)
   if (isLoading) {
     return (
       <View style={[styles.loadingContainer, isDark && styles.loadingContainerDark]}>
@@ -84,10 +97,6 @@ function RootNavigation() {
 }
 
 export default function RootLayout() {
-  useEffect(() => {
-    SplashScreen.hideAsync().catch(() => {});
-  }, []);
-
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>

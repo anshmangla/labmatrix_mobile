@@ -19,7 +19,8 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { Image as ExpoImage } from "expo-image";
 import {
   MapPin,
   Tag,
@@ -67,6 +68,7 @@ export default function ListingDetailScreen() {
   const isDark = colorScheme === "dark";
   const { colors } = LabMatrixTokens;
   const { isAuthenticated, user } = useAuth();
+  const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<DetailTab>("Overview");
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -104,6 +106,19 @@ export default function ListingDetailScreen() {
         isOwner: Boolean(res.data?.isOwner),
         isAdmin: Boolean(res.data?.isAdmin),
       };
+    },
+    // Opened from the marketplace feed: show the card's data right away while the full
+    // record (and owner/admin flags) loads, instead of a blank loading screen.
+    placeholderData: () => {
+      const feeds = queryClient.getQueriesData<InfiniteData<{ listings: Listing[] }>>({ queryKey: ["listings"] });
+      for (const [, feed] of feeds) {
+        for (const page of feed?.pages ?? []) {
+          const match = page.listings?.find((l) => l.id === id);
+          // The public feed only contains approved listings
+          if (match) return { listing: { ...match, isApproved: true }, isOwner: false, isAdmin: false };
+        }
+      }
+      return undefined;
     },
   });
 
@@ -261,10 +276,14 @@ export default function ListingDetailScreen() {
                     onPress={() => openMagnifier(idx)}
                     style={{ width, height: CAROUSEL_HEIGHT }}
                   >
-                    <Image
+                    <ExpoImage
                       source={{ uri: getOptimizedImageUrl(photo, IMAGE_PRESETS.HERO) }}
+                      // The feed already cached the card-size photo: show it until the sharper one arrives
+                      placeholder={{ uri: getOptimizedImageUrl(photo, IMAGE_PRESETS.CARD) }}
+                      placeholderContentFit="cover"
                       style={styles.carouselImage}
-                      resizeMode="cover"
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
                     />
                   </TouchableOpacity>
                 ))}
@@ -335,10 +354,11 @@ export default function ListingDetailScreen() {
                     activeImageIndex === idx && styles.thumbnailItemActive,
                   ]}
                 >
-                  <Image
+                  <ExpoImage
                     source={{ uri: getOptimizedImageUrl(photo, IMAGE_PRESETS.THUMBNAIL) }}
                     style={styles.thumbnailImg}
-                    resizeMode="cover"
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
                   />
                   {activeImageIndex === idx && (
                     <View style={styles.thumbnailActiveOverlay} />

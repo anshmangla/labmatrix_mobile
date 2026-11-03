@@ -46,6 +46,7 @@ import { useAuth } from "@/context/auth-context";
 import { LabMatrixTokens } from "@/constants/theme";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
 // Same categories and order as the website's buyer requests page
 const CATEGORIES = [
@@ -96,6 +97,8 @@ export default function RequestsScreen() {
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState("");
+  // Loaded rows are filtered locally as you type; the server is queried once typing pauses
+  const debouncedSearch = useDebouncedValue(searchQuery.trim());
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<"ALL" | "URGENT" | "SPARE_PART">("ALL");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
   const [categorySheetVisible, setCategorySheetVisible] = useState(false);
@@ -126,12 +129,12 @@ export default function RequestsScreen() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ["requirements", selectedCategory, searchQuery, selectedTypeFilter],
+    queryKey: ["requirements", selectedCategory, debouncedSearch, selectedTypeFilter],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
       const params: any = { page: pageParam, limit: PAGE_SIZE };
       if (selectedCategory !== "ALL") params.category = selectedCategory;
-      if (searchQuery.trim()) params.query = searchQuery.trim();
+      if (debouncedSearch) params.query = debouncedSearch;
       if (selectedTypeFilter === "SPARE_PART") params.itemType = "SPARE_PART";
 
       const res = await api.get("/api/requirements", { params });

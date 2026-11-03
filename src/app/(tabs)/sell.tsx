@@ -287,9 +287,7 @@ export default function SellScreen() {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        for (const asset of result.assets) {
-          await uploadImage(asset.uri);
-        }
+        await uploadImages(result.assets.map((asset) => asset.uri));
       }
     } catch (err) {
       console.error("Image pick error:", err);
@@ -314,9 +312,7 @@ export default function SellScreen() {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        for (const asset of result.assets) {
-          await uploadImage(asset.uri);
-        }
+        await uploadImages(result.assets.map((asset) => asset.uri));
       }
     } catch (err) {
       console.error("Camera capture error:", err);
@@ -350,33 +346,70 @@ export default function SellScreen() {
     );
   };
 
-  const uploadImage = async (uri: string) => {
+  /** Uploads one photo and returns its hosted URL. */
+  const uploadImage = async (uri: string): Promise<string | null> => {
+    const formData = new FormData();
+    const filename = uri.split("/").pop() || "upload.jpg";
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+    // @ts-ignore: FormData in React Native accepts uri object
+    formData.append("file", {
+      uri: Platform.OS === "ios" ? uri.replace("file://", "") : uri,
+      name: filename,
+      type,
+    });
+
+    const res = await api.post("/api/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+
+    return res.data?.url || null;
+  };
+
+  /**
+   * Uploads several photos a few at a time instead of one after another. Photos are added
+   * in the order they were picked, each as soon as it and the ones before it have finished.
+   */
+  const uploadImages = async (uris: string[]) => {
+    const CONCURRENCY = 3;
+    const results: (string | null | undefined)[] = new Array(uris.length).fill(undefined);
+    let nextToStart = 0;
+    let nextToAdd = 0;
+    let firstError: any = null;
+
+    const addFinishedInOrder = () => {
+      const ready: string[] = [];
+      while (nextToAdd < uris.length && results[nextToAdd] !== undefined) {
+        const url = results[nextToAdd++];
+        if (url) ready.push(url);
+      }
+      if (ready.length > 0) setPhotos((prev) => [...prev, ...ready]);
+    };
+
+    const worker = async () => {
+      while (nextToStart < uris.length) {
+        const index = nextToStart++;
+        try {
+          results[index] = await uploadImage(uris[index]);
+        } catch (error: any) {
+          console.error("Upload error:", error);
+          firstError = firstError ?? error;
+          results[index] = null;
+        }
+        addFinishedInOrder();
+      }
+    };
+
     setIsUploadingPhoto(true);
     try {
-      const formData = new FormData();
-      const filename = uri.split("/").pop() || "upload.jpg";
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : `image/jpeg`;
-
-      // @ts-ignore: FormData in React Native accepts uri object
-      formData.append("file", {
-        uri: Platform.OS === "ios" ? uri.replace("file://", "") : uri,
-        name: filename,
-        type,
-      });
-
-      const res = await api.post("/api/upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      if (res.data?.url) {
-        setPhotos((prev) => [...prev, res.data.url]);
-      }
-    } catch (error: any) {
-      console.error("Upload error:", error);
-      Alert.alert("Upload Failed", error.response?.data?.error || "Could not upload photo.");
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, uris.length) }, worker));
     } finally {
       setIsUploadingPhoto(false);
+    }
+
+    if (firstError) {
+      Alert.alert("Upload Failed", firstError.response?.data?.error || "Could not upload photo.");
     }
   };
 

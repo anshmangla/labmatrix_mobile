@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useCallback, memo } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
   StatusBar,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { Image as ExpoImage } from "expo-image";
 import { useRouter } from "expo-router";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
@@ -45,6 +46,7 @@ import { LabMatrixTokens } from "@/constants/theme";
 import { getOptimizedImageUrl, IMAGE_PRESETS } from "@/lib/images";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
 // Marketplace sections, shown as the tab bar and (for the three item types) as entry tiles
 const ITEM_TYPES = [
@@ -105,6 +107,175 @@ const STATUS_OPTIONS: { label: string; value: "ALL" | "AVAILABLE" | "SOLD" }[] =
 
 const PAGE_SIZE = 30;
 
+/**
+ * One marketplace card. Memoized so typing in search or opening a modal doesn't
+ * re-render every card in the feed.
+ */
+const ListingCard = memo(function ListingCard({
+  item,
+  isDark,
+  onOpen,
+}: {
+  item: Listing;
+  isDark: boolean;
+  onOpen: (id: string) => void;
+}) {
+  const { colors } = LabMatrixTokens;
+  const open = () => onOpen(item.id);
+  const hasPhoto = item.photos && item.photos.length > 0;
+  const isSold = item.status === "SOLD";
+  const isSpare = item.itemType === "SPARE_PART";
+
+  const formattedMinPrice = item.minPrice ? item.minPrice.toLocaleString("en-IN") : null;
+  const formattedMaxPrice =
+    item.maxPrice && item.minPrice && item.maxPrice > item.minPrice
+      ? item.maxPrice.toLocaleString("en-IN")
+      : null;
+
+  const priceText = formattedMinPrice
+    ? formattedMaxPrice
+      ? `₹${formattedMinPrice} - ₹${formattedMaxPrice}`
+      : `₹${formattedMinPrice}`
+    : "Contact for Price";
+
+  const itemCode = item.partNumber ? `OEM Part: ${item.partNumber}` : null;
+
+  return (
+    <TouchableOpacity
+      style={[styles.card, isDark && styles.cardDark]}
+      activeOpacity={0.92}
+      onPress={open}
+    >
+      {/* 4:3 Image Container with Stitch Badges */}
+      <View style={[styles.imageContainer, !hasPhoto && styles.imageContainerNoPhoto]}>
+        {hasPhoto ? (
+          <ExpoImage
+            source={{ uri: getOptimizedImageUrl(item.photos[0], IMAGE_PRESETS.CARD) }}
+            style={[styles.cardImage, isSold && styles.cardImageSold]}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={item.id}
+          />
+        ) : (
+          <View style={[styles.placeholderImage, isDark && styles.placeholderImageDark]}>
+            <Tag size={22} color={isDark ? "#64748b" : "#94a3b8"} />
+            <Text style={styles.placeholderText}>No photo yet</Text>
+          </View>
+        )}
+
+        {/* Top-Left Category Badge */}
+        <View style={styles.categoryBadge}>
+          <Text style={styles.categoryBadgeText} numberOfLines={1}>
+            {isSpare ? "SPARE PARTS" : item.category.toUpperCase()}
+          </Text>
+        </View>
+
+        {/* Top-Right Status Badge */}
+        {isSold ? (
+          <View style={styles.soldBadge}>
+            <View style={styles.soldDot} />
+            <Text style={styles.soldBadgeText}>SOLD OUT</Text>
+          </View>
+        ) : isSpare ? (
+          <View style={styles.qtyBadge}>
+            <View style={styles.qtyDot} />
+            <Text style={styles.qtyBadgeText}>Qty: {item.quantity || 1} in Stock</Text>
+          </View>
+        ) : (
+          <View style={styles.availableBadge}>
+            <View style={styles.availableDot} />
+            <Text style={styles.availableBadgeText}>AVAILABLE</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Card Body */}
+      <View style={styles.cardBody}>
+        {/* Tag Row: Condition + Model/Part Code */}
+        <View style={styles.tagRow}>
+          <View style={styles.conditionPill}>
+            <Text style={styles.conditionPillText} numberOfLines={1}>
+              {item.condition || "Used - Good Working Condition"}
+            </Text>
+          </View>
+          {itemCode ? (
+            <Text style={styles.itemCodeText} numberOfLines={1}>
+              {itemCode}
+            </Text>
+          ) : null}
+        </View>
+
+        {/* Instrument Title */}
+        <Text style={[styles.cardTitle, isDark && styles.cardTitleDark]} numberOfLines={2}>
+          {item.title}
+        </Text>
+
+        {/* Spare Parts Compatibility Sub-row (if spare part) */}
+        {isSpare && item.compatibleWith ? (
+          <View style={styles.compatibleBox}>
+            <Text style={styles.compatibleText} numberOfLines={1}>
+              Compatible: {item.compatibleWith}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Price Box (Gray Container) */}
+        <View style={styles.priceLogisticsBox}>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.priceSubtext}>
+              {isSold ? "PRICE REALIZED (SOLD)" : isSpare ? "SURPLUS PRICE" : "EXPECTED PRICE"}
+            </Text>
+            <Text style={[styles.cardPrice, isSold && styles.cardPriceSold]} numberOfLines={1}>
+              {priceText}
+            </Text>
+          </View>
+
+        </View>
+
+        {/* Card Footer: Location & Action Button */}
+        <View style={styles.cardFooter}>
+          <View style={styles.locationRow}>
+            <MapPin size={13} color="#64748b" />
+            <Text style={styles.locationText} numberOfLines={1}>
+              {item.location || "India Hub"}
+            </Text>
+          </View>
+
+          {/* Inquire / Request Similar Action Button */}
+          {isSold ? (
+            <TouchableOpacity
+              style={styles.requestSimilarBtn}
+              activeOpacity={0.85}
+              onPress={open}
+            >
+              <Text style={styles.requestSimilarBtnText}>Request Similar</Text>
+              <ArrowRight size={13} color="#b45309" />
+            </TouchableOpacity>
+          ) : isSpare ? (
+            <TouchableOpacity
+              style={styles.inquireBtnLight}
+              activeOpacity={0.85}
+              onPress={open}
+            >
+              <MessageSquare size={13} color={colors.primaryContainer} />
+              <Text style={styles.inquireBtnLightText}>Inquire</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.inquireBtnNavy}
+              activeOpacity={0.85}
+              onPress={open}
+            >
+              <MessageSquare size={13} color="#ffffff" />
+              <Text style={styles.inquireBtnNavyText}>Inquire</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+});
+
 export default function MarketplaceScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -138,6 +309,8 @@ export default function MarketplaceScreen() {
   const [selectedStatus, setSelectedStatus] = useState<"ALL" | "AVAILABLE" | "SOLD">("ALL");
   const [selectedPriceTier, setSelectedPriceTier] = useState(0);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
+  // Search the server once typing pauses, not on every keystroke
+  const debouncedSearch = useDebouncedValue(searchQuery.trim());
 
   // Active filter count for badge
   const activeFilterCount = useMemo(() => {
@@ -159,7 +332,7 @@ export default function MarketplaceScreen() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ["listings", selectedType, selectedCategory, selectedStatus, selectedPriceTier, searchQuery],
+    queryKey: ["listings", selectedType, selectedCategory, selectedStatus, selectedPriceTier, debouncedSearch],
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => {
       const params: any = { page: pageParam, limit: PAGE_SIZE };
@@ -169,7 +342,7 @@ export default function MarketplaceScreen() {
       }
       if (selectedType !== "ALL") params.itemType = selectedType;
       if (selectedCategory !== "ALL") params.category = selectedCategory;
-      if (searchQuery.trim()) params.query = searchQuery.trim();
+      if (debouncedSearch) params.query = debouncedSearch;
 
       const tier = PRICE_TIERS[selectedPriceTier];
       if (tier.min) params.minPrice = tier.min;
@@ -208,158 +381,11 @@ export default function MarketplaceScreen() {
     setSearchQuery("");
   };
 
-  const renderListingCard = ({ item }: { item: Listing }) => {
-    const hasPhoto = item.photos && item.photos.length > 0;
-    const isSold = item.status === "SOLD";
-    const isSpare = item.itemType === "SPARE_PART";
-
-    const formattedMinPrice = item.minPrice ? item.minPrice.toLocaleString("en-IN") : null;
-    const formattedMaxPrice =
-      item.maxPrice && item.minPrice && item.maxPrice > item.minPrice
-        ? item.maxPrice.toLocaleString("en-IN")
-        : null;
-
-    const priceText = formattedMinPrice
-      ? formattedMaxPrice
-        ? `₹${formattedMinPrice} - ₹${formattedMaxPrice}`
-        : `₹${formattedMinPrice}`
-      : "Contact for Price";
-
-    const itemCode = item.partNumber ? `OEM Part: ${item.partNumber}` : null;
-
-    return (
-      <TouchableOpacity
-        style={[styles.card, isDark && styles.cardDark]}
-        activeOpacity={0.92}
-        onPress={() => router.push(`/listing/${item.id}`)}
-      >
-        {/* 4:3 Image Container with Stitch Badges */}
-        <View style={[styles.imageContainer, !hasPhoto && styles.imageContainerNoPhoto]}>
-          {hasPhoto ? (
-            <Image
-              source={{ uri: getOptimizedImageUrl(item.photos[0], IMAGE_PRESETS.CARD) }}
-              style={[styles.cardImage, isSold && styles.cardImageSold]}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={[styles.placeholderImage, isDark && styles.placeholderImageDark]}>
-              <Tag size={22} color={isDark ? "#64748b" : "#94a3b8"} />
-              <Text style={styles.placeholderText}>No photo yet</Text>
-            </View>
-          )}
-
-          {/* Top-Left Category Badge */}
-          <View style={styles.categoryBadge}>
-            <Text style={styles.categoryBadgeText} numberOfLines={1}>
-              {isSpare ? "SPARE PARTS" : item.category.toUpperCase()}
-            </Text>
-          </View>
-
-          {/* Top-Right Status Badge */}
-          {isSold ? (
-            <View style={styles.soldBadge}>
-              <View style={styles.soldDot} />
-              <Text style={styles.soldBadgeText}>SOLD OUT</Text>
-            </View>
-          ) : isSpare ? (
-            <View style={styles.qtyBadge}>
-              <View style={styles.qtyDot} />
-              <Text style={styles.qtyBadgeText}>Qty: {item.quantity || 1} in Stock</Text>
-            </View>
-          ) : (
-            <View style={styles.availableBadge}>
-              <View style={styles.availableDot} />
-              <Text style={styles.availableBadgeText}>AVAILABLE</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Card Body */}
-        <View style={styles.cardBody}>
-          {/* Tag Row: Condition + Model/Part Code */}
-          <View style={styles.tagRow}>
-            <View style={styles.conditionPill}>
-              <Text style={styles.conditionPillText} numberOfLines={1}>
-                {item.condition || "Used - Good Working Condition"}
-              </Text>
-            </View>
-            {itemCode ? (
-              <Text style={styles.itemCodeText} numberOfLines={1}>
-                {itemCode}
-              </Text>
-            ) : null}
-          </View>
-
-          {/* Instrument Title */}
-          <Text style={[styles.cardTitle, isDark && styles.cardTitleDark]} numberOfLines={2}>
-            {item.title}
-          </Text>
-
-          {/* Spare Parts Compatibility Sub-row (if spare part) */}
-          {isSpare && item.compatibleWith ? (
-            <View style={styles.compatibleBox}>
-              <Text style={styles.compatibleText} numberOfLines={1}>
-                Compatible: {item.compatibleWith}
-              </Text>
-            </View>
-          ) : null}
-
-          {/* Price Box (Gray Container) */}
-          <View style={styles.priceLogisticsBox}>
-            <View style={{ flex: 1, paddingRight: 8 }}>
-              <Text style={styles.priceSubtext}>
-                {isSold ? "PRICE REALIZED (SOLD)" : isSpare ? "SURPLUS PRICE" : "EXPECTED PRICE"}
-              </Text>
-              <Text style={[styles.cardPrice, isSold && styles.cardPriceSold]} numberOfLines={1}>
-                {priceText}
-              </Text>
-            </View>
-
-          </View>
-
-          {/* Card Footer: Location & Action Button */}
-          <View style={styles.cardFooter}>
-            <View style={styles.locationRow}>
-              <MapPin size={13} color="#64748b" />
-              <Text style={styles.locationText} numberOfLines={1}>
-                {item.location || "India Hub"}
-              </Text>
-            </View>
-
-            {/* Inquire / Request Similar Action Button */}
-            {isSold ? (
-              <TouchableOpacity
-                style={styles.requestSimilarBtn}
-                activeOpacity={0.85}
-                onPress={() => router.push(`/listing/${item.id}`)}
-              >
-                <Text style={styles.requestSimilarBtnText}>Request Similar</Text>
-                <ArrowRight size={13} color="#b45309" />
-              </TouchableOpacity>
-            ) : isSpare ? (
-              <TouchableOpacity
-                style={styles.inquireBtnLight}
-                activeOpacity={0.85}
-                onPress={() => router.push(`/listing/${item.id}`)}
-              >
-                <MessageSquare size={13} color={colors.primaryContainer} />
-                <Text style={styles.inquireBtnLightText}>Inquire</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.inquireBtnNavy}
-                activeOpacity={0.85}
-                onPress={() => router.push(`/listing/${item.id}`)}
-              >
-                <MessageSquare size={13} color="#ffffff" />
-                <Text style={styles.inquireBtnNavyText}>Inquire</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  const openListing = useCallback((id: string) => router.push(`/listing/${id}`), [router]);
+  const renderListingCard = useCallback(
+    ({ item }: { item: Listing }) => <ListingCard item={item} isDark={isDark} onOpen={openListing} />,
+    [isDark, openListing]
+  );
 
   return (
     <SafeAreaView edges={["top"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
@@ -531,6 +557,11 @@ export default function MarketplaceScreen() {
           data={data}
           keyExtractor={(item) => item.id}
           renderItem={renderListingCard}
+          // Cards are tall (photo + details): render only what fills the first screens
+          initialNumToRender={4}
+          maxToRenderPerBatch={4}
+          windowSize={7}
+          removeClippedSubviews={Platform.OS === "android"}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={

@@ -28,10 +28,22 @@ export const setAuthHeader = (token: string | null) => {
   }
 };
 
+// Public feeds that never read the session. Sending a token with them makes the CDN skip
+// its cache, so signed-in users would always wait for the server and database.
+const PUBLIC_GET_PATHS = new Set(["/api/listings", "/api/requirements"]);
+
+function isPublicFeedRequest(method?: string, url?: string): boolean {
+  if ((method || "get").toLowerCase() !== "get" || !url) return false;
+  return PUBLIC_GET_PATHS.has(url.split("?")[0]);
+}
+
 // Attach Authorization header if token exists
 api.interceptors.request.use(async (config) => {
   try {
-    if (!config.headers.Authorization && !config.headers.authorization) {
+    if (isPublicFeedRequest(config.method, config.url)) {
+      config.headers.delete("Authorization");
+      config.headers.delete("authorization");
+    } else if (!config.headers.Authorization && !config.headers.authorization) {
       const token = await getAuthToken();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
@@ -48,7 +60,10 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const isVerifyEndpoint = error.config?.url?.includes("/api/auth/mobile/me");
-    if (error.response?.status === 401 && isVerifyEndpoint) {
+    // Only clear the token this request was sent with, not one from a newer sign-in
+    const sentWith = String(error.config?.headers?.Authorization ?? "");
+    const current = await getAuthToken();
+    if (error.response?.status === 401 && isVerifyEndpoint && current && sentWith === `Bearer ${current}`) {
       setAuthHeader(null);
       await removeAuthToken();
       await removeCachedUser();

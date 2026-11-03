@@ -72,43 +72,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Restore session on app boot
+  // Restore session on app boot. The app opens as soon as the stored session is read from the
+  // device; the token is then verified with the server in the background, so launch never waits
+  // on the network. A rejected token still signs the user out, and the server checks every request.
   useEffect(() => {
-    async function initAuth() {
+    async function verifyStoredSession(storedToken: string) {
       try {
-        const storedToken = await getAuthToken();
-        const storedUser = await getCachedUser();
+        const res = await api.get("/api/auth/mobile/me");
+        // Ignore the result if the user signed out or into another account meanwhile
+        if (res.data?.user && (await getAuthToken()) === storedToken) {
+          setUser(res.data.user);
+          await saveCachedUser(res.data.user);
+        }
+      } catch (err: any) {
+        // The response interceptor may already have removed the rejected token (null);
+        // a different token means the user signed in again meanwhile, so leave that alone.
+        const current = await getAuthToken();
+        if (err.response?.status === 401 && (current === storedToken || current === null)) {
+          setAuthHeader(null);
+          await removeAuthToken();
+          await removeCachedUser();
+          setToken(null);
+          setUser(null);
+          // Drop anything loaded with the rejected session
+          queryClient.clear();
+        }
+      }
+    }
+
+    async function initAuth() {
+      let storedToken: string | null = null;
+      try {
+        const [tokenValue, storedUser] = await Promise.all([getAuthToken(), getCachedUser()]);
+        storedToken = tokenValue;
 
         if (storedToken) {
           setAuthHeader(storedToken);
           setToken(storedToken);
           if (storedUser) setUser(storedUser);
-
-          // Verify token validity and get latest profile from backend if possible
-          try {
-            const res = await api.get("/api/auth/mobile/me");
-            if (res.data?.user) {
-              setUser(res.data.user);
-              await saveCachedUser(res.data.user);
-            }
-          } catch (err: any) {
-            if (err.response?.status === 401) {
-              setAuthHeader(null);
-              await removeAuthToken();
-              await removeCachedUser();
-              setToken(null);
-              setUser(null);
-            }
-          }
         }
       } catch (e) {
         console.error("Auth init error:", e);
       } finally {
         setIsLoading(false);
       }
+
+      if (storedToken) {
+        verifyStoredSession(storedToken);
+      }
     }
 
     initAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const login = async (email: string, password: string) => {

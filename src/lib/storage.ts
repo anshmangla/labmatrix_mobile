@@ -4,7 +4,12 @@ import { Platform } from "react-native";
 const TOKEN_KEY = "labmatrix_auth_token";
 const USER_KEY = "labmatrix_user_data";
 
+// In-memory copy of the token so requests don't hit secure storage every time.
+// undefined = not read from storage yet.
+let memoryToken: string | null | undefined;
+
 export async function saveAuthToken(token: string): Promise<void> {
+  memoryToken = token;
   if (Platform.OS === "web") {
     try {
       localStorage.setItem(TOKEN_KEY, token);
@@ -17,18 +22,21 @@ export async function saveAuthToken(token: string): Promise<void> {
 }
 
 export async function getAuthToken(): Promise<string | null> {
+  if (memoryToken !== undefined) return memoryToken;
   if (Platform.OS === "web") {
     try {
-      return localStorage.getItem(TOKEN_KEY);
+      memoryToken = localStorage.getItem(TOKEN_KEY);
     } catch {
-      return null;
+      memoryToken = null;
     }
   } else {
-    return await SecureStore.getItemAsync(TOKEN_KEY);
+    memoryToken = await SecureStore.getItemAsync(TOKEN_KEY);
   }
+  return memoryToken;
 }
 
 export async function removeAuthToken(): Promise<void> {
+  memoryToken = null;
   if (Platform.OS === "web") {
     try {
       localStorage.removeItem(TOKEN_KEY);
