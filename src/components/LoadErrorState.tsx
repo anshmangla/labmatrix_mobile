@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from "react-native";
-import { CloudOff, RefreshCw } from "lucide-react-native";
+import CloudOff from "lucide-react-native/icons/cloud-off";
+import RefreshCw from "lucide-react-native/icons/refresh-cw";
 
 /**
  * Shown when a list failed to load, so a failed request isn't mistaken for "nothing here".

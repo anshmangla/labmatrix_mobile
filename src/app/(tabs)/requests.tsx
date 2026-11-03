@@ -19,21 +19,19 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Search,
-  Clock,
-  ShieldCheck,
-  FileQuestion,
-  PlusCircle,
-  FileText,
-  X,
-  Bell,
-  User,
-  ArrowRight,
-  Wrench,
-  Check,
-  SlidersHorizontal,
-} from "lucide-react-native";
+import Search from "lucide-react-native/icons/search";
+import Clock from "lucide-react-native/icons/clock";
+import ShieldCheck from "lucide-react-native/icons/shield-check";
+import FileQuestion from "lucide-react-native/icons/file-question-mark";
+import PlusCircle from "lucide-react-native/icons/circle-plus";
+import FileText from "lucide-react-native/icons/file-text";
+import X from "lucide-react-native/icons/x";
+import Bell from "lucide-react-native/icons/bell";
+import User from "lucide-react-native/icons/user";
+import ArrowRight from "lucide-react-native/icons/arrow-right";
+import Wrench from "lucide-react-native/icons/wrench";
+import Check from "lucide-react-native/icons/check";
+import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import { api } from "@/lib/api";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { Requirement } from "@/types/api";

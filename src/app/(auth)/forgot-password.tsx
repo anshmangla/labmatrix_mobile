@@ -16,7 +16,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Mail, Lock, KeyRound, ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react-native";
+import Mail from "lucide-react-native/icons/mail";
+import Lock from "lucide-react-native/icons/lock";
+import KeyRound from "lucide-react-native/icons/key-round";
+import ArrowLeft from "lucide-react-native/icons/arrow-left";
+import ArrowRight from "lucide-react-native/icons/arrow-right";
+import CheckCircle2 from "lucide-react-native/icons/circle-check";
 import { api } from "@/lib/api";
 
 export default function ForgotPasswordScreen() {

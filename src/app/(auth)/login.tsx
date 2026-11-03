@@ -18,19 +18,17 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import Svg, { Path } from "react-native-svg";
-import {
-  Lock,
-  Mail,
-  ArrowRight,
-  ShieldCheck,
-  Eye,
-  EyeOff,
-  AlertCircle,
-  X,
-  HelpCircle,
-  Microscope,
-  CheckCircle2,
-} from "lucide-react-native";
+import Lock from "lucide-react-native/icons/lock";
+import Mail from "lucide-react-native/icons/mail";
+import ArrowRight from "lucide-react-native/icons/arrow-right";
+import ShieldCheck from "lucide-react-native/icons/shield-check";
+import Eye from "lucide-react-native/icons/eye";
+import EyeOff from "lucide-react-native/icons/eye-off";
+import AlertCircle from "lucide-react-native/icons/circle-alert";
+import X from "lucide-react-native/icons/x";
+import HelpCircle from "lucide-react-native/icons/circle-question-mark";
+import Microscope from "lucide-react-native/icons/microscope";
+import CheckCircle2 from "lucide-react-native/icons/circle-check";
 import { useAuth } from "@/context/auth-context";
 
 function GoogleLogo() {

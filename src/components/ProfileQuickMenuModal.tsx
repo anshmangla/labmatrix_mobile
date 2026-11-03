@@ -13,22 +13,19 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import {
-  X,
-  User as 
-  Mail,
-  Building2,
-  ShieldCheck,
-  LogOut,
-  Package,
-  Settings,
-  MessageSquare,
-  Phone,
-  ChevronRight,
-  CheckCircle2,
-  Shield,
-  ExternalLink,
-} from "lucide-react-native";
+import X from "lucide-react-native/icons/x";
+import Mail from "lucide-react-native/icons/user";
+import Building2 from "lucide-react-native/icons/building-complex";
+import ShieldCheck from "lucide-react-native/icons/shield-check";
+import LogOut from "lucide-react-native/icons/log-out";
+import Package from "lucide-react-native/icons/package";
+import Settings from "lucide-react-native/icons/settings";
+import MessageSquare from "lucide-react-native/icons/message-square";
+import Phone from "lucide-react-native/icons/phone";
+import ChevronRight from "lucide-react-native/icons/chevron-right";
+import CheckCircle2 from "lucide-react-native/icons/circle-check";
+import Shield from "lucide-react-native/icons/shield";
+import ExternalLink from "lucide-react-native/icons/external-link";
 import { useAuth } from "@/context/auth-context";
 import { openPrivacyPolicy } from "@/lib/links";
 

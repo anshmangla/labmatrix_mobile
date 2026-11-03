@@ -2,7 +2,11 @@ import React from "react";
 import { Tabs } from "expo-router";
 import { useColorScheme, View, StyleSheet, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Store, ClipboardList, Plus, MessageSquare, User } from "lucide-react-native";
+import Store from "lucide-react-native/icons/store";
+import ClipboardList from "lucide-react-native/icons/clipboard-list";
+import Plus from "lucide-react-native/icons/plus";
+import MessageSquare from "lucide-react-native/icons/message-square";
+import User from "lucide-react-native/icons/user";
 import { LabMatrixTokens } from "@/constants/theme";
 
 export default function TabLayout() {

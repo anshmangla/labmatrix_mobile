@@ -21,29 +21,27 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { Image as ExpoImage } from "expo-image";
-import {
-  MapPin,
-  Tag,
-  ShieldCheck,
-  Send,
-  X,
-  Phone,
-  Share2,
-  Pencil,
-  Copy,
-  Video,
-  CheckCircle2,
-  Truck,
-  FileText,
-  ChevronLeft,
-  ChevronRight,
-  Building2,
-  Mail,
-  Layers,
-  ZoomIn,
-  ZoomOut,
-  RotateCcw,
-} from "lucide-react-native";
+import MapPin from "lucide-react-native/icons/map-pin";
+import Tag from "lucide-react-native/icons/tag";
+import ShieldCheck from "lucide-react-native/icons/shield-check";
+import Send from "lucide-react-native/icons/send";
+import X from "lucide-react-native/icons/x";
+import Phone from "lucide-react-native/icons/phone";
+import Share2 from "lucide-react-native/icons/share-2";
+import Pencil from "lucide-react-native/icons/pencil";
+import Copy from "lucide-react-native/icons/copy";
+import Video from "lucide-react-native/icons/video";
+import CheckCircle2 from "lucide-react-native/icons/circle-check";
+import Truck from "lucide-react-native/icons/truck";
+import FileText from "lucide-react-native/icons/file-text";
+import ChevronLeft from "lucide-react-native/icons/chevron-left";
+import ChevronRight from "lucide-react-native/icons/chevron-right";
+import Building2 from "lucide-react-native/icons/building-complex";
+import Mail from "lucide-react-native/icons/mail";
+import Layers from "lucide-react-native/icons/layers";
+import ZoomIn from "lucide-react-native/icons/zoom-in";
+import ZoomOut from "lucide-react-native/icons/zoom-out";
+import RotateCcw from "lucide-react-native/icons/rotate-ccw";
 import { api } from "@/lib/api";
 import { Listing } from "@/types/api";
 import { useAuth } from "@/context/auth-context";

@@ -12,14 +12,12 @@ import {
   Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  X,
-  ShieldCheck,
-  Lock,
-  Truck,
-  Phone,
-  FileCheck2,
-} from "lucide-react-native";
+import X from "lucide-react-native/icons/x";
+import ShieldCheck from "lucide-react-native/icons/shield-check";
+import Lock from "lucide-react-native/icons/lock";
+import Truck from "lucide-react-native/icons/truck";
+import Phone from "lucide-react-native/icons/phone";
+import FileCheck2 from "lucide-react-native/icons/file-check-corner";
 
 interface EscrowPolicyModalProps {
   visible: boolean;

@@ -18,20 +18,18 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Clock,
-  ShieldCheck,
-  Shield,
-  CheckCircle2,
-  FileText,
-  Phone,
-  Share2,
-  Pencil,
-  ChevronLeft,
-  Send,
-  X,
-  Layers,
-} from "lucide-react-native";
+import Clock from "lucide-react-native/icons/clock";
+import ShieldCheck from "lucide-react-native/icons/shield-check";
+import Shield from "lucide-react-native/icons/shield";
+import CheckCircle2 from "lucide-react-native/icons/circle-check";
+import FileText from "lucide-react-native/icons/file-text";
+import Phone from "lucide-react-native/icons/phone";
+import Share2 from "lucide-react-native/icons/share-2";
+import Pencil from "lucide-react-native/icons/pencil";
+import ChevronLeft from "lucide-react-native/icons/chevron-left";
+import Send from "lucide-react-native/icons/send";
+import X from "lucide-react-native/icons/x";
+import Layers from "lucide-react-native/icons/layers";
 import { api } from "@/lib/api";
 import { Requirement } from "@/types/api";
 import { useAuth } from "@/context/auth-context";

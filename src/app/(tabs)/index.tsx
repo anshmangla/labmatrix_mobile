@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback, memo } from "react";
+import React, { useState, useMemo, useRef, useCallback, useEffect, memo } from "react";
 import {
   View,
   Text,
@@ -19,25 +19,23 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Image as ExpoImage } from "expo-image";
 import { useRouter } from "expo-router";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import {
-  Search,
-  MapPin,
-  Tag,
-  AlertCircle,
-  RefreshCw,
-  SlidersHorizontal,
-  X,
-  Bell,
-  User,
-  Check,
-  PlusCircle,
-  ArrowRight,
-  MessageSquare,
-  LayoutGrid,
-  Microscope,
-  PackageCheck,
-  Wrench,
-} from "lucide-react-native";
+import Search from "lucide-react-native/icons/search";
+import MapPin from "lucide-react-native/icons/map-pin";
+import Tag from "lucide-react-native/icons/tag";
+import AlertCircle from "lucide-react-native/icons/circle-alert";
+import RefreshCw from "lucide-react-native/icons/refresh-cw";
+import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
+import X from "lucide-react-native/icons/x";
+import Bell from "lucide-react-native/icons/bell";
+import User from "lucide-react-native/icons/user";
+import Check from "lucide-react-native/icons/check";
+import PlusCircle from "lucide-react-native/icons/circle-plus";
+import ArrowRight from "lucide-react-native/icons/arrow-right";
+import MessageSquare from "lucide-react-native/icons/message-square";
+import LayoutGrid from "lucide-react-native/icons/layout-grid";
+import Microscope from "lucide-react-native/icons/microscope";
+import PackageCheck from "lucide-react-native/icons/package-check";
+import Wrench from "lucide-react-native/icons/wrench";
 import { api } from "@/lib/api";
 import { Listing } from "@/types/api";
 import { useAuth } from "@/context/auth-context";
@@ -121,6 +119,12 @@ const ListingCard = memo(function ListingCard({
 }) {
   const { colors } = LabMatrixTokens;
   const open = () => onOpen(item.id);
+  // Start downloading the detail screen's large photo as soon as the card is pressed
+  const prefetchDetailPhoto = () => {
+    if (item.photos?.[0]) {
+      ExpoImage.prefetch(getOptimizedImageUrl(item.photos[0], IMAGE_PRESETS.HERO), "memory-disk").catch(() => {});
+    }
+  };
   const hasPhoto = item.photos && item.photos.length > 0;
   const isSold = item.status === "SOLD";
   const isSpare = item.itemType === "SPARE_PART";
@@ -143,7 +147,8 @@ const ListingCard = memo(function ListingCard({
     <TouchableOpacity
       style={[styles.card, isDark && styles.cardDark]}
       activeOpacity={0.92}
-      onPress={open}
+      onPressIn={prefetchDetailPhoto}
+              onPress={open}
     >
       {/* 4:3 Image Container with Stitch Badges */}
       <View style={[styles.imageContainer, !hasPhoto && styles.imageContainerNoPhoto]}>
@@ -245,6 +250,7 @@ const ListingCard = memo(function ListingCard({
             <TouchableOpacity
               style={styles.requestSimilarBtn}
               activeOpacity={0.85}
+              onPressIn={prefetchDetailPhoto}
               onPress={open}
             >
               <Text style={styles.requestSimilarBtnText}>Request Similar</Text>
@@ -254,6 +260,7 @@ const ListingCard = memo(function ListingCard({
             <TouchableOpacity
               style={styles.inquireBtnLight}
               activeOpacity={0.85}
+              onPressIn={prefetchDetailPhoto}
               onPress={open}
             >
               <MessageSquare size={13} color={colors.primaryContainer} />
@@ -263,6 +270,7 @@ const ListingCard = memo(function ListingCard({
             <TouchableOpacity
               style={styles.inquireBtnNavy}
               activeOpacity={0.85}
+              onPressIn={prefetchDetailPhoto}
               onPress={open}
             >
               <MessageSquare size={13} color="#ffffff" />
@@ -379,6 +387,18 @@ export default function MarketplaceScreen() {
     setSelectedPriceTier(0);
     setSearchQuery("");
   };
+
+  // Download this page's card photos to disk in the background, so cards further down the
+  // list already have their photo when scrolled into view
+  const prefetchedCardPhotos = useRef(new Set<string>());
+  useEffect(() => {
+    const urls = (data ?? [])
+      .map((item) => (item.photos?.[0] ? getOptimizedImageUrl(item.photos[0], IMAGE_PRESETS.CARD) : null))
+      .filter((url): url is string => !!url && !prefetchedCardPhotos.current.has(url));
+    if (urls.length === 0) return;
+    urls.forEach((url) => prefetchedCardPhotos.current.add(url));
+    ExpoImage.prefetch(urls, "disk").catch(() => {});
+  }, [data]);
 
   const openListing = useCallback((id: string) => router.push(`/listing/${id}`), [router]);
   const renderListingCard = useCallback(

@@ -15,7 +15,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { ArrowLeft, CheckCircle2, Send, Phone, Check } from "lucide-react-native";
+import ArrowLeft from "lucide-react-native/icons/arrow-left";
+import CheckCircle2 from "lucide-react-native/icons/circle-check";
+import Send from "lucide-react-native/icons/send";
+import Phone from "lucide-react-native/icons/phone";
+import Check from "lucide-react-native/icons/check";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/auth-context";
 

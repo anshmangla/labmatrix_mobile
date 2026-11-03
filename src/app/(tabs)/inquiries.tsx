@@ -14,22 +14,20 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import {
-  MessageSquare,
-  Building2,
-  Clock,
-  ArrowRight,
-  ExternalLink,
-  User,
-  Bell,
-  Lock,
-  Plus,
-  Store,
-  ClipboardList,
-  Tag,
-  Wrench,
-  Microscope,
-} from "lucide-react-native";
+import MessageSquare from "lucide-react-native/icons/message-square";
+import Building2 from "lucide-react-native/icons/building-complex";
+import Clock from "lucide-react-native/icons/clock";
+import ArrowRight from "lucide-react-native/icons/arrow-right";
+import ExternalLink from "lucide-react-native/icons/external-link";
+import User from "lucide-react-native/icons/user";
+import Bell from "lucide-react-native/icons/bell";
+import Lock from "lucide-react-native/icons/lock";
+import Plus from "lucide-react-native/icons/plus";
+import Store from "lucide-react-native/icons/store";
+import ClipboardList from "lucide-react-native/icons/clipboard-list";
+import Tag from "lucide-react-native/icons/tag";
+import Wrench from "lucide-react-native/icons/wrench";
+import Microscope from "lucide-react-native/icons/microscope";
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
 import { LoadErrorState } from "@/components/LoadErrorState";

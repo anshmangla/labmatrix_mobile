@@ -13,7 +13,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, CheckCheck, Clock, ArrowLeft, ChevronRight } from "lucide-react-native";
+import Bell from "lucide-react-native/icons/bell";
+import CheckCheck from "lucide-react-native/icons/check-check";
+import Clock from "lucide-react-native/icons/clock";
+import ArrowLeft from "lucide-react-native/icons/arrow-left";
+import ChevronRight from "lucide-react-native/icons/chevron-right";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/auth-context";
 

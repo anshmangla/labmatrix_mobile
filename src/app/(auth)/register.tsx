@@ -17,18 +17,16 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import Svg, { Path } from "react-native-svg";
-import {
-  Lock,
-  Mail,
-  User,
-  Phone,
-  Building2,
-  KeyRound,
-  ArrowRight,
-  ShieldCheck,
-  ArrowLeft,
-  CheckCircle2,
-} from "lucide-react-native";
+import Lock from "lucide-react-native/icons/lock";
+import Mail from "lucide-react-native/icons/mail";
+import User from "lucide-react-native/icons/user";
+import Phone from "lucide-react-native/icons/phone";
+import Building2 from "lucide-react-native/icons/building-complex";
+import KeyRound from "lucide-react-native/icons/key-round";
+import ArrowRight from "lucide-react-native/icons/arrow-right";
+import ShieldCheck from "lucide-react-native/icons/shield-check";
+import ArrowLeft from "lucide-react-native/icons/arrow-left";
+import CheckCircle2 from "lucide-react-native/icons/circle-check";
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
 import { openPrivacyPolicy } from "@/lib/links";

@@ -21,28 +21,26 @@ import { prepareImageForUpload, type PickedImage } from "@/lib/upload-image";
 import { useQueryClient } from "@tanstack/react-query";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
-import {
-  Upload,
-  X,
-  Lock,
-  Phone,
-  Building2,
-  ArrowRight,
-  Clock,
-  CheckCircle2,
-  Bell,
-  User,
-  Sparkles,
-  Wrench,
-  Microscope,
-  MapPin,
-  ChevronDown,
-  Plus,
-  Minus,
-  Camera,
-  ShieldCheck,
-  Check,
-} from "lucide-react-native";
+import Upload from "lucide-react-native/icons/upload";
+import X from "lucide-react-native/icons/x";
+import Lock from "lucide-react-native/icons/lock";
+import Phone from "lucide-react-native/icons/phone";
+import Building2 from "lucide-react-native/icons/building-complex";
+import ArrowRight from "lucide-react-native/icons/arrow-right";
+import Clock from "lucide-react-native/icons/clock";
+import CheckCircle2 from "lucide-react-native/icons/circle-check";
+import Bell from "lucide-react-native/icons/bell";
+import User from "lucide-react-native/icons/user";
+import Sparkles from "lucide-react-native/icons/sparkles";
+import Wrench from "lucide-react-native/icons/wrench";
+import Microscope from "lucide-react-native/icons/microscope";
+import MapPin from "lucide-react-native/icons/map-pin";
+import ChevronDown from "lucide-react-native/icons/chevron-down";
+import Plus from "lucide-react-native/icons/plus";
+import Minus from "lucide-react-native/icons/minus";
+import Camera from "lucide-react-native/icons/camera";
+import ShieldCheck from "lucide-react-native/icons/shield-check";
+import Check from "lucide-react-native/icons/check";
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
 

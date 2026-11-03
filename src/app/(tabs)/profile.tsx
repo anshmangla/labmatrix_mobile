@@ -18,32 +18,30 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  User as UserIcon,
-  Mail,
-  Phone,
-  Building2,
-  ShieldCheck,
-  LogOut,
-  Trash2,
-  LogIn,
-  Package,
-  ExternalLink,
-  CheckCircle2,
-  Clock,
-  Pencil,
-  Copy,
-  ChevronDown,
-  ArrowRight,
-  Bell,
-  AlertTriangle,
-  X,
-  Share2,
-  Settings,
-  Plus,
-  Wrench,
-  FileQuestion,
-} from "lucide-react-native";
+import UserIcon from "lucide-react-native/icons/user";
+import Mail from "lucide-react-native/icons/mail";
+import Phone from "lucide-react-native/icons/phone";
+import Building2 from "lucide-react-native/icons/building-complex";
+import ShieldCheck from "lucide-react-native/icons/shield-check";
+import LogOut from "lucide-react-native/icons/log-out";
+import Trash2 from "lucide-react-native/icons/trash";
+import LogIn from "lucide-react-native/icons/log-in";
+import Package from "lucide-react-native/icons/package";
+import ExternalLink from "lucide-react-native/icons/external-link";
+import CheckCircle2 from "lucide-react-native/icons/circle-check";
+import Clock from "lucide-react-native/icons/clock";
+import Pencil from "lucide-react-native/icons/pencil";
+import Copy from "lucide-react-native/icons/copy";
+import ChevronDown from "lucide-react-native/icons/chevron-down";
+import ArrowRight from "lucide-react-native/icons/arrow-right";
+import Bell from "lucide-react-native/icons/bell";
+import AlertTriangle from "lucide-react-native/icons/triangle-alert";
+import X from "lucide-react-native/icons/x";
+import Share2 from "lucide-react-native/icons/share-2";
+import Settings from "lucide-react-native/icons/settings";
+import Plus from "lucide-react-native/icons/plus";
+import Wrench from "lucide-react-native/icons/wrench";
+import FileQuestion from "lucide-react-native/icons/file-question-mark";
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
 import { LoadErrorState } from "@/components/LoadErrorState";
