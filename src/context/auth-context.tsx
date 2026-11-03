@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import * as WebBrowser from "expo-web-browser";
 import { User } from "@/types/api";
 import { api, setAuthHeader } from "@/lib/api";
 import {
@@ -12,14 +11,15 @@ import {
   removeCachedUser,
 } from "@/lib/storage";
 
-WebBrowser.maybeCompleteAuthSession();
-
 const GOOGLE_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
   "732621225229-p3t2c05pif5eiq11lg20k6pnv109gr10.apps.googleusercontent.com";
 
 // Safely obtain native GoogleSignin module so Expo Go does not crash on TurboModuleRegistry
 let GoogleSignin: any = null;
+// Google's DEVELOPER_ERROR status, reported by the native module as the code "10"
+const GOOGLE_DEVELOPER_ERROR = "10";
+
 let statusCodes: any = {
   SIGN_IN_CANCELLED: "SIGN_IN_CANCELLED",
   IN_PROGRESS: "IN_PROGRESS",
@@ -172,7 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const exchangeGoogleCredential = async (
-    credential: { idToken: string } | { accessToken: string }
+    credential: { idToken: string }
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       const res = await api.post("/api/auth/mobile/google", credential);
@@ -201,71 +201,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Native Google Sign-In only. (The old browser fallback through auth.expo.io could never complete:
+  // Expo's auth proxy is deprecated, and it hid the real error behind a second account picker.)
   const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
-    try {
-      // 1. Try Native Google Sign-In first (standalone APK / custom dev clients)
-      if (GoogleSignin) {
-        try {
-          await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-
-          // Sign out previous session first so Android ALWAYS shows the account chooser dialog
-          try {
-            await GoogleSignin.signOut();
-          } catch {}
-
-          const signInResult = await GoogleSignin.signIn();
-
-        if (signInResult.type === "success" && signInResult.data?.user) {
-          const idToken = signInResult.data.idToken;
-          if (!idToken) {
-            return { success: false, error: "Google did not return a sign-in token. Please try again." };
-          }
-          return await exchangeGoogleCredential({ idToken });
-        } else if (signInResult.type === "cancelled") {
-          return { success: false, error: "Google sign-in was cancelled." };
-        }
-      } catch (nativeErr: any) {
-        if (nativeErr.code === statusCodes.SIGN_IN_CANCELLED) {
-          return { success: false, error: "Google sign-in was cancelled." };
-        } else if (nativeErr.code === statusCodes.IN_PROGRESS) {
-          return { success: false, error: "Google sign-in is already in progress." };
-        } else if (nativeErr.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-          return { success: false, error: "Google Play Services is not available or outdated." };
-        }
-
-        // Log warning and gracefully fall through to browser OAuth flow
-        console.warn("Native Google Sign-In not ready, attempting fallback:", nativeErr.message);
-      }
+    if (!GoogleSignin) {
+      // Expo Go and other builds without the native Google Sign-In module
+      return {
+        success: false,
+        error: "Google sign-in isn't available in this version of the app. Please sign in with your email and password.",
+      };
     }
 
-      // 2. Fallback to Browser OAuth Flow
-      const redirectUri = "https://auth.expo.io/@anshmangla/labmatrix-market";
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(
-        redirectUri
-      )}&response_type=token&scope=openid%20profile%20email`;
+    try {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+      // Sign out previous session first so Android ALWAYS shows the account chooser dialog
+      try {
+        await GoogleSignin.signOut();
+      } catch {}
 
-      if (result.type === "success" && result.url) {
-        // Parse access_token from the URL hash or query params
-        const urlPart = result.url.includes("#") ? result.url.split("#")[1] : result.url.split("?")[1];
-        const params = new URLSearchParams(urlPart);
-        const accessToken = params.get("access_token");
-
-        if (accessToken) {
-          return await exchangeGoogleCredential({ accessToken });
-        }
-        return { success: false, error: "Could not retrieve Google profile tokens." };
-      }
-
-      if (result.type === "cancel" || result.type === "dismiss") {
+      const signInResult = await GoogleSignin.signIn();
+      if (signInResult.type === "cancelled") {
         return { success: false, error: "Google sign-in was cancelled." };
       }
 
-      return { success: false, error: "Authentication was interrupted." };
-    } catch (err: any) {
-      console.warn("Google auth error:", err);
-      return { success: false, error: err.message || "Failed to sign in with Google." };
+      const idToken = signInResult.data?.idToken;
+      if (signInResult.type !== "success" || !idToken) {
+        return { success: false, error: "Google did not return a sign-in token. Please try again." };
+      }
+      return await exchangeGoogleCredential({ idToken });
+    } catch (nativeErr: any) {
+      const code = String(nativeErr?.code ?? "");
+      if (code === statusCodes.SIGN_IN_CANCELLED) {
+        return { success: false, error: "Google sign-in was cancelled." };
+      }
+      if (code === statusCodes.IN_PROGRESS) {
+        return { success: false, error: "Google sign-in is already in progress." };
+      }
+      if (code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        return { success: false, error: "Google Play Services is not available or outdated." };
+      }
+      if (code === GOOGLE_DEVELOPER_ERROR) {
+        // This build's signing certificate (SHA-1) isn't registered as an Android OAuth client in
+        // Google Cloud for this package (e.g. the Play app signing key after a Play Store install)
+        console.warn("Google Sign-In DEVELOPER_ERROR (10): signing certificate not registered for this build");
+        return {
+          success: false,
+          error: "Google sign-in isn't set up for this version of the app yet (Google error 10). Please sign in with your email and password for now.",
+        };
+      }
+      console.warn("Google sign-in failed:", code, nativeErr?.message);
+      return { success: false, error: "Google sign-in failed. Please try again." };
     }
   };
 
