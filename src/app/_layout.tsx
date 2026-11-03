@@ -9,9 +9,18 @@ import {
 } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useColorScheme, View, Image, ActivityIndicator, StyleSheet } from "react-native";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, useIsRestoring } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "@/context/auth-context";
+import { getAuthToken } from "@/lib/storage";
+import {
+  PERSIST_BUSTER,
+  PERSIST_MAX_AGE,
+  queryPersister,
+  removeViewerSpecificQueries,
+  shouldPersistQuery,
+} from "@/lib/query-persistence";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -26,7 +35,8 @@ const queryClient = new QueryClient({
         return failureCount < 2;
       },
       staleTime: 1000 * 60 * 2, // 2 minutes
-      gcTime: 1000 * 60 * 10, // Keep screens' data for instant back-navigation
+      // Keep loaded data (also needed for it to be saved on the device for PERSIST_MAX_AGE)
+      gcTime: PERSIST_MAX_AGE,
     },
   },
 });
@@ -34,7 +44,10 @@ const queryClient = new QueryClient({
 function RootNavigation() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  // Wait for data saved on the device too, so screens never flash an empty state before it arrives
+  const isRestoring = useIsRestoring();
+  const isLoading = isAuthLoading || isRestoring;
   const segments = useSegments();
   const router = useRouter();
 
@@ -55,7 +68,7 @@ function RootNavigation() {
     }
   }, [isAuthenticated, isLoading, segments, router]);
 
-  // Keep the native splash up while the session is read from the device (a few ms),
+  // Keep the native splash up while the session and saved data are read from the device (a few ms),
   // then reveal the first screen directly instead of showing a second, JS-drawn splash.
   useEffect(() => {
     if (!isLoading) SplashScreen.hide();
@@ -99,11 +112,24 @@ function RootNavigation() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
+      {/* Restores data saved on the device before any query fetches, and keeps saving it */}
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{
+          persister: queryPersister,
+          maxAge: PERSIST_MAX_AGE,
+          buster: PERSIST_BUSTER,
+          dehydrateOptions: { shouldDehydrateQuery: shouldPersistQuery },
+        }}
+        onSuccess={async () => {
+          // Nobody is signed in: drop anything that belonged to, or depended on, a previous account
+          if (!(await getAuthToken())) removeViewerSpecificQueries(queryClient);
+        }}
+      >
         <AuthProvider>
           <RootNavigation />
         </AuthProvider>
-      </QueryClientProvider>
+      </PersistQueryClientProvider>
     </SafeAreaProvider>
   );
 }

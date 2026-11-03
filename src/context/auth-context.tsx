@@ -10,6 +10,7 @@ import {
   saveCachedUser,
   removeCachedUser,
 } from "@/lib/storage";
+import { clearPersistedQueries, removeViewerSpecificQueries } from "@/lib/query-persistence";
 
 const GOOGLE_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
@@ -95,8 +96,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await removeCachedUser();
           setToken(null);
           setUser(null);
-          // Drop anything loaded with the rejected session
+          // Drop anything loaded with the rejected session, including the copy saved on the device
           queryClient.clear();
+          await clearPersistedQueries();
         }
       }
     }
@@ -134,6 +136,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
       });
       const { token: receivedToken, user: receivedUser } = res.data;
+
+      // Drop any previous account's data (in memory and saved on the device) before switching
+      removeViewerSpecificQueries(queryClient);
+      await clearPersistedQueries();
 
       setAuthHeader(receivedToken);
       setToken(receivedToken);
@@ -177,6 +183,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await api.post("/api/auth/mobile/google", credential);
       const { token: receivedToken, user: receivedUser } = res.data;
+
+      // Drop any previous account's data (in memory and saved on the device) before switching
+      removeViewerSpecificQueries(queryClient);
+      await clearPersistedQueries();
 
       setAuthHeader(receivedToken);
       setToken(receivedToken);
@@ -267,6 +277,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await api.post("/api/auth/mobile/register", data);
       const { token: receivedToken, user: receivedUser } = res.data;
 
+      // Drop any previous account's data (in memory and saved on the device) before switching
+      removeViewerSpecificQueries(queryClient);
+      await clearPersistedQueries();
+
       setAuthHeader(receivedToken);
       setToken(receivedToken);
       setUser(receivedUser);
@@ -293,8 +307,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await removeCachedUser();
       setToken(null);
       setUser(null);
-      // Drop cached inquiries, items, notifications and admin data so the next account can't see them
+      // Drop cached inquiries, items, notifications and admin data so the next account can't see them,
+      // including the copy saved on the device
       queryClient.clear();
+      await clearPersistedQueries();
     } catch (e) {
       console.error("Logout error:", e);
     }

@@ -34,6 +34,7 @@ import { LoadErrorState } from "@/components/LoadErrorState";
 import { Inquiry } from "@/types/api";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
+import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 
 const INQUIRY_PAGE_SIZE = 20;
 
@@ -76,7 +77,6 @@ export default function InquiriesScreen() {
     data: pagedData,
     isLoading,
     isError,
-    isRefetching,
     refetch,
     fetchNextPage,
     hasNextPage,
@@ -93,6 +93,8 @@ export default function InquiriesScreen() {
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
+  // Spinner only for refreshes the user pulled for; background refreshes stay silent
+  const pullToRefresh = usePullToRefresh(refetch);
 
   const formatINR = (amount?: number | null) => {
     if (amount === undefined || amount === null) return "N/A";
@@ -457,10 +459,8 @@ export default function InquiriesScreen() {
           }
           refreshControl={
             <RefreshControl
-              refreshing={isRefetching && !isFetchingNextPage}
-              onRefresh={() => {
-                refetch();
-              }}
+              refreshing={pullToRefresh.refreshing}
+              onRefresh={pullToRefresh.onRefresh}
               tintColor="#033a7d"
               colors={["#033a7d"]}
             />

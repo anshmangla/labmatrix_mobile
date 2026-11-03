@@ -44,6 +44,7 @@ import { getOptimizedImageUrl, IMAGE_PRESETS } from "@/lib/images";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 
 // Marketplace sections, shown as the tab bar and (for the three item types) as entry tiles
 const ITEM_TYPES = [
@@ -332,7 +333,6 @@ export default function MarketplaceScreen() {
   const {
     data: pagedData,
     isLoading,
-    isRefetching,
     isError,
     refetch,
     fetchNextPage,
@@ -366,6 +366,8 @@ export default function MarketplaceScreen() {
     getNextPageParam: (lastPage) =>
       lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
   });
+  // Spinner only for refreshes the user pulled for; background refreshes stay silent
+  const pullToRefresh = usePullToRefresh(refetch);
 
   // Flatten loaded pages; skip duplicates if new items shifted page boundaries
   const data = useMemo(() => {
@@ -625,10 +627,8 @@ export default function MarketplaceScreen() {
           }
           refreshControl={
             <RefreshControl
-              refreshing={isRefetching && !isFetchingNextPage}
-              onRefresh={() => {
-                refetch();
-              }}
+              refreshing={pullToRefresh.refreshing}
+              onRefresh={pullToRefresh.onRefresh}
               tintColor={colors.primaryContainer}
             />
           }

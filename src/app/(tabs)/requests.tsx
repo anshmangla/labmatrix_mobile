@@ -40,6 +40,7 @@ import { LabMatrixTokens } from "@/constants/theme";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 
 // Same categories and order as the website's buyer requests page
 const CATEGORIES = [
@@ -116,7 +117,6 @@ export default function RequestsScreen() {
     data: pagedData,
     isLoading,
     isError,
-    isRefetching,
     refetch,
     fetchNextPage,
     hasNextPage,
@@ -141,6 +141,8 @@ export default function RequestsScreen() {
     getNextPageParam: (lastPage) =>
       lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
   });
+  // Spinner only for refreshes the user pulled for; background refreshes stay silent
+  const pullToRefresh = usePullToRefresh(refetch);
 
   // Flatten loaded pages; skip duplicates if new items shifted page boundaries
   const data = useMemo(() => {
@@ -514,10 +516,8 @@ export default function RequestsScreen() {
         }
         refreshControl={
           <RefreshControl
-            refreshing={isRefetching && !isFetchingNextPage}
-            onRefresh={() => {
-              refetch();
-            }}
+            refreshing={pullToRefresh.refreshing}
+            onRefresh={pullToRefresh.onRefresh}
             tintColor={colors.primaryContainer}
           />
         }

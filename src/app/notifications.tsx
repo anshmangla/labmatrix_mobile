@@ -20,6 +20,7 @@ import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/auth-context";
+import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 
 interface NotificationItem {
   id: string;
@@ -43,7 +44,6 @@ export default function NotificationsScreen() {
   const {
     data,
     isLoading,
-    isRefetching,
     refetch,
   } = useQuery({
     queryKey: ["notifications"],
@@ -63,6 +63,8 @@ export default function NotificationsScreen() {
       };
     },
   });
+  // Spinner only for refreshes the user pulled for; background refreshes stay silent
+  const pullToRefresh = usePullToRefresh(refetch);
 
   // Copy each new result into the locally editable list (handled during render; the null
   // start makes the first render pick up data that was already cached)
@@ -234,10 +236,8 @@ export default function NotificationsScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
-              refreshing={isRefetching}
-              onRefresh={() => {
-                refetch();
-              }}
+              refreshing={pullToRefresh.refreshing}
+              onRefresh={pullToRefresh.onRefresh}
               tintColor="#033a7d"
               colors={["#033a7d"]}
             />
