@@ -15,12 +15,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   X,
   ShieldCheck,
-  CheckCircle2,
   Lock,
   Truck,
   Phone,
   FileCheck2,
-  BadgeCheck,
 } from "lucide-react-native";
 
 interface EscrowPolicyModalProps {

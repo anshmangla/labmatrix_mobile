@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useEffectEvent } from "react";
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   User as UserIcon,
   Mail,
@@ -28,8 +28,6 @@ import {
   Trash2,
   LogIn,
   Package,
-  ClipboardList,
-  ChevronRight,
   ExternalLink,
   CheckCircle2,
   Clock,
@@ -38,24 +36,17 @@ import {
   ChevronDown,
   ArrowRight,
   Bell,
-  Sparkles,
   AlertTriangle,
   X,
   Share2,
-  Bookmark,
   Settings,
   Plus,
   Wrench,
   FileQuestion,
-  ShieldAlert,
-  Send,
-  AlertCircle,
-  HelpCircle,
 } from "lucide-react-native";
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
 import { LoadErrorState } from "@/components/LoadErrorState";
-import { LabMatrixTokens } from "@/constants/theme";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 
@@ -64,7 +55,6 @@ export default function ProfileScreen() {
   const { tab } = useLocalSearchParams<{ tab?: string }>();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
-  const { colors } = LabMatrixTokens;
   const { user, isAuthenticated, logout, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
 
@@ -73,12 +63,21 @@ export default function ProfileScreen() {
     "listings" | "requests" | "inquiries" | "settings"
   >("listings");
 
-  // Synchronize incoming tab route param
-  useEffect(() => {
+  // Synchronize incoming tab route param (handled during render, including the first one)
+  const [handledTab, setHandledTab] = useState<string | undefined | null>(null);
+  if (tab !== handledTab) {
+    setHandledTab(tab);
     if (tab === "settings") setActiveTab("settings");
     else if (tab === "requests") setActiveTab("requests");
-    else if (tab === "inquiries") router.push("/(tabs)/inquiries" as any);
     else if (tab === "listings") setActiveTab("listings");
+  }
+
+  // ?tab=inquiries opens the Inquiries tab instead
+  const openInquiriesTab = useEffectEvent(() => {
+    router.push("/(tabs)/inquiries" as any);
+  });
+  useEffect(() => {
+    if (tab === "inquiries") openInquiriesTab();
   }, [tab]);
 
   // Quick Profile Menu & Escrow modal states
@@ -762,7 +761,7 @@ export default function ProfileScreen() {
               <View style={[styles.emptyCard, isDark && styles.emptyCardDark]}>
                 <Package size={36} color="#94a3b8" />
                 <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>
-                  You haven't listed any machines yet
+                  You haven&apos;t listed any machines yet
                 </Text>
                 <Text style={styles.emptySubtitle}>
                   Have surplus HPLC, GC-MS, or testing instruments? List them on

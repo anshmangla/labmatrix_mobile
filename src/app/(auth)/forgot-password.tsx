@@ -18,13 +18,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Mail, Lock, KeyRound, ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react-native";
 import { api } from "@/lib/api";
-import { LabMatrixTokens } from "@/constants/theme";
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
-  const { colors } = LabMatrixTokens;
 
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");

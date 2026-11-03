@@ -28,12 +28,9 @@ import {
   Share2,
   Pencil,
   ChevronLeft,
-  Building,
   Send,
   X,
-  MapPin,
   Layers,
-  ArrowRight,
 } from "lucide-react-native";
 import { api } from "@/lib/api";
 import { Requirement } from "@/types/api";

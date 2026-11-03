@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import * as WebBrowser from "expo-web-browser";
-import * as Linking from "expo-linking";
 import { User } from "@/types/api";
 import { api, setAuthHeader } from "@/lib/api";
 import {
@@ -28,6 +27,8 @@ let statusCodes: any = {
 };
 
 try {
+  // Loaded with require() inside try/catch: a static import would crash Expo Go, which lacks this native module
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const gModule = require("@react-native-google-signin/google-signin");
   GoogleSignin = gModule.GoogleSignin;
   if (gModule.statusCodes) {
@@ -40,7 +41,7 @@ try {
       offlineAccess: false,
     });
   }
-} catch (_e) {
+} catch {
   // Running inside standard Expo Go where RNGoogleSignin native binary is not embedded
   GoogleSignin = null;
 }
@@ -210,7 +211,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Sign out previous session first so Android ALWAYS shows the account chooser dialog
           try {
             await GoogleSignin.signOut();
-          } catch (_) {}
+          } catch {}
 
           const signInResult = await GoogleSignin.signIn();
 
@@ -299,7 +300,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (GoogleSignin) {
         try {
           await GoogleSignin.signOut();
-        } catch (_) {}
+        } catch {}
       }
       setAuthHeader(null);
       await removeAuthToken();

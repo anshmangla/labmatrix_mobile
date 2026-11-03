@@ -1,5 +1,4 @@
 import axios from "axios";
-import { Platform } from "react-native";
 import { getAuthToken, removeAuthToken, removeCachedUser } from "./storage";
 
 // Live production backend on Vercel: https://surplus.labmatrixindia.com
@@ -11,6 +10,9 @@ const getBaseUrl = (): string => {
   return "https://surplus.labmatrixindia.com";
 };
 
+// axios.create is axios's documented API; React Native resolves axios to its CommonJS build,
+// where create is a property of the default export rather than a dependable named export
+// eslint-disable-next-line import/no-named-as-default-member
 export const api = axios.create({
   baseURL: getBaseUrl(),
   timeout: 15000,

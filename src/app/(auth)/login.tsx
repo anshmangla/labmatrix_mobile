@@ -32,7 +32,6 @@ import {
   CheckCircle2,
 } from "lucide-react-native";
 import { useAuth } from "@/context/auth-context";
-import { LabMatrixTokens } from "@/constants/theme";
 
 function GoogleLogo() {
   return (
@@ -61,7 +60,6 @@ export default function LoginLandingScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
-  const { colors } = LabMatrixTokens;
   const { login, loginWithGoogle } = useAuth();
 
   const [email, setEmail] = useState("");
@@ -155,7 +153,7 @@ export default function LoginLandingScreen() {
             <View style={[styles.statusPill, isDark && styles.statusPillDark]}>
               <View style={styles.statusDotGreen} />
               <Text style={styles.statusPillText}>
-                India's B2B Marketplace • Refurbished Machinery
+                India&apos;s B2B Marketplace • Refurbished Machinery
               </Text>
             </View>
           </View>
@@ -371,7 +369,7 @@ export default function LoginLandingScreen() {
           {/* 6. Registration Redirect */}
           <View style={styles.registerBlock}>
             <Text style={styles.registerPrompt}>
-              Don't have an account yet?{" "}
+              Don&apos;t have an account yet?{" "}
               <Text
                 style={styles.createAccountLink}
                 onPress={() => router.push("/(auth)/register" as any)}

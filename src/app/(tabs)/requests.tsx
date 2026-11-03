@@ -18,13 +18,11 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search,
-  MapPin,
   Clock,
   ShieldCheck,
-  Shield,
   FileQuestion,
   PlusCircle,
   FileText,
@@ -32,10 +30,7 @@ import {
   Bell,
   User,
   ArrowRight,
-  Layers,
   Wrench,
-  CheckCircle2,
-  Building,
   Check,
   SlidersHorizontal,
 } from "lucide-react-native";

@@ -10,13 +10,12 @@ import {
   Linking,
   Alert,
   ScrollView,
-  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import {
   X,
-  User as UserIcon,
+  User as 
   Mail,
   Building2,
   ShieldCheck,
@@ -28,7 +27,6 @@ import {
   ChevronRight,
   CheckCircle2,
   Shield,
-  FileQuestion,
   ExternalLink,
 } from "lucide-react-native";
 import { useAuth } from "@/context/auth-context";

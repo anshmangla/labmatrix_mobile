@@ -37,7 +37,6 @@ import {
   Microscope,
   PackageCheck,
   Wrench,
-  CheckCircle2,
 } from "lucide-react-native";
 import { api } from "@/lib/api";
 import { Listing } from "@/types/api";

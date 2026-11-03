@@ -31,7 +31,6 @@ import {
 } from "lucide-react-native";
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
-import { LabMatrixTokens } from "@/constants/theme";
 import { openPrivacyPolicy } from "@/lib/links";
 
 function GoogleLogo() {
@@ -61,7 +60,6 @@ export default function RegisterScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
-  const { colors } = LabMatrixTokens;
   const { register, loginWithGoogle } = useAuth();
 
   const [name, setName] = useState("");
@@ -204,7 +202,7 @@ export default function RegisterScreen() {
               Register Laboratory Account
             </Text>
             <Text style={styles.pageSubtitle}>
-              Join India's verified scientific network for surplus instruments and analytical spares.
+              Join India&apos;s verified scientific network for surplus instruments and analytical spares.
             </Text>
 
             <View style={styles.assurancePill}>

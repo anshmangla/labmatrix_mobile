@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   StyleSheet,
   useColorScheme,
-  Alert,
   Image,
   StatusBar,
 } from "react-native";
@@ -21,7 +20,6 @@ import {
   Clock,
   ArrowRight,
   ExternalLink,
-  ShieldCheck,
   User,
   Bell,
   Lock,
@@ -36,7 +34,6 @@ import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { Inquiry } from "@/types/api";
-import { LabMatrixTokens } from "@/constants/theme";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 
@@ -53,7 +50,6 @@ export default function InquiriesScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
-  const { colors } = LabMatrixTokens;
   const { isAuthenticated, user } = useAuth();
 
   // Quick Profile Menu & Escrow Modals
@@ -170,7 +166,6 @@ export default function InquiriesScreen() {
   const sentCount = counts?.sent ?? 0;
 
   const renderInquiryCard = ({ item }: { item: Inquiry }) => {
-    const isListing = Boolean(item.listing);
     const targetTitle = item.listing?.title || item.requirement?.title || "Analytical Instrument";
     const itemType = item.listing?.itemType || item.requirement?.itemType;
     const hasPriceRange =
@@ -268,7 +263,7 @@ export default function InquiriesScreen() {
               {activeTab === "received" ? "INCOMING PROPOSAL / NOTE:" : "YOUR SUBMITTED INQUIRY:"}
             </Text>
             <Text style={[styles.messageText, isDark && styles.messageTextDark]}>
-              "{item.message}"
+              &quot;{item.message}&quot;
             </Text>
           </View>
         </View>

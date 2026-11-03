@@ -8,16 +8,14 @@ import {
   ActivityIndicator,
   StyleSheet,
   useColorScheme,
-  Image,
   StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bell, CheckCheck, Clock, ArrowLeft, ArrowRight, MessageSquare, Package, ChevronRight } from "lucide-react-native";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Bell, CheckCheck, Clock, ArrowLeft, ChevronRight } from "lucide-react-native";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/auth-context";
-import { LabMatrixTokens } from "@/constants/theme";
 
 interface NotificationItem {
   id: string;
@@ -33,8 +31,7 @@ export default function NotificationsScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
-  const { colors } = LabMatrixTokens;
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
 
   const [localNotifications, setLocalNotifications] = useState<NotificationItem[]>([]);
@@ -63,11 +60,15 @@ export default function NotificationsScreen() {
     },
   });
 
-  React.useEffect(() => {
+  // Copy each new result into the locally editable list (handled during render; the null
+  // start makes the first render pick up data that was already cached)
+  const [syncedData, setSyncedData] = useState<typeof data | null>(null);
+  if (data !== syncedData) {
+    setSyncedData(data);
     if (data?.notifications) {
       setLocalNotifications(data.notifications);
     }
-  }, [data]);
+  }
 
   const unreadCount = localNotifications.filter((n: NotificationItem) => !n.isRead).length;
 
@@ -76,7 +77,7 @@ export default function NotificationsScreen() {
     try {
       await api.patch("/api/notifications", { all: true });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
-    } catch (_) {}
+    } catch {}
   };
 
   const handleNotificationPress = async (item: NotificationItem) => {
@@ -88,7 +89,7 @@ export default function NotificationsScreen() {
       try {
         await api.patch("/api/notifications", { id: item.id });
         queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      } catch (e) {
+      } catch {
         // Silent fail
       }
     }

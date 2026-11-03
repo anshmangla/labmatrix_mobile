@@ -40,18 +40,15 @@ import {
   Trash2,
   X,
   Lock,
-  Bookmark,
   Check,
   Pencil,
   Copy,
   Clock,
   Wrench,
-  CheckSquare,
 } from "lucide-react-native";
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
 import { LoadErrorState } from "@/components/LoadErrorState";
-import { LabMatrixTokens } from "@/constants/theme";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 
@@ -139,7 +136,6 @@ export default function AdminConsoleScreen() {
 
   // 1. Fetch Admin KPI Stats
   const {
-    data: statsData,
     refetch: refetchStats,
   } = useQuery({
     queryKey: ["adminStats"],
@@ -220,8 +216,12 @@ export default function AdminConsoleScreen() {
     },
   });
 
-  // Sync incoming queries with local editable states
-  React.useEffect(() => {
+  // Sync incoming queries with local editable states (when a query returns new data;
+  // handled during render rather than in effects). The null start makes the first render
+  // copy data that was already cached when the screen opened.
+  const [syncedUsersData, setSyncedUsersData] = useState<typeof fetchedUsersData | null>(null);
+  if (fetchedUsersData !== syncedUsersData) {
+    setSyncedUsersData(fetchedUsersData);
     if (fetchedUsersData && fetchedUsersData.length > 0) {
       const unique = fetchedUsersData.filter(
         (u: any, index: number, self: any[]) =>
@@ -229,21 +229,25 @@ export default function AdminConsoleScreen() {
       );
       setLocalUsersList(unique);
     }
-  }, [fetchedUsersData]);
+  }
 
-  React.useEffect(() => {
+  const [syncedListingsData, setSyncedListingsData] = useState<typeof fetchedListingsData | null>(null);
+  if (fetchedListingsData !== syncedListingsData) {
+    setSyncedListingsData(fetchedListingsData);
     if (fetchedListingsData && fetchedListingsData.length > 0) {
       setLocalListingsList(fetchedListingsData);
     }
-  }, [fetchedListingsData]);
+  }
 
-  React.useEffect(() => {
+  const [syncedRequirementsData, setSyncedRequirementsData] = useState<typeof fetchedRequirementsData | null>(null);
+  if (fetchedRequirementsData !== syncedRequirementsData) {
+    setSyncedRequirementsData(fetchedRequirementsData);
     if (fetchedRequirementsData && fetchedRequirementsData.length > 0) {
       setLocalRequirementsList(fetchedRequirementsData);
     }
-  }, [fetchedRequirementsData]);
+  }
 
-  const inquiries = inquiriesData || [];
+  const inquiries = useMemo(() => inquiriesData || [], [inquiriesData]);
 
   // Filter users by search query
   const filteredUsers = useMemo(() => {

@@ -45,7 +45,6 @@ import {
 } from "lucide-react-native";
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
-import { LabMatrixTokens } from "@/constants/theme";
 
 const CATEGORIES = [
   "HPLC & UHPLC",
@@ -91,7 +90,6 @@ export default function SellScreen() {
   const isEditMode = !!edit;
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
-  const { colors } = LabMatrixTokens;
   const { isAuthenticated, user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -176,16 +174,6 @@ export default function SellScreen() {
   const [isLoadingEdit, setIsLoadingEdit] = useState(false);
   const [submittedData, setSubmittedData] = useState<{ id: string; title: string; itemType: string } | null>(null);
 
-  // Initialize itemType from query param if passed
-  useEffect(() => {
-    if (!edit && type) {
-      if (type === "SPARE_PART") {
-        handleItemTypeChange("SPARE_PART");
-      } else if (type === "NEW_INSTRUMENT") {
-        handleItemTypeChange("NEW_INSTRUMENT");
-      }
-    }
-  }, [type, edit]);
 
   // Load listing for edit mode
   useEffect(() => {
@@ -227,13 +215,6 @@ export default function SellScreen() {
     };
   }, [edit]);
 
-  // Sync profile details if available
-  useEffect(() => {
-    if (user) {
-      if (user.phoneNumber && !phoneNumber) setPhoneNumber(user.phoneNumber);
-      if (user.companyName && !companyName) setCompanyName(user.companyName);
-    }
-  }, [user]);
 
   // Adjust conditions and category defaults when itemType changes
   const handleItemTypeChange = (type: "MACHINE" | "NEW_INSTRUMENT" | "SPARE_PART") => {
@@ -249,6 +230,30 @@ export default function SellScreen() {
       if (category === "Spare Parts & Consumables") setCategory(CATEGORIES[0]);
     }
   };
+
+  // Initialize itemType from query param if passed (handled during render, including the first one)
+  const typeParamKey = `${type ?? ""}|${edit ?? ""}`;
+  const [handledTypeParam, setHandledTypeParam] = useState<string | null>(null);
+  if (typeParamKey !== handledTypeParam) {
+    setHandledTypeParam(typeParamKey);
+    if (!edit && type) {
+      if (type === "SPARE_PART") {
+        handleItemTypeChange("SPARE_PART");
+      } else if (type === "NEW_INSTRUMENT") {
+        handleItemTypeChange("NEW_INSTRUMENT");
+      }
+    }
+  }
+
+  // Prefill contact details from the profile when it loads (without overwriting what was typed)
+  const [syncedUser, setSyncedUser] = useState<typeof user | undefined>(undefined);
+  if (user !== syncedUser) {
+    setSyncedUser(user);
+    if (user) {
+      if (user.phoneNumber && !phoneNumber) setPhoneNumber(user.phoneNumber);
+      if (user.companyName && !companyName) setCompanyName(user.companyName);
+    }
+  }
 
   const currentConditions =
     itemType === "SPARE_PART"
@@ -565,7 +570,7 @@ export default function SellScreen() {
             Entry Submitted for Approval!
           </Text>
           <Text style={styles.successSubtitle}>
-            Your listing for <Text style={{ fontWeight: "800", color: "#0f172a" }}>"{submittedData.title}"</Text> has
+            Your listing for <Text style={{ fontWeight: "800", color: "#0f172a" }}>&quot;{submittedData.title}&quot;</Text> has
             been created and sent to our admin team for verification.
           </Text>
 
