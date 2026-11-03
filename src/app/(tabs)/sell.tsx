@@ -17,6 +17,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
+import { prepareImageForUpload, type PickedImage } from "@/lib/upload-image";
 import { useQueryClient } from "@tanstack/react-query";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
@@ -287,7 +288,7 @@ export default function SellScreen() {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        await uploadImages(result.assets.map((asset) => asset.uri));
+        await uploadImages(result.assets);
       }
     } catch (err) {
       console.error("Image pick error:", err);
@@ -312,7 +313,7 @@ export default function SellScreen() {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        await uploadImages(result.assets.map((asset) => asset.uri));
+        await uploadImages(result.assets);
       }
     } catch (err) {
       console.error("Camera capture error:", err);
@@ -346,8 +347,9 @@ export default function SellScreen() {
     );
   };
 
-  /** Uploads one photo and returns its hosted URL. */
-  const uploadImage = async (uri: string): Promise<string | null> => {
+  /** Scales the photo down to upload size if needed, uploads it and returns its hosted URL. */
+  const uploadImage = async (image: PickedImage): Promise<string | null> => {
+    const uri = await prepareImageForUpload(image);
     const formData = new FormData();
     const filename = uri.split("/").pop() || "upload.jpg";
     const match = /\.(\w+)$/.exec(filename);
@@ -371,16 +373,16 @@ export default function SellScreen() {
    * Uploads several photos a few at a time instead of one after another. Photos are added
    * in the order they were picked, each as soon as it and the ones before it have finished.
    */
-  const uploadImages = async (uris: string[]) => {
+  const uploadImages = async (images: PickedImage[]) => {
     const CONCURRENCY = 3;
-    const results: (string | null | undefined)[] = new Array(uris.length).fill(undefined);
+    const results: (string | null | undefined)[] = new Array(images.length).fill(undefined);
     let nextToStart = 0;
     let nextToAdd = 0;
     let firstError: any = null;
 
     const addFinishedInOrder = () => {
       const ready: string[] = [];
-      while (nextToAdd < uris.length && results[nextToAdd] !== undefined) {
+      while (nextToAdd < images.length && results[nextToAdd] !== undefined) {
         const url = results[nextToAdd++];
         if (url) ready.push(url);
       }
@@ -388,10 +390,10 @@ export default function SellScreen() {
     };
 
     const worker = async () => {
-      while (nextToStart < uris.length) {
+      while (nextToStart < images.length) {
         const index = nextToStart++;
         try {
-          results[index] = await uploadImage(uris[index]);
+          results[index] = await uploadImage(images[index]);
         } catch (error: any) {
           console.error("Upload error:", error);
           firstError = firstError ?? error;
@@ -403,7 +405,7 @@ export default function SellScreen() {
 
     setIsUploadingPhoto(true);
     try {
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, uris.length) }, worker));
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, images.length) }, worker));
     } finally {
       setIsUploadingPhoto(false);
     }

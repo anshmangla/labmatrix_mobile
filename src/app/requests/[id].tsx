@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Clock,
   ShieldCheck,
@@ -50,6 +50,7 @@ export default function RequirementDetailScreen() {
   const isDark = colorScheme === "dark";
   const { colors } = LabMatrixTokens;
   const { isAuthenticated, user } = useAuth();
+  const queryClient = useQueryClient();
 
   // Offer modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -111,6 +112,8 @@ export default function RequirementDetailScreen() {
         phoneNumber: phone.trim(),
         message: message.trim(),
       });
+      // Show it in the Inquiries tab's "Sent" list right away
+      queryClient.invalidateQueries({ queryKey: ["inquiries"] });
 
       setModalVisible(false);
       setMessage("");

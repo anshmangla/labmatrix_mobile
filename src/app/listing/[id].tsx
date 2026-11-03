@@ -170,6 +170,8 @@ export default function ListingDetailScreen() {
         phoneNumber: inquiryPhone.trim(),
         message: inquiryMessage.trim(),
       });
+      // Show it in the Inquiries tab's "Sent" list right away
+      queryClient.invalidateQueries({ queryKey: ["inquiries"] });
 
       setInquiryModalVisible(false);
       setInquiryMessage("");

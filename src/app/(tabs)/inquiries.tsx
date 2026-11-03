@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import {
   MessageSquare,
   Building2,
@@ -39,6 +39,15 @@ import { Inquiry } from "@/types/api";
 import { LabMatrixTokens } from "@/constants/theme";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
+
+const INQUIRY_PAGE_SIZE = 20;
+
+/** One page of GET /api/inquiries?box=...; counts come with the first page only. */
+type InquiryPage = {
+  inquiries: Inquiry[];
+  nextCursor: string | null;
+  counts?: { received: number; sent: number };
+};
 
 export default function InquiriesScreen() {
   const router = useRouter();
@@ -66,19 +75,29 @@ export default function InquiriesScreen() {
 
   const [activeTab, setActiveTab] = useState<"received" | "sent">("received");
 
+  const queryClient = useQueryClient();
+
+  // Loads the active tab a page at a time as you scroll, instead of every inquiry at once
   const {
-    data,
+    data: pagedData,
     isLoading,
     isError,
     isRefetching,
     refetch,
-  } = useQuery({
-    queryKey: ["inquiries"],
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ["inquiries", activeTab],
     enabled: isAuthenticated,
-    queryFn: async () => {
-      const res = await api.get("/api/inquiries");
-      return res.data as { received: Inquiry[]; sent: Inquiry[] };
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }) => {
+      const params: Record<string, string | number> = { box: activeTab, limit: INQUIRY_PAGE_SIZE };
+      if (pageParam) params.cursor = pageParam;
+      const res = await api.get("/api/inquiries", { params });
+      return res.data as InquiryPage;
     },
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 
   const formatINR = (amount?: number | null) => {
@@ -141,9 +160,14 @@ export default function InquiriesScreen() {
     );
   }
 
-  const inquiriesList = activeTab === "received" ? data?.received || [] : data?.sent || [];
-  const receivedCount = data?.received?.length || 0;
-  const sentCount = data?.sent?.length || 0;
+  const inquiriesList = pagedData?.pages.flatMap((p) => p.inquiries) ?? [];
+  // Both tab totals arrive with the first page; while the other tab loads, keep the last known totals
+  const otherTab = activeTab === "received" ? "sent" : "received";
+  const counts =
+    pagedData?.pages[0]?.counts ??
+    queryClient.getQueryData<InfiniteData<InquiryPage>>(["inquiries", otherTab])?.pages[0]?.counts;
+  const receivedCount = counts?.received ?? 0;
+  const sentCount = counts?.sent ?? 0;
 
   const renderInquiryCard = ({ item }: { item: Inquiry }) => {
     const isListing = Boolean(item.listing);
@@ -431,9 +455,16 @@ export default function InquiriesScreen() {
           renderItem={renderInquiryCard}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          onEndReached={() => {
+            if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+          }}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            isFetchingNextPage ? <ActivityIndicator style={{ marginVertical: 20 }} color="#033a7d" /> : undefined
+          }
           refreshControl={
             <RefreshControl
-              refreshing={isRefetching}
+              refreshing={isRefetching && !isFetchingNextPage}
               onRefresh={() => {
                 refetch();
               }}
