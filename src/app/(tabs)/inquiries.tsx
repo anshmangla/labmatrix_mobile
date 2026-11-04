@@ -1,3 +1,4 @@
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import React, { useState, useMemo } from "react";
 import {
   View,
@@ -7,7 +8,6 @@ import {
   RefreshControl,
   ActivityIndicator,
   StyleSheet,
-  useColorScheme,
   Image,
   StatusBar,
 } from "react-native";

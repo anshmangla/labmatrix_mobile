@@ -1,3 +1,4 @@
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -7,7 +8,6 @@ import {
   ActivityIndicator,
   Alert,
   StyleSheet,
-  useColorScheme,
   KeyboardAvoidingView,
   Platform,
   ScrollView,

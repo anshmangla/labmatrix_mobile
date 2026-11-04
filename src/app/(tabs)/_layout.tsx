@@ -1,6 +1,7 @@
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import React from "react";
 import { Tabs } from "expo-router";
-import { useColorScheme, View, StyleSheet, Platform } from "react-native";
+import { View, StyleSheet, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Store from "lucide-react-native/icons/store";
 import ClipboardList from "lucide-react-native/icons/clipboard-list";

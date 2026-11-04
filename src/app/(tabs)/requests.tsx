@@ -1,3 +1,4 @@
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   View,
@@ -8,7 +9,6 @@ import {
   RefreshControl,
   ActivityIndicator,
   StyleSheet,
-  useColorScheme,
   ScrollView,
   Modal,
   Platform,
