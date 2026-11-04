@@ -22,6 +22,7 @@ import {
   shouldPersistQuery,
 } from "@/lib/query-persistence";
 import { wakeServer } from "@/lib/wake-server";
+import { OnboardingModal } from "@/components/OnboardingModal";
 
 // After this long in the background, connections may have died and data may be out of date
 const RESUME_REFRESH_AFTER_MS = 30_000;
@@ -131,6 +132,7 @@ function RootNavigation() {
         <Stack.Screen name="admin" options={{ headerShown: false }} />
         <Stack.Screen name="contact" options={{ headerShown: false }} />
       </Stack>
+      <OnboardingModal />
     </ThemeProvider>
   );
 }

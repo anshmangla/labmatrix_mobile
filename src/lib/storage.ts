@@ -172,3 +172,66 @@ export async function clearSellDraft(): Promise<void> {
     console.error("Failed to clear draft:", err);
   }
 }
+
+const ONBOARDING_KEY = "labmatrix_onboarding_completed";
+const PREFERENCES_KEY = "labmatrix_user_preferences";
+
+export interface UserPreferences {
+  role: "SOURCING" | "SELLING" | "BOTH" | null;
+  categories: string[];
+}
+
+export async function hasSeenOnboarding(): Promise<boolean> {
+  try {
+    let val: string | null = null;
+    if (Platform.OS === "web") {
+      val = localStorage.getItem(ONBOARDING_KEY);
+    } else {
+      val = await SecureStore.getItemAsync(ONBOARDING_KEY);
+    }
+    return val === "true";
+  } catch {
+    return false;
+  }
+}
+
+export async function setOnboardingCompleted(completed: boolean = true): Promise<void> {
+  try {
+    const val = completed ? "true" : "false";
+    if (Platform.OS === "web") {
+      localStorage.setItem(ONBOARDING_KEY, val);
+    } else {
+      await SecureStore.setItemAsync(ONBOARDING_KEY, val);
+    }
+  } catch (err) {
+    console.error("Failed to set onboarding completed:", err);
+  }
+}
+
+export async function getUserPreferences(): Promise<UserPreferences> {
+  try {
+    let json: string | null = null;
+    if (Platform.OS === "web") {
+      json = localStorage.getItem(PREFERENCES_KEY);
+    } else {
+      json = await SecureStore.getItemAsync(PREFERENCES_KEY);
+    }
+    if (!json) return { role: null, categories: [] };
+    return JSON.parse(json);
+  } catch {
+    return { role: null, categories: [] };
+  }
+}
+
+export async function saveUserPreferences(prefs: UserPreferences): Promise<void> {
+  try {
+    const json = JSON.stringify(prefs);
+    if (Platform.OS === "web") {
+      localStorage.setItem(PREFERENCES_KEY, json);
+    } else {
+      await SecureStore.setItemAsync(PREFERENCES_KEY, json);
+    }
+  } catch (err) {
+    console.error("Failed to save user preferences:", err);
+  }
+}

@@ -42,6 +42,8 @@ import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
+import { OnboardingModal } from "@/components/OnboardingModal";
+import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
 import { getSavedListingIds, toggleSavedListingId } from "@/lib/storage";
 
 function formatRelativeTime(dateString: string): string {
@@ -102,6 +104,7 @@ export default function ProfileScreen() {
   // Modals
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [escrowModalVisible, setEscrowModalVisible] = useState(false);
+  const [onboardingModalVisible, setOnboardingModalVisible] = useState(false);
 
   // Manage Bottom Sheets
   const [manageListing, setManageListing] = useState<any | null>(null);
@@ -1258,7 +1261,24 @@ export default function ProfileScreen() {
               </TouchableOpacity>
 
               {/* Help & Escrow */}
-              <Text style={styles.sectionHeading}>Support & Verification</Text>
+              <Text style={styles.sectionHeading}>Preferences & Support</Text>
+
+              <TouchableOpacity
+                style={styles.settingsMenuRow}
+                activeOpacity={0.7}
+                onPress={() => {
+                  setSettingsModalVisible(false);
+                  setOnboardingModalVisible(true);
+                }}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <SlidersHorizontal size={18} color="#033a7d" />
+                  <Text style={[styles.settingsMenuText, isDark && styles.settingsMenuTextDark]}>
+                    Role & Instrument Preferences
+                  </Text>
+                </View>
+                <ChevronRight size={18} color="#94a3b8" />
+              </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.settingsMenuRow}
@@ -1402,6 +1422,12 @@ export default function ProfileScreen() {
       <EscrowPolicyModal
         visible={escrowModalVisible}
         onClose={() => setEscrowModalVisible(false)}
+      />
+
+      {/* Onboarding Preferences Modal */}
+      <OnboardingModal
+        forceVisible={onboardingModalVisible}
+        onClose={() => setOnboardingModalVisible(false)}
       />
     </SafeAreaView>
   );
