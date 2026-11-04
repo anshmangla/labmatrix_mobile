@@ -18,6 +18,8 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { prepareImageForUpload, type PickedImage } from "@/lib/upload-image";
+import * as DocumentPicker from "expo-document-picker";
+import { uploadDocument } from "@/lib/upload-document";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 import { useAuth } from "@/context/auth-context";
@@ -25,6 +27,7 @@ import { api } from "@/lib/api";
 import { saveSellDraft, getSellDraft, clearSellDraft } from "@/lib/storage";
 
 import Upload from "lucide-react-native/icons/upload";
+import FileText from "lucide-react-native/icons/file-text";
 import X from "lucide-react-native/icons/x";
 import Lock from "lucide-react-native/icons/lock";
 import Phone from "lucide-react-native/icons/phone";
@@ -136,6 +139,10 @@ export default function SellScreen() {
   const [photos, setPhotos] = useState<string[]>([]);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
+  // PDF Documents
+  const [documents, setDocuments] = useState<string[]>([]);
+  const [isUploadingDocument, setIsUploadingDocument] = useState(false);
+
   // Private Contact Details
   const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || "");
   const [companyName, setCompanyName] = useState(user?.companyName || "");
@@ -191,6 +198,7 @@ export default function SellScreen() {
           setQuantity(listing.quantity ? String(listing.quantity) : "1");
           setDescription(listing.description || "");
           setPhotos(listing.photos || []);
+          setDocuments(listing.documents || []);
           if (listing.partNumber) setPartNumber(listing.partNumber);
           if (listing.compatibleWith) setCompatibleWith(listing.compatibleWith);
         }
@@ -225,6 +233,7 @@ export default function SellScreen() {
         if (draft.quantity) setQuantity(draft.quantity);
         if (draft.description) setDescription(draft.description);
         if (draft.photos && Array.isArray(draft.photos)) setPhotos(draft.photos);
+        if (draft.documents && Array.isArray(draft.documents)) setDocuments(draft.documents);
         if (draft.phoneNumber) setPhoneNumber(draft.phoneNumber);
         if (draft.companyName) setCompanyName(draft.companyName);
         if (draft.currentStep && draft.currentStep >= 1 && draft.currentStep <= 4) {
@@ -256,6 +265,7 @@ export default function SellScreen() {
         quantity,
         description,
         photos,
+        documents,
         phoneNumber,
         companyName,
         currentStep,
@@ -283,6 +293,7 @@ export default function SellScreen() {
     quantity,
     description,
     photos,
+    documents,
     phoneNumber,
     companyName,
     currentStep,
@@ -432,6 +443,47 @@ export default function SellScreen() {
     setPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handlePickDocument = async () => {
+    if (documents.length >= 5) {
+      Alert.alert("Limit Reached", "A maximum of 5 documents can be attached per listing.");
+      return;
+    }
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "application/pdf",
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
+
+      const asset = result.assets[0];
+      if (asset.size && asset.size > 10 * 1024 * 1024) {
+        Alert.alert("File Too Large", "PDF document must be under 10MB.");
+        return;
+      }
+
+      setIsUploadingDocument(true);
+      const url = await uploadDocument(asset);
+      if (url) {
+        setDocuments((prev) => [...prev, url]);
+      }
+    } catch (err: any) {
+      console.error("Document upload error:", err);
+      Alert.alert(
+        "Upload Failed",
+        err?.response?.data?.error || "Could not upload document. Please ensure it is a valid PDF under 10MB."
+      );
+    } finally {
+      setIsUploadingDocument(false);
+    }
+  };
+
+  const removeDocument = (index: number) => {
+    setDocuments((prev) => prev.filter((_, i) => i !== index));
+  };
+
   // Step Validation & Navigation
   const handleStep1Next = () => {
     const errors: Record<string, string> = {};
@@ -511,6 +563,7 @@ export default function SellScreen() {
               setCategory("");
               setCondition("");
               setPhotos([]);
+              setDocuments([]);
               setDescription("");
               setMinPrice("");
               setMaxPrice("");
@@ -552,6 +605,7 @@ export default function SellScreen() {
         quantity: Math.max(1, parseInt(quantity, 10) || 1),
         description: description.trim(),
         photos,
+        documents,
         phoneNumber: phoneNumber.trim(),
         companyName: companyName.trim() || undefined,
       };
@@ -698,6 +752,7 @@ export default function SellScreen() {
                 setMaxPrice("");
                 setIsPriceOnRequest(false);
                 setPhotos([]);
+              setDocuments([]);
                 setPartNumber("");
                 setCompatibleWith("");
                 setCurrentStep(1);
@@ -1080,6 +1135,70 @@ export default function SellScreen() {
                     Listings with clear photos of the serial number nameplate and detector modules receive quote inquiries 3x faster.
                   </Text>
                 </View>
+              </View>
+
+              {/* Technical Documents (PDF) */}
+              <View style={[styles.fieldCard, { marginTop: 14 }]}>
+                <View style={styles.photosHeaderRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                      Technical Documents (PDF)
+                    </Text>
+                    <Text style={styles.photosSubHint}>
+                      Attach specification sheets, calibration certificates, or user manuals (Optional, max 10MB per file).
+                    </Text>
+                  </View>
+                  <View style={styles.photoCountBadge}>
+                    <Text style={styles.photoCountBadgeText}>{documents.length} / 5</Text>
+                  </View>
+                </View>
+
+                {/* Attached Document List */}
+                {documents.map((docUrl, index) => {
+                  const rawName = docUrl.split("/").pop()?.split("?")[0] || `Document_${index + 1}.pdf`;
+                  const displayName = decodeURIComponent(rawName);
+                  return (
+                    <View key={index} style={styles.docRowItem}>
+                      <View style={styles.docIconPill}>
+                        <FileText size={16} color="#dc2626" />
+                      </View>
+                      <Text style={styles.docRowTitle} numberOfLines={1}>
+                        {displayName}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.docRemoveBtn}
+                        onPress={() => removeDocument(index)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <X size={15} color="#64748b" />
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+
+                {/* Add Document Button */}
+                {documents.length < 5 && (
+                  <TouchableOpacity
+                    style={[styles.addDocBtn, isUploadingDocument && { opacity: 0.6 }]}
+                    onPress={handlePickDocument}
+                    disabled={isUploadingDocument}
+                    activeOpacity={0.8}
+                  >
+                    {isUploadingDocument ? (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <ActivityIndicator size="small" color="#033a7d" />
+                        <Text style={styles.addDocBtnText}>Uploading document...</Text>
+                      </View>
+                    ) : (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <FileText size={16} color="#033a7d" />
+                        <Text style={styles.addDocBtnText}>
+                          {documents.length === 0 ? "+ Attach PDF Document" : "+ Add Another PDF"}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           )}
@@ -2318,5 +2437,62 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#64748b",
+  },
+  fieldCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 16,
+  },
+  fieldCardDark: {
+    backgroundColor: "#0b1329",
+    borderColor: "#1e293b",
+  },
+  docRowItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 8,
+  },
+  docIconPill: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: "#fee2e2",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  docRowTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#1e293b",
+  },
+  docRemoveBtn: {
+    padding: 4,
+  },
+  addDocBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#cbd5e1",
+    borderStyle: "dashed",
+    borderRadius: 10,
+    paddingVertical: 12,
+    marginTop: 10,
+    backgroundColor: "#ffffff",
+  },
+  addDocBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#033a7d",
   },
 });

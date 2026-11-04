@@ -26,6 +26,7 @@ export interface Listing {
   condition: string;
   location: string;
   photos: string[];
+  documents?: string[];
   quantity: number;
   status: ListingStatus;
   isApproved: boolean;
@@ -49,6 +50,7 @@ export interface Requirement {
   itemType: string;
   partNumber?: string | null;
   compatibleWith?: string | null;
+  documents?: string[];
   status: RequirementStatus;
   isApproved: boolean;
   buyerId?: string;

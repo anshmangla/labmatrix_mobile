@@ -19,6 +19,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { Image as ExpoImage } from "expo-image";
 import MapPin from "lucide-react-native/icons/map-pin";
@@ -35,6 +36,7 @@ import Video from "lucide-react-native/icons/video";
 import CheckCircle2 from "lucide-react-native/icons/circle-check";
 import Truck from "lucide-react-native/icons/truck";
 import FileText from "lucide-react-native/icons/file-text";
+import ExternalLink from "lucide-react-native/icons/external-link";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Building2 from "lucide-react-native/icons/building-complex";
@@ -529,6 +531,49 @@ export default function ListingDetailScreen() {
             <Text style={[styles.descriptionText, isDark && styles.descriptionTextDark]}>
               {data.description}
             </Text>
+          </View>
+        ) : null}
+
+        {/* Attached Technical Documents & Manuals */}
+        {data.documents && data.documents.length > 0 ? (
+          <View style={[styles.sectionContainer, isDark && styles.sectionContainerDark]}>
+            <View style={styles.sectionHeader}>
+              <FileText size={18} color="#dc2626" />
+              <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>
+                Attached Documents ({data.documents.length})
+              </Text>
+            </View>
+            <View style={{ gap: 8, marginTop: 4 }}>
+              {data.documents.map((docUrl: string, idx: number) => {
+                const rawName = docUrl.split("/").pop()?.split("?")[0] || `Document_${idx + 1}.pdf`;
+                const displayName = decodeURIComponent(rawName);
+                return (
+                  <TouchableOpacity
+                    key={idx}
+                    style={styles.docItemCard}
+                    activeOpacity={0.8}
+                    onPress={async () => {
+                      try {
+                        await WebBrowser.openBrowserAsync(docUrl);
+                      } catch {
+                        Linking.openURL(docUrl);
+                      }
+                    }}
+                  >
+                    <View style={styles.docIconPill}>
+                      <FileText size={18} color="#dc2626" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.docNameText} numberOfLines={1}>
+                        {displayName}
+                      </Text>
+                      <Text style={styles.docHintText}>Tap to view or download PDF</Text>
+                    </View>
+                    <ExternalLink size={16} color="#033a7d" />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
         ) : null}
 
@@ -1983,5 +2028,34 @@ const styles = StyleSheet.create({
   magnifyThumbImg: {
     width: "100%",
     height: "100%",
+  },
+  docItemCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 12,
+  },
+  docIconPill: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: "#fee2e2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  docNameText: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: "#0f172a",
+  },
+  docHintText: {
+    fontSize: 11.5,
+    color: "#64748b",
+    marginTop: 2,
   },
 });
