@@ -225,9 +225,12 @@ export default function ProfileScreen() {
         {
           text: "Sign Out",
           style: "destructive",
-          onPress: async () => {
+          onPress: () => {
             setSettingsModalVisible(false);
-            await logout();
+            // Wait for native Android Dialog dismissal before clearing session
+            setTimeout(async () => {
+              await logout();
+            }, 300);
           },
         },
       ]

@@ -44,6 +44,7 @@ import { LabMatrixTokens } from "@/constants/theme";
 import { getOptimizedImageUrl, IMAGE_PRESETS } from "@/lib/images";
 import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
+import { OnboardingModal } from "@/components/OnboardingModal";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { getSavedListingIds, toggleSavedListingId } from "@/lib/storage";
@@ -163,12 +164,12 @@ const ListingCard = memo(function ListingCard({
       onPressIn={prefetchDetailPhoto}
       onPress={open}
     >
-      {/* 86x86 Thumbnail with rounded corners */}
+      {/* 86x86 Thumbnail with rounded corners - image always bright & clear */}
       <View style={[styles.compactThumbContainer, isDark && styles.compactThumbContainerDark]}>
         {hasPhoto ? (
           <ExpoImage
             source={{ uri: getOptimizedImageUrl(item.photos[0], IMAGE_PRESETS.CARD) }}
-            style={[styles.compactThumbImg, isSold && { opacity: 0.6 }]}
+            style={styles.compactThumbImg}
             contentFit="cover"
             cachePolicy="memory-disk"
             recyclingKey={item.id}
@@ -176,11 +177,6 @@ const ListingCard = memo(function ListingCard({
         ) : (
           <View style={[styles.compactThumbPlaceholder, isDark && styles.compactThumbPlaceholderDark]}>
             <Tag size={20} color={isDark ? "#64748b" : "#94a3b8"} />
-          </View>
-        )}
-        {isSold && (
-          <View style={styles.compactSoldOverlay}>
-            <Text style={styles.compactSoldOverlayText}>SOLD</Text>
           </View>
         )}
       </View>
@@ -198,6 +194,11 @@ const ListingCard = memo(function ListingCard({
               <Text style={styles.compactSparePillText}>SPARE</Text>
             </View>
           )}
+          {isSold && (
+            <View style={styles.compactSoldPill}>
+              <Text style={styles.compactSoldPillText}>SOLD</Text>
+            </View>
+          )}
         </View>
 
         <Text style={[styles.compactTitle, isDark && styles.compactTitleDark]} numberOfLines={2}>
@@ -212,16 +213,23 @@ const ListingCard = memo(function ListingCard({
         </View>
 
         <View style={styles.compactBottomRow}>
-          <Text
-            style={[
-              styles.compactPrice,
-              isDark && styles.compactPriceDark,
-              isSold && styles.compactPriceSold,
-            ]}
-            numberOfLines={1}
-          >
-            {priceText}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 }}>
+            <Text
+              style={[
+                styles.compactPrice,
+                isDark && styles.compactPriceDark,
+                isSold && styles.compactPriceSold,
+              ]}
+              numberOfLines={1}
+            >
+              {priceText}
+            </Text>
+            {isSold && (
+              <View style={styles.soldBadgeMini}>
+                <Text style={styles.soldBadgeMiniText}>Sold Out</Text>
+              </View>
+            )}
+          </View>
 
           <TouchableOpacity
             style={styles.compactHeartBtn}
@@ -1010,6 +1018,9 @@ export default function MarketplaceScreen() {
         visible={escrowModalVisible}
         onClose={() => setEscrowModalVisible(false)}
       />
+
+      {/* First-time visitor onboarding */}
+      <OnboardingModal />
     </SafeAreaView>
   );
 }
@@ -1352,21 +1363,32 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
   },
-  compactSoldOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(15, 23, 42, 0.75)",
-    alignItems: "center",
-    justifyContent: "center",
+  compactSoldPill: {
+    backgroundColor: "#fef2f2",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
-  compactSoldOverlayText: {
-    color: "#ffffff",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 0.5,
+  compactSoldPillText: {
+    color: "#dc2626",
+    fontSize: 9.5,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  soldBadgeMini: {
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+  },
+  soldBadgeMiniText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748b",
   },
   compactInfo: {
     flex: 1,

@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import Check from "lucide-react-native/icons/check";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
+import { useAuth } from "@/context/auth-context";
 import {
   hasSeenOnboarding,
   setOnboardingCompleted,
@@ -49,6 +50,8 @@ export function OnboardingModal({ forceVisible, onClose }: OnboardingModalProps)
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
 
+  const { isAuthenticated } = useAuth();
+
   const [visible, setVisible] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [selectedRole, setSelectedRole] = useState<"SOURCING" | "SELLING" | "BOTH">("SOURCING");
@@ -66,13 +69,16 @@ export function OnboardingModal({ forceVisible, onClose }: OnboardingModalProps)
       return;
     }
 
+    // Do not show onboarding automatically if user is authenticated
+    if (isAuthenticated) return;
+
     // Auto check if user has seen onboarding
     hasSeenOnboarding().then((seen) => {
       if (!seen) {
         setVisible(true);
       }
     });
-  }, [forceVisible]);
+  }, [forceVisible, isAuthenticated]);
 
   const handleSkip = async () => {
     await setOnboardingCompleted(true);
@@ -116,7 +122,7 @@ export function OnboardingModal({ forceVisible, onClose }: OnboardingModalProps)
     <Modal
       visible={visible}
       animationType="fade"
-      transparent={false}
+      transparent={true}
       onRequestClose={handleSkip}
     >
       <View

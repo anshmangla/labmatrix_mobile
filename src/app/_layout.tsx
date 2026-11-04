@@ -22,7 +22,6 @@ import {
   shouldPersistQuery,
 } from "@/lib/query-persistence";
 import { wakeServer } from "@/lib/wake-server";
-import { OnboardingModal } from "@/components/OnboardingModal";
 
 // After this long in the background, connections may have died and data may be out of date
 const RESUME_REFRESH_AFTER_MS = 30_000;
@@ -81,19 +80,12 @@ function RootNavigation() {
   useEffect(() => {
     if (isLoading) return;
 
-    // Guests can browse the marketplace and requests; screens that need an account
-    // (Sell, Inquiries, Profile, Notifications, Admin) show their own sign-in prompt.
+    // If app boots while already authenticated on an auth page, redirect to tabs
     const inAuthGroup = segments[0] === "(auth)";
-
     if (isAuthenticated && inAuthGroup) {
-      // Just signed in: go back to where sign-in was started (e.g. a listing), else the marketplace
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace("/(tabs)");
-      }
+      router.replace("/(tabs)");
     }
-  }, [isAuthenticated, isLoading, segments, router]);
+  }, [isLoading]);
 
   // Keep the native splash up while the session and saved data are read from the device (a few ms),
   // then reveal the first screen directly instead of showing a second, JS-drawn splash.
@@ -132,7 +124,6 @@ function RootNavigation() {
         <Stack.Screen name="admin" options={{ headerShown: false }} />
         <Stack.Screen name="contact" options={{ headerShown: false }} />
       </Stack>
-      <OnboardingModal />
     </ThemeProvider>
   );
 }
