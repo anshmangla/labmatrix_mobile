@@ -36,6 +36,7 @@ import LayoutGrid from "lucide-react-native/icons/layout-grid";
 import Microscope from "lucide-react-native/icons/microscope";
 import PackageCheck from "lucide-react-native/icons/package-check";
 import Wrench from "lucide-react-native/icons/wrench";
+import Heart from "lucide-react-native/icons/heart";
 import { api } from "@/lib/api";
 import { Listing } from "@/types/api";
 import { useAuth } from "@/context/auth-context";
@@ -45,6 +46,7 @@ import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
+import { getSavedListingIds, toggleSavedListingId } from "@/lib/storage";
 
 // Marketplace sections, shown as the tab bar and (for the three item types) as entry tiles
 const ITEM_TYPES = [
@@ -71,8 +73,6 @@ const ITEM_TYPES = [
     description: "Boards, lamps, modules & consumables",
   },
 ];
-const SECTION_TILES = ITEM_TYPES.filter((t) => t.value !== "ALL");
-
 const CATEGORIES = [
   "ALL",
   "HPLC & UHPLC",
@@ -98,29 +98,31 @@ const PRICE_TIERS = [
 ];
 
 const STATUS_OPTIONS: { label: string; value: "ALL" | "AVAILABLE" | "SOLD" }[] = [
-  { label: "All Items", value: "ALL" },
   { label: "Available / In Stock", value: "AVAILABLE" },
+  { label: "All Items", value: "ALL" },
   { label: "Sold Out", value: "SOLD" },
 ];
 
 const PAGE_SIZE = 30;
 
 /**
- * One marketplace card. Memoized so typing in search or opening a modal doesn't
- * re-render every card in the feed.
+ * One marketplace card. Compact horizontal row (Direction A) fitting ~3.5 items on screen.
+ * Memoized so typing in search or opening a modal doesn't re-render every card.
  */
 const ListingCard = memo(function ListingCard({
   item,
   isDark,
+  isSaved,
+  onToggleSave,
   onOpen,
 }: {
   item: Listing;
   isDark: boolean;
+  isSaved: boolean;
+  onToggleSave: (id: string) => void;
   onOpen: (id: string) => void;
 }) {
-  const { colors } = LabMatrixTokens;
   const open = () => onOpen(item.id);
-  // Start downloading the detail screen's large photo as soon as the card is pressed
   const prefetchDetailPhoto = () => {
     if (item.photos?.[0]) {
       ExpoImage.prefetch(getOptimizedImageUrl(item.photos[0], IMAGE_PRESETS.HERO), "memory-disk").catch(() => {});
@@ -140,157 +142,180 @@ const ListingCard = memo(function ListingCard({
     ? formattedMaxPrice
       ? `₹${formattedMinPrice} - ₹${formattedMaxPrice}`
       : `₹${formattedMinPrice}`
-    : "Contact for Price";
+    : "Price on request";
 
-  const itemCode = item.partNumber ? `OEM Part: ${item.partNumber}` : null;
+  const tagText = item.condition
+    ? item.condition
+    : isSpare
+    ? `Spare · Qty ${item.quantity || 1}`
+    : item.itemType === "NEW_INSTRUMENT"
+    ? "Brand New"
+    : "Pre-Owned";
+
+  const locationText = [item.location, isSpare && item.partNumber ? `Part #${item.partNumber}` : null]
+    .filter(Boolean)
+    .join(" · ") || item.category;
 
   return (
     <TouchableOpacity
-      style={[styles.card, isDark && styles.cardDark]}
-      activeOpacity={0.92}
+      style={[styles.compactRow, isDark && styles.compactRowDark]}
+      activeOpacity={0.88}
       onPressIn={prefetchDetailPhoto}
-              onPress={open}
+      onPress={open}
     >
-      {/* 4:3 Image Container with Stitch Badges */}
-      <View style={[styles.imageContainer, !hasPhoto && styles.imageContainerNoPhoto]}>
+      {/* 86x86 Thumbnail with rounded corners */}
+      <View style={[styles.compactThumbContainer, isDark && styles.compactThumbContainerDark]}>
         {hasPhoto ? (
           <ExpoImage
             source={{ uri: getOptimizedImageUrl(item.photos[0], IMAGE_PRESETS.CARD) }}
-            style={[styles.cardImage, isSold && styles.cardImageSold]}
+            style={[styles.compactThumbImg, isSold && { opacity: 0.6 }]}
             contentFit="cover"
             cachePolicy="memory-disk"
             recyclingKey={item.id}
           />
         ) : (
-          <View style={[styles.placeholderImage, isDark && styles.placeholderImageDark]}>
-            <Tag size={22} color={isDark ? "#64748b" : "#94a3b8"} />
-            <Text style={styles.placeholderText}>No photo yet</Text>
+          <View style={[styles.compactThumbPlaceholder, isDark && styles.compactThumbPlaceholderDark]}>
+            <Tag size={20} color={isDark ? "#64748b" : "#94a3b8"} />
           </View>
         )}
-
-        {/* Top-Left Category Badge */}
-        <View style={styles.categoryBadge}>
-          <Text style={styles.categoryBadgeText} numberOfLines={1}>
-            {isSpare ? "SPARE PARTS" : item.category.toUpperCase()}
-          </Text>
-        </View>
-
-        {/* Top-Right Status Badge */}
-        {isSold ? (
-          <View style={styles.soldBadge}>
-            <View style={styles.soldDot} />
-            <Text style={styles.soldBadgeText}>SOLD OUT</Text>
-          </View>
-        ) : isSpare ? (
-          <View style={styles.qtyBadge}>
-            <View style={styles.qtyDot} />
-            <Text style={styles.qtyBadgeText}>Qty: {item.quantity || 1} in Stock</Text>
-          </View>
-        ) : (
-          <View style={styles.availableBadge}>
-            <View style={styles.availableDot} />
-            <Text style={styles.availableBadgeText}>AVAILABLE</Text>
+        {isSold && (
+          <View style={styles.compactSoldOverlay}>
+            <Text style={styles.compactSoldOverlayText}>SOLD</Text>
           </View>
         )}
       </View>
 
-      {/* Card Body */}
-      <View style={styles.cardBody}>
-        {/* Tag Row: Condition + Model/Part Code */}
-        {(item.condition || itemCode) ? (
-          <View style={styles.tagRow}>
-            {item.condition ? (
-              <View style={styles.conditionPill}>
-                <Text style={styles.conditionPillText} numberOfLines={1}>
-                  {item.condition}
-                </Text>
-              </View>
-            ) : null}
-            {itemCode ? (
-              <Text style={styles.itemCodeText} numberOfLines={1}>
-                {itemCode}
-              </Text>
-            ) : null}
+      {/* Info Column */}
+      <View style={styles.compactInfo}>
+        <View style={styles.compactTagRow}>
+          <View style={[styles.compactTagPill, isDark && styles.compactTagPillDark]}>
+            <Text style={[styles.compactTagText, isDark && styles.compactTagTextDark]} numberOfLines={1}>
+              {tagText}
+            </Text>
           </View>
-        ) : null}
+          {isSpare && (
+            <View style={styles.compactSparePill}>
+              <Text style={styles.compactSparePillText}>SPARE</Text>
+            </View>
+          )}
+        </View>
 
-        {/* Instrument Title */}
-        <Text style={[styles.cardTitle, isDark && styles.cardTitleDark]} numberOfLines={2}>
+        <Text style={[styles.compactTitle, isDark && styles.compactTitleDark]} numberOfLines={2}>
           {item.title}
         </Text>
 
-        {/* Spare Parts Compatibility Sub-row (if spare part) */}
-        {isSpare && item.compatibleWith ? (
-          <View style={styles.compatibleBox}>
-            <Text style={styles.compatibleText} numberOfLines={1}>
-              Compatible: {item.compatibleWith}
-            </Text>
-          </View>
-        ) : null}
-
-        {/* Price Box (Gray Container) */}
-        <View style={styles.priceLogisticsBox}>
-          <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={styles.priceSubtext}>
-              {isSold ? "PRICE REALIZED (SOLD)" : isSpare ? "SURPLUS PRICE" : "EXPECTED PRICE"}
-            </Text>
-            <Text style={[styles.cardPrice, isSold && styles.cardPriceSold]} numberOfLines={1}>
-              {priceText}
-            </Text>
-          </View>
-
+        <View style={styles.compactLocationRow}>
+          {item.location ? <MapPin size={11} color="#64748b" style={{ marginRight: 3 }} /> : null}
+          <Text style={styles.compactLocationText} numberOfLines={1}>
+            {locationText}
+          </Text>
         </View>
 
-        {/* Card Footer: Location & Action Button */}
-        <View style={styles.cardFooter}>
-          {item.location ? (
-            <View style={styles.locationRow}>
-              <MapPin size={13} color="#64748b" />
-              <Text style={styles.locationText} numberOfLines={1}>
-                {item.location}
-              </Text>
-            </View>
-          ) : (
-            <View />
-          )}
+        <View style={styles.compactBottomRow}>
+          <Text
+            style={[
+              styles.compactPrice,
+              isDark && styles.compactPriceDark,
+              isSold && styles.compactPriceSold,
+            ]}
+            numberOfLines={1}
+          >
+            {priceText}
+          </Text>
 
-          {/* Inquire / Request Similar Action Button */}
-          {isSold ? (
-            <TouchableOpacity
-              style={styles.requestSimilarBtn}
-              activeOpacity={0.85}
-              onPressIn={prefetchDetailPhoto}
-              onPress={open}
-            >
-              <Text style={styles.requestSimilarBtnText}>Request Similar</Text>
-              <ArrowRight size={13} color="#b45309" />
-            </TouchableOpacity>
-          ) : isSpare ? (
-            <TouchableOpacity
-              style={styles.inquireBtnLight}
-              activeOpacity={0.85}
-              onPressIn={prefetchDetailPhoto}
-              onPress={open}
-            >
-              <MessageSquare size={13} color={colors.primaryContainer} />
-              <Text style={styles.inquireBtnLightText}>Inquire</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={styles.inquireBtnNavy}
-              activeOpacity={0.85}
-              onPressIn={prefetchDetailPhoto}
-              onPress={open}
-            >
-              <MessageSquare size={13} color="#ffffff" />
-              <Text style={styles.inquireBtnNavyText}>Inquire</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={styles.compactHeartBtn}
+            activeOpacity={0.7}
+            onPress={(e) => {
+              e.stopPropagation();
+              onToggleSave(item.id);
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel={isSaved ? "Remove from saved" : "Save listing"}
+          >
+            <Heart
+              size={17}
+              color={isSaved ? "#dc2626" : isDark ? "#64748b" : "#94a3b8"}
+              fill={isSaved ? "#dc2626" : "none"}
+            />
+          </TouchableOpacity>
         </View>
       </View>
     </TouchableOpacity>
   );
 });
+
+function SkeletonListingFeed({ isDark }: { isDark: boolean }) {
+  return (
+    <View style={styles.skeletonContainer}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <View key={i} style={[styles.compactRow, isDark && styles.compactRowDark, { opacity: 0.65 }]}>
+          <View
+            style={[
+              styles.compactThumbContainer,
+              isDark && styles.compactThumbContainerDark,
+              { backgroundColor: isDark ? "#1e293b" : "#e2e8f0" },
+            ]}
+          />
+          <View style={styles.compactInfo}>
+            <View
+              style={{
+                width: 90,
+                height: 16,
+                borderRadius: 6,
+                backgroundColor: isDark ? "#1e293b" : "#e2e8f0",
+                marginBottom: 6,
+              }}
+            />
+            <View
+              style={{
+                width: "90%",
+                height: 16,
+                borderRadius: 4,
+                backgroundColor: isDark ? "#1e293b" : "#e2e8f0",
+                marginBottom: 6,
+              }}
+            />
+            <View
+              style={{
+                width: "60%",
+                height: 12,
+                borderRadius: 4,
+                backgroundColor: isDark ? "#1e293b" : "#e2e8f0",
+                marginBottom: 8,
+              }}
+            />
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginTop: "auto",
+              }}
+            >
+              <View
+                style={{
+                  width: 100,
+                  height: 18,
+                  borderRadius: 4,
+                  backgroundColor: isDark ? "#1e293b" : "#e2e8f0",
+                }}
+              />
+              <View
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 11,
+                  backgroundColor: isDark ? "#1e293b" : "#e2e8f0",
+                }}
+              />
+            </View>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 export default function MarketplaceScreen() {
   const insets = useSafeAreaInsets();
@@ -322,20 +347,32 @@ export default function MarketplaceScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState("ALL");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
-  const [selectedStatus, setSelectedStatus] = useState<"ALL" | "AVAILABLE" | "SOLD">("ALL");
+  const [selectedStatus, setSelectedStatus] = useState<"ALL" | "AVAILABLE" | "SOLD">("AVAILABLE");
   const [selectedPriceTier, setSelectedPriceTier] = useState(0);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [savedIds, setSavedIds] = useState<string[]>([]);
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
   // Search the server once typing pauses, not on every keystroke
   const debouncedSearch = useDebouncedValue(searchQuery.trim());
+
+  useEffect(() => {
+    getSavedListingIds().then(setSavedIds);
+  }, []);
+
+  const handleToggleSave = useCallback(async (id: string) => {
+    const isNowSaved = await toggleSavedListingId(id);
+    setSavedIds((prev) => (isNowSaved ? [...prev, id] : prev.filter((i) => i !== id)));
+  }, []);
 
   // Active filter count for badge
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (selectedStatus !== "ALL") count++;
+    if (selectedStatus !== "AVAILABLE") count++;
     if (selectedCategory !== "ALL") count++;
     if (selectedPriceTier !== 0) count++;
+    if (showSavedOnly) count++;
     return count;
-  }, [selectedStatus, selectedCategory, selectedPriceTier]);
+  }, [selectedStatus, selectedCategory, selectedPriceTier, showSavedOnly]);
 
   // Fetch unread notifications count
   const { data: notificationsData } = useQuery({
@@ -399,15 +436,23 @@ export default function MarketplaceScreen() {
   }, [pagedData]);
   const totalCount = pagedData?.pages[0]?.total ?? data?.length ?? 0;
 
+  const displayData = useMemo(() => {
+    if (!data) return undefined;
+    if (showSavedOnly) {
+      return data.filter((item) => savedIds.includes(item.id));
+    }
+    return data;
+  }, [data, showSavedOnly, savedIds]);
+
   const currentSection = ITEM_TYPES.find((t) => t.value === selectedType) ?? ITEM_TYPES[0];
-  const showSectionTiles = selectedType === "ALL" && !searchQuery.trim();
 
   const resetAllFilters = () => {
     setSelectedType("ALL");
     setSelectedCategory("ALL");
-    setSelectedStatus("ALL");
+    setSelectedStatus("AVAILABLE");
     setSelectedPriceTier(0);
     setSearchQuery("");
+    setShowSavedOnly(false);
   };
 
   // Download this page's card photos to disk in the background, so cards further down the
@@ -424,8 +469,16 @@ export default function MarketplaceScreen() {
 
   const openListing = useCallback((id: string) => router.push(`/listing/${id}`), [router]);
   const renderListingCard = useCallback(
-    ({ item }: { item: Listing }) => <ListingCard item={item} isDark={isDark} onOpen={openListing} />,
-    [isDark, openListing]
+    ({ item }: { item: Listing }) => (
+      <ListingCard
+        item={item}
+        isDark={isDark}
+        isSaved={savedIds.includes(item.id)}
+        onToggleSave={handleToggleSave}
+        onOpen={openListing}
+      />
+    ),
+    [isDark, savedIds, handleToggleSave, openListing]
   );
 
   return (
@@ -546,7 +599,102 @@ export default function MarketplaceScreen() {
         })}
       </View>
 
-      {/* 6. Live Status / Available Instruments Bar */}
+      {/* 4. Horizontal Category Chip Shelf */}
+      <View style={[styles.categoryShelfWrapper, isDark && styles.categoryShelfWrapperDark]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryShelfContainer}
+        >
+          {/* All Instruments */}
+          <TouchableOpacity
+            style={[
+              styles.categoryChip,
+              !showSavedOnly && selectedCategory === "ALL" && styles.categoryChipActive,
+              isDark && styles.categoryChipDark,
+              !showSavedOnly && selectedCategory === "ALL" && isDark && styles.categoryChipActiveDark,
+            ]}
+            activeOpacity={0.7}
+            onPress={() => {
+              setShowSavedOnly(false);
+              setSelectedCategory("ALL");
+            }}
+          >
+            <Text
+              style={[
+                styles.categoryChipText,
+                !showSavedOnly && selectedCategory === "ALL" && styles.categoryChipTextActive,
+                isDark && styles.categoryChipTextDark,
+              ]}
+            >
+              All Instruments
+            </Text>
+          </TouchableOpacity>
+
+          {/* Saved Shortlist */}
+          <TouchableOpacity
+            style={[
+              styles.categoryChip,
+              showSavedOnly && styles.categoryChipActive,
+              isDark && styles.categoryChipDark,
+              showSavedOnly && isDark && styles.categoryChipActiveDark,
+            ]}
+            activeOpacity={0.7}
+            onPress={() => {
+              setShowSavedOnly((prev) => !prev);
+            }}
+          >
+            <Heart
+              size={12}
+              color={showSavedOnly ? "#ffffff" : "#dc2626"}
+              fill={showSavedOnly ? "#ffffff" : "#dc2626"}
+              style={{ marginRight: 5 }}
+            />
+            <Text
+              style={[
+                styles.categoryChipText,
+                showSavedOnly && styles.categoryChipTextActive,
+                isDark && styles.categoryChipTextDark,
+              ]}
+            >
+              Saved{savedIds.length > 0 ? ` (${savedIds.length})` : ""}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Individual Categories */}
+          {CATEGORIES.filter((c) => c !== "ALL").map((cat) => {
+            const isSelected = !showSavedOnly && selectedCategory === cat;
+            return (
+              <TouchableOpacity
+                key={cat}
+                style={[
+                  styles.categoryChip,
+                  isSelected && styles.categoryChipActive,
+                  isDark && styles.categoryChipDark,
+                  isSelected && isDark && styles.categoryChipActiveDark,
+                ]}
+                activeOpacity={0.7}
+                onPress={() => {
+                  setShowSavedOnly(false);
+                  setSelectedCategory(isSelected ? "ALL" : cat);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.categoryChipText,
+                    isSelected && styles.categoryChipTextActive,
+                    isDark && styles.categoryChipTextDark,
+                  ]}
+                >
+                  {cat}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* 5. Live Status / Available Instruments Bar */}
       <View style={[styles.statusBarRow, isDark && styles.statusBarRowDark]}>
         <View style={styles.statusLeft}>
           <View
@@ -555,17 +703,37 @@ export default function MarketplaceScreen() {
               selectedStatus === "SOLD" && { backgroundColor: "#f43f5e" },
             ]}
           />
-          <Text style={styles.statusAvailableText}>
-            {`${currentSection.title.toUpperCase()}${
-              data
-                ? ` · ${totalCount} ${
-                    selectedStatus === "SOLD" ? "SOLD" : selectedStatus === "AVAILABLE" ? "AVAILABLE" : "ITEMS"
-                  }`
-                : ""
-            }`}
+          <Text style={[styles.statusAvailableText, isDark && styles.statusAvailableTextDark]}>
+            <Text style={[styles.statusBoldCount, isDark && styles.statusBoldCountDark]}>
+              {displayData ? displayData.length : totalCount}
+            </Text>{" "}
+            {showSavedOnly
+              ? "saved instruments"
+              : selectedStatus === "SOLD"
+              ? "sold out items"
+              : selectedStatus === "ALL"
+              ? "total listings"
+              : "available"}
           </Text>
         </View>
 
+        <TouchableOpacity
+          style={[styles.statusTogglePill, isDark && styles.statusTogglePillDark]}
+          activeOpacity={0.7}
+          onPress={() => {
+            setSelectedStatus((curr) =>
+              curr === "AVAILABLE" ? "ALL" : curr === "ALL" ? "SOLD" : "AVAILABLE"
+            );
+          }}
+        >
+          <Text style={[styles.statusToggleText, isDark && styles.statusToggleTextDark]}>
+            {selectedStatus === "AVAILABLE"
+              ? "In Stock ▾"
+              : selectedStatus === "SOLD"
+              ? "Sold Out ▾"
+              : "All Items ▾"}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Connection / Network Error Banner */}
@@ -585,57 +753,20 @@ export default function MarketplaceScreen() {
         </View>
       )}
 
-      {/* 6. Main Listing Feed */}
+      {/* 6. Main Listing Feed (Compact Rows & Skeleton Loading) */}
       {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primaryContainer} />
-          <Text style={[styles.loadingText, isDark && styles.loadingTextDark]}>
-            Loading laboratory instruments...
-          </Text>
-        </View>
+        <SkeletonListingFeed isDark={isDark} />
       ) : (
         <FlatList
-          data={data}
+          data={displayData}
           keyExtractor={(item) => item.id}
           renderItem={renderListingCard}
-          // Cards are tall (photo + details): render only what fills the first screens
-          initialNumToRender={4}
-          maxToRenderPerBatch={4}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
           windowSize={7}
           removeClippedSubviews={Platform.OS === "android"}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-            showSectionTiles ? (
-              <View style={styles.tilesSection}>
-                <Text style={[styles.tilesTitle, isDark && styles.tilesTitleDark]}>What are you looking for?</Text>
-                <View style={styles.tilesRow}>
-                  {SECTION_TILES.map((t) => {
-                    const Icon = t.icon;
-                    return (
-                      <TouchableOpacity
-                        key={t.value}
-                        style={[styles.tile, isDark && styles.tileDark]}
-                        activeOpacity={0.8}
-                        onPress={() => setSelectedType(t.value)}
-                      >
-                        <View style={styles.tileIconCircle}>
-                          <Icon size={22} color={colors.primaryContainer} />
-                        </View>
-                        <Text style={[styles.tileTitle, isDark && styles.tileTitleDark]} numberOfLines={2}>
-                          {t.label}
-                        </Text>
-                        <Text style={styles.tileDescription} numberOfLines={3}>
-                          {t.description}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                <Text style={[styles.latestTitle, isDark && styles.tilesTitleDark]}>Latest listings</Text>
-              </View>
-            ) : undefined
-          }
           onEndReached={() => {
             if (hasNextPage && !isFetchingNextPage) fetchNextPage();
           }}
@@ -656,35 +787,54 @@ export default function MarketplaceScreen() {
             !isError ? (
               <View style={styles.emptyContainer}>
                 <View style={styles.emptyIconCircle}>
-                  <Search size={32} color={colors.textMuted} />
+                  {showSavedOnly ? (
+                    <Heart size={32} color="#dc2626" />
+                  ) : (
+                    <Search size={32} color={colors.textMuted} />
+                  )}
                 </View>
                 <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>
-                  {selectedType !== "ALL" && activeFilterCount === 0 && !searchQuery.trim()
+                  {showSavedOnly
+                    ? "No saved instruments yet"
+                    : selectedType !== "ALL" && activeFilterCount === 0 && !searchQuery.trim()
                     ? `No ${currentSection.title.toLowerCase()} listed yet`
                     : "No laboratory equipment found"}
                 </Text>
                 <Text style={styles.emptySubtitle}>
-                  {selectedType !== "ALL" && activeFilterCount === 0 && !searchQuery.trim()
+                  {showSavedOnly
+                    ? "Tap the heart icon on any instrument or spare part to add it to your shortlist."
+                    : selectedType !== "ALL" && activeFilterCount === 0 && !searchQuery.trim()
                     ? "Check back soon, or browse everything on the marketplace."
                     : "No listings matched your criteria. Try adjusting your search query or reset your filters."}
                 </Text>
                 <View style={styles.emptyActionRow}>
-                  {selectedType !== "ALL" && activeFilterCount === 0 && !searchQuery.trim() ? (
+                  {showSavedOnly ? (
+                    <TouchableOpacity
+                      style={styles.emptyBrowseBtn}
+                      onPress={() => setShowSavedOnly(false)}
+                    >
+                      <Text style={styles.emptyBrowseBtnText}>Browse All Equipment</Text>
+                    </TouchableOpacity>
+                  ) : selectedType !== "ALL" && activeFilterCount === 0 && !searchQuery.trim() ? (
                     <TouchableOpacity style={styles.resetFiltersBtn} onPress={() => setSelectedType("ALL")}>
                       <Text style={styles.resetFiltersBtnText}>Browse All Listings</Text>
                     </TouchableOpacity>
                   ) : (
-                    <TouchableOpacity style={styles.resetFiltersBtn} onPress={resetAllFilters}>
-                      <Text style={styles.resetFiltersBtnText}>Reset All Filters</Text>
+                    (activeFilterCount > 0 || searchQuery.trim().length > 0) && (
+                      <TouchableOpacity style={styles.resetFiltersBtn} onPress={resetAllFilters}>
+                        <Text style={styles.resetFiltersBtnText}>Reset All Filters</Text>
+                      </TouchableOpacity>
+                    )
+                  )}
+                  {!showSavedOnly && (
+                    <TouchableOpacity
+                      style={styles.listMachineBtn}
+                      onPress={() => router.push("/sell" as any)}
+                    >
+                      <PlusCircle size={15} color={colors.brandBlue900} />
+                      <Text style={styles.listMachineBtnText}>List Equipment</Text>
                     </TouchableOpacity>
                   )}
-                  <TouchableOpacity
-                    style={styles.listMachineBtn}
-                    onPress={() => router.push("/sell" as any)}
-                  >
-                    <PlusCircle size={15} color={colors.brandBlue900} />
-                    <Text style={styles.listMachineBtnText}>List Equipment</Text>
-                  </TouchableOpacity>
                 </View>
               </View>
             ) : undefined
@@ -1035,76 +1185,73 @@ const styles = StyleSheet.create({
   sectionTabIndicatorActive: {
     backgroundColor: "#033a7d",
   },
-  tilesSection: {
-    gap: 10,
-  },
-  tilesTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  tilesTitleDark: {
-    color: "#f8fafc",
-  },
-  tilesRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  tile: {
-    flex: 1,
+  // Category Chip Shelf
+  categoryShelfWrapper: {
     backgroundColor: "#ffffff",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#dbeaf7",
-    padding: 12,
-    gap: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
   },
-  tileDark: {
+  categoryShelfWrapperDark: {
     backgroundColor: "#0b1329",
+    borderBottomColor: "#1e293b",
+  },
+  categoryShelfContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+    gap: 8,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  categoryChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  categoryChipDark: {
+    backgroundColor: "#0f172a",
     borderColor: "#1e293b",
   },
-  tileIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#eff5fb",
-    alignItems: "center",
-    justifyContent: "center",
+  categoryChipActive: {
+    backgroundColor: "#002555",
+    borderColor: "#002555",
   },
-  tileTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#0f172a",
+  categoryChipActiveDark: {
+    backgroundColor: "#1d4ed8",
+    borderColor: "#1d4ed8",
   },
-  tileTitleDark: {
-    color: "#f8fafc",
+  categoryChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#475569",
   },
-  tileDescription: {
-    fontSize: 11,
-    lineHeight: 15,
-    color: "#64748b",
+  categoryChipTextDark: {
+    color: "#94a3b8",
   },
-  latestTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#0f172a",
-    marginTop: 8,
+  categoryChipTextActive: {
+    color: "#ffffff",
+    fontWeight: "700",
   },
-  statusChipDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
+
+  // Live Status / Filter Row
   statusBarRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 9,
     backgroundColor: "#f8fafc",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
   },
   statusBarRowDark: {
     backgroundColor: "#090e1d",
+    borderBottomColor: "#1e293b",
   },
   statusLeft: {
     flexDirection: "row",
@@ -1118,291 +1265,206 @@ const styles = StyleSheet.create({
     backgroundColor: "#16a34a",
   },
   statusAvailableText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "600",
     color: "#475569",
-    letterSpacing: 0.3,
   },
+  statusAvailableTextDark: {
+    color: "#94a3b8",
+  },
+  statusBoldCount: {
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  statusBoldCountDark: {
+    color: "#f8fafc",
+  },
+  statusTogglePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: "#eff5fb",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#dbeaf7",
+  },
+  statusTogglePillDark: {
+    backgroundColor: "#172554",
+    borderColor: "#1e3a8a",
+  },
+  statusToggleText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#033a7d",
+  },
+  statusToggleTextDark: {
+    color: "#93c5fd",
+  },
+  // Feed & Compact Row (Direction A)
   listContent: {
-    padding: 16,
-    gap: 18,
+    padding: 12,
+    gap: 10,
     backgroundColor: "#f8fafc",
   },
-  card: {
+  compactRow: {
+    flexDirection: "row",
     backgroundColor: "#ffffff",
     borderRadius: 14,
-    overflow: "hidden",
     borderWidth: 1,
     borderColor: "#e2e8f0",
+    padding: 10,
+    gap: 12,
     shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  cardDark: {
+  compactRowDark: {
     backgroundColor: "#0b1329",
     borderColor: "#1e293b",
   },
-  imageContainer: {
-    width: "100%",
-    aspectRatio: 4 / 3,
+  compactThumbContainer: {
+    width: 86,
+    height: 86,
+    borderRadius: 10,
     backgroundColor: "#f1f5f9",
-    position: "relative",
     overflow: "hidden",
+    position: "relative",
   },
-  imageContainerNoPhoto: {
-    aspectRatio: undefined,
-    height: 96,
-  },
-  cardImage: {
-    width: "100%",
-    height: "100%",
-  },
-  cardImageSold: {
-    opacity: 0.9,
-  },
-  placeholderImage: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#f1f5f9",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  placeholderImageDark: {
+  compactThumbContainerDark: {
     backgroundColor: "#16203a",
   },
-  placeholderText: {
-    fontSize: 12,
-    color: "#64748b",
-    fontWeight: "600",
+  compactThumbImg: {
+    width: "100%",
+    height: "100%",
   },
-  categoryBadge: {
+  compactThumbPlaceholder: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  compactThumbPlaceholderDark: {
+    backgroundColor: "#16203a",
+  },
+  statusChipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  compactSoldOverlay: {
     position: "absolute",
-    top: 10,
-    left: 10,
-    backgroundColor: "rgba(1, 25, 54, 0.92)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(15, 23, 42, 0.75)",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  categoryBadgeText: {
+  compactSoldOverlayText: {
     color: "#ffffff",
-    fontSize: 10,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  availableBadge: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    backgroundColor: "#dcfce7",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 9999,
-    gap: 5,
-  },
-  availableDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#15803d",
-  },
-  availableBadgeText: {
-    color: "#15803d",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.3,
-  },
-  soldBadge: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    backgroundColor: "rgba(15, 23, 42, 0.92)",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 9999,
-    gap: 5,
-  },
-  soldDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#f43f5e",
-  },
-  soldBadgeText: {
-    color: "#ffffff",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.4,
-  },
-  qtyBadge: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    backgroundColor: "#fef3c7",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 9999,
-    gap: 5,
-  },
-  qtyDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#b45309",
-  },
-  qtyBadgeText: {
-    color: "#b45309",
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  cardBody: {
-    padding: 14,
-  },
-  tagRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 6,
-  },
-  conditionPill: {
-    backgroundColor: "#eff5fb",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    maxWidth: "60%",
-  },
-  conditionPillText: {
-    color: "#033a7d",
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "900",
+    letterSpacing: 0.5,
   },
-  itemCodeText: {
-    fontSize: 10,
-    color: "#64748b",
-    fontFamily: Platform.select({ ios: "Courier", android: "monospace" }),
-    fontWeight: "600",
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#0f172a",
-    lineHeight: 22,
-    marginBottom: 8,
-  },
-  cardTitleDark: {
-    color: "#f8fafc",
-  },
-  compatibleBox: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginBottom: 8,
-  },
-  compatibleText: {
-    fontSize: 11,
-    color: "#475569",
-    fontFamily: Platform.select({ ios: "Courier", android: "monospace" }),
-  },
-  priceLogisticsBox: {
-    backgroundColor: "#f8fafc",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    flexDirection: "row",
+  compactInfo: {
+    flex: 1,
+    minWidth: 0,
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
   },
-  priceSubtext: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#64748b",
-    letterSpacing: 0.4,
+  compactTagRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     marginBottom: 2,
   },
-  cardPrice: {
-    fontSize: 17,
+  compactTagPill: {
+    alignSelf: "flex-start",
+    backgroundColor: "#eff5fb",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  compactTagPillDark: {
+    backgroundColor: "#172554",
+  },
+  compactTagText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#033a7d",
+  },
+  compactTagTextDark: {
+    color: "#93c5fd",
+  },
+  compactSparePill: {
+    backgroundColor: "#fef3c7",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  compactSparePillText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#b45309",
+  },
+  compactTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 18,
+    color: "#0f172a",
+    marginBottom: 2,
+  },
+  compactTitleDark: {
+    color: "#f8fafc",
+  },
+  compactLocationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  compactLocationText: {
+    fontSize: 12,
+    color: "#64748b",
+  },
+  compactBottomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 2,
+  },
+  compactPrice: {
+    fontSize: 15,
     fontWeight: "900",
     color: "#002555",
   },
-  cardPriceSold: {
-    color: "#475569",
+  compactPriceDark: {
+    color: "#93c5fd",
   },
-  cardFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  compactPriceSold: {
+    color: "#94a3b8",
+  },
+  compactHeartBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
-    paddingTop: 2,
+    justifyContent: "center",
   },
-  locationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    maxWidth: 160,
+  skeletonContainer: {
+    padding: 12,
+    gap: 10,
   },
-  locationText: {
-    fontSize: 12,
-    color: "#64748b",
-    fontWeight: "500",
+  emptyBrowseBtn: {
+    backgroundColor: "#002555",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
   },
-  inquireBtnNavy: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#033a7d",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  inquireBtnNavyText: {
+  emptyBrowseBtnText: {
     color: "#ffffff",
-    fontSize: 12,
     fontWeight: "700",
-  },
-  inquireBtnLight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#dbeaf7",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  inquireBtnLightText: {
-    color: "#033a7d",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  requestSimilarBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#fffbeb",
-    borderWidth: 1,
-    borderColor: "#fde68a",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-  },
-  requestSimilarBtnText: {
-    color: "#b45309",
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 13,
   },
   loadingContainer: {
     flex: 1,
