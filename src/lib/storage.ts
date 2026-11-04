@@ -85,3 +85,49 @@ export async function removeCachedUser(): Promise<void> {
     await SecureStore.deleteItemAsync(USER_KEY);
   }
 }
+
+const SAVED_KEY = "labmatrix_saved_listings";
+
+export async function getSavedListingIds(): Promise<string[]> {
+  try {
+    let json: string | null = null;
+    if (Platform.OS === "web") {
+      json = localStorage.getItem(SAVED_KEY);
+    } else {
+      json = await SecureStore.getItemAsync(SAVED_KEY);
+    }
+    return json ? JSON.parse(json) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function isListingSaved(id: string): Promise<boolean> {
+  const list = await getSavedListingIds();
+  return list.includes(id);
+}
+
+export async function toggleSavedListingId(id: string): Promise<boolean> {
+  try {
+    const list = await getSavedListingIds();
+    const index = list.indexOf(id);
+    let isSaved = false;
+    let nextList: string[];
+    if (index > -1) {
+      nextList = list.filter((item) => item !== id);
+      isSaved = false;
+    } else {
+      nextList = [...list, id];
+      isSaved = true;
+    }
+    const json = JSON.stringify(nextList);
+    if (Platform.OS === "web") {
+      localStorage.setItem(SAVED_KEY, json);
+    } else {
+      await SecureStore.setItemAsync(SAVED_KEY, json);
+    }
+    return isSaved;
+  } catch {
+    return false;
+  }
+}

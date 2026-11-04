@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -28,6 +28,7 @@ import Send from "lucide-react-native/icons/send";
 import X from "lucide-react-native/icons/x";
 import Phone from "lucide-react-native/icons/phone";
 import Share2 from "lucide-react-native/icons/share-2";
+import Heart from "lucide-react-native/icons/heart";
 import Pencil from "lucide-react-native/icons/pencil";
 import Copy from "lucide-react-native/icons/copy";
 import Video from "lucide-react-native/icons/video";
@@ -46,6 +47,7 @@ import { api } from "@/lib/api";
 import { Listing } from "@/types/api";
 import { useAuth } from "@/context/auth-context";
 import { LabMatrixTokens } from "@/constants/theme";
+import { isListingSaved, toggleSavedListingId } from "@/lib/storage";
 import { getOptimizedImageUrl, IMAGE_PRESETS } from "@/lib/images";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ZoomableImage } from "@/components/ZoomableImage";
@@ -54,12 +56,17 @@ const { width } = Dimensions.get("window");
 const CAROUSEL_HEIGHT = 280;
 const LABMATRIX_PHONE = "+917303040804";
 
-const DETAIL_TABS = ["Overview", "Specifications", "Verification", "Assurance"] as const;
-type DetailTab = (typeof DETAIL_TABS)[number];
+const QUICK_TOPICS = [
+  { id: "price", label: "Best price", text: "Please share your best commercial price for this unit." },
+  { id: "calibration", label: "Calibration records", text: "Please share recent calibration certificates and operational service logs." },
+  { id: "video", label: "Video inspection", text: "I would like to request an operational video inspection of the instrument." },
+  { id: "delivery", label: "Delivery to my city", text: "Please provide estimated delivery time and crating logistics to my location." },
+  { id: "warranty", label: "Warranty terms", text: "What warranty period, parts coverage, or inspection return window is included?" },
+];
 
 export default function ListingDetailScreen() {
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, openInquiry } = useLocalSearchParams<{ id: string; openInquiry?: string }>();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -67,8 +74,8 @@ export default function ListingDetailScreen() {
   const { isAuthenticated, user } = useAuth();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<DetailTab>("Overview");
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isSaved, setIsSaved] = useState(false);
 
   // Photo Magnifier & Lightbox State
   const [magnifyModalVisible, setMagnifyModalVisible] = useState(false);
@@ -92,6 +99,40 @@ export default function ListingDetailScreen() {
   const [inquiryPhone, setInquiryPhone] = useState(user?.phoneNumber || "");
   const [inquiryMessage, setInquiryMessage] = useState("");
   const [isSendingInquiry, setIsSendingInquiry] = useState(false);
+  const [inquirySuccess, setInquirySuccess] = useState(false);
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (id) {
+      isListingSaved(id).then(setIsSaved);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (openInquiry === "true" && isAuthenticated) {
+      setInquiryModalVisible(true);
+    }
+  }, [openInquiry, isAuthenticated]);
+
+  const handleToggleSave = async () => {
+    if (!id) return;
+    const nowSaved = await toggleSavedListingId(id);
+    setIsSaved(nowSaved);
+  };
+
+  const handleToggleTopic = (topic: (typeof QUICK_TOPICS)[number]) => {
+    let nextTopics: string[];
+    let nextMessage = inquiryMessage;
+    if (selectedTopics.includes(topic.id)) {
+      nextTopics = selectedTopics.filter((t) => t !== topic.id);
+      nextMessage = nextMessage.replace(topic.text, "").replace(/\n\n+/g, "\n").trim();
+    } else {
+      nextTopics = [...selectedTopics, topic.id];
+      nextMessage = nextMessage ? `${nextMessage}\n${topic.text}` : topic.text;
+    }
+    setSelectedTopics(nextTopics);
+    setInquiryMessage(nextMessage);
+  };
 
   // Query single listing
   const { data: detail, isLoading, isFetching, isError, error, refetch } = useQuery({
@@ -170,12 +211,9 @@ export default function ListingDetailScreen() {
       // Show it in the Inquiries tab's "Sent" list right away
       queryClient.invalidateQueries({ queryKey: ["inquiries"] });
 
-      setInquiryModalVisible(false);
+      setInquirySuccess(true);
       setInquiryMessage("");
-      Alert.alert(
-        "Inquiry Submitted",
-        "Your quotation request has been delivered to LabMatrix operations and the equipment seller. You will be contacted shortly."
-      );
+      setSelectedTopics([]);
     } catch (err: any) {
       Alert.alert("Error", err.response?.data?.error || "Could not submit inquiry.");
     } finally {
@@ -238,6 +276,7 @@ export default function ListingDetailScreen() {
           style={styles.headerCircleBtn}
           activeOpacity={0.8}
           onPress={() => router.back()}
+          accessibilityLabel="Go back"
         >
           <ChevronLeft size={22} color="#0f172a" />
         </TouchableOpacity>
@@ -247,8 +286,22 @@ export default function ListingDetailScreen() {
             style={styles.headerCircleBtn}
             activeOpacity={0.8}
             onPress={handleShare}
+            accessibilityLabel="Share listing"
           >
             <Share2 size={18} color="#0f172a" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.headerCircleBtn}
+            activeOpacity={0.8}
+            onPress={handleToggleSave}
+            accessibilityLabel={isSaved ? "Remove from saved" : "Save listing"}
+          >
+            <Heart
+              size={18}
+              color={isSaved ? "#dc2626" : "#0f172a"}
+              fill={isSaved ? "#dc2626" : "none"}
+            />
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -277,7 +330,6 @@ export default function ListingDetailScreen() {
                   >
                     <ExpoImage
                       source={{ uri: getOptimizedImageUrl(photo, IMAGE_PRESETS.HERO) }}
-                      // The feed already cached the card-size photo: show it until the sharper one arrives
                       placeholder={{ uri: getOptimizedImageUrl(photo, IMAGE_PRESETS.CARD) }}
                       placeholderContentFit="cover"
                       style={styles.carouselImage}
@@ -288,37 +340,12 @@ export default function ListingDetailScreen() {
                 ))}
               </ScrollView>
 
-              {/* Pagination Dots */}
-              {photos.length > 1 && (
-                <View style={styles.paginationDots}>
-                  {photos.map((_, idx) => (
-                    <View
-                      key={idx}
-                      style={[
-                        styles.dot,
-                        idx === activeImageIndex && styles.activeDot,
-                      ]}
-                    />
-                  ))}
-                </View>
-              )}
-
               {/* Photo Count Pill */}
               <View style={styles.photoCountPill}>
                 <Text style={styles.photoCountText}>
                   {activeImageIndex + 1} / {photos.length}
                 </Text>
               </View>
-
-              {/* Tap to Enlarge / Magnify Pill */}
-              <TouchableOpacity
-                style={styles.magnifyPill}
-                activeOpacity={0.8}
-                onPress={() => openMagnifier(activeImageIndex)}
-              >
-                <ZoomIn size={13} color="#ffffff" />
-                <Text style={styles.magnifyPillText}>Magnify</Text>
-              </TouchableOpacity>
             </>
           ) : (
             <View style={[styles.noImageContainer, isDark && styles.noImageContainerDark]}>
@@ -335,53 +362,18 @@ export default function ListingDetailScreen() {
           )}
         </View>
 
-        {/* Thumbnail Gallery Strip (Tap thumbnail to select or tap photo to magnify) */}
-        {photos.length > 1 && (
-          <View style={[styles.thumbnailStrip, isDark && styles.thumbnailStripDark]}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.thumbnailScroll}
-            >
-              {photos.map((photo, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  activeOpacity={0.8}
-                  onPress={() => handleSelectPhoto(idx)}
-                  style={[
-                    styles.thumbnailItem,
-                    activeImageIndex === idx && styles.thumbnailItemActive,
-                  ]}
-                >
-                  <ExpoImage
-                    source={{ uri: getOptimizedImageUrl(photo, IMAGE_PRESETS.THUMBNAIL) }}
-                    style={styles.thumbnailImg}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                  />
-                  {activeImageIndex === idx && (
-                    <View style={styles.thumbnailActiveOverlay} />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
         {/* Instrument Title & Identification Block */}
         <View style={[styles.mainBlock, isDark && styles.mainBlockDark]}>
           <View style={styles.categoryBadgeRow}>
             <Text style={styles.categorySubtitle}>{data.category}</Text>
-            {data.itemType === "SPARE_PART" && (
-              <View style={styles.spareBadge}>
-                <Text style={styles.spareBadgeText}>Spare Part</Text>
-              </View>
-            )}
-            {data.itemType === "NEW_INSTRUMENT" && (
-              <View style={styles.newBadge}>
-                <Text style={styles.newBadgeText}>OEM Sealed Demo</Text>
-              </View>
-            )}
+            <Text style={{ color: "#94a3b8", fontSize: 13, marginHorizontal: 6 }}>·</Text>
+            <Text style={styles.classificationText}>
+              {data.itemType === "MACHINE"
+                ? "Pre-Owned Machine"
+                : data.itemType === "NEW_INSTRUMENT"
+                ? "Brand New"
+                : "Spare Part"}
+            </Text>
           </View>
 
           <Text style={[styles.title, isDark && styles.titleDark]}>{data.title}</Text>
@@ -425,17 +417,19 @@ export default function ListingDetailScreen() {
 
           {/* Price Box */}
           <View style={styles.priceContainer}>
-            <Text style={styles.priceSubtext}>
-              {isSold ? "Price Realized (Sold)" : "Approximate Price Expectation"}
-            </Text>
             <Text style={[styles.priceText, isSold && styles.priceTextSold]}>{priceText}</Text>
+            <Text style={styles.priceSubtext}>
+              {isSold ? "Price realized (sold)" : "Expected price · final after inspection"}
+            </Text>
           </View>
 
           {/* Chips Row */}
           <View style={styles.chipsRow}>
-            <View style={styles.conditionChip}>
-              <Text style={styles.conditionChipText}>{data.condition}</Text>
-            </View>
+            {data.condition ? (
+              <View style={styles.conditionChip}>
+                <Text style={styles.conditionChipText}>{data.condition}</Text>
+              </View>
+            ) : null}
 
             {isSold ? (
               <View style={[styles.conditionChip, { backgroundColor: "#fee2e2" }]}>
@@ -458,198 +452,121 @@ export default function ListingDetailScreen() {
           </View>
         </View>
 
-        {/* Section Tabs Bar (Stitch Interactive Segment Bar) */}
-        <View style={[styles.tabsBar, isDark && styles.tabsBarDark]}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll}>
-            {DETAIL_TABS.map((tab) => {
-              const isActive = activeTab === tab;
-              return (
-                <TouchableOpacity
-                  key={tab}
-                  style={[styles.tabBtn, isActive && styles.tabBtnActive]}
-                  onPress={() => setActiveTab(tab)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.tabBtnText, isActive && styles.tabBtnTextActive]}>
-                    {tab}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+        {/* Specifications Table */}
+        <View style={[styles.sectionContainer, isDark && styles.sectionContainerDark]}>
+          <View style={styles.sectionHeader}>
+            <Layers size={18} color={colors.primaryContainer} />
+            <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>
+              Equipment Specifications
+            </Text>
+          </View>
+
+          <View style={styles.specTable}>
+            {data.partNumber ? (
+              <View style={styles.specTableRow}>
+                <Text style={styles.specKey}>Model / Part No.</Text>
+                <Text style={[styles.specValMono, isDark && styles.specValDark]}>
+                  {data.partNumber}
+                </Text>
+              </View>
+            ) : null}
+
+            {data.compatibleWith ? (
+              <View style={styles.specTableRow}>
+                <Text style={styles.specKey}>Compatible Instruments</Text>
+                <Text style={[styles.specVal, isDark && styles.specValDark]}>
+                  {data.compatibleWith}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.specTableRow}>
+              <Text style={styles.specKey}>Category</Text>
+              <Text style={[styles.specVal, isDark && styles.specValDark]}>{data.category}</Text>
+            </View>
+
+            <View style={styles.specTableRow}>
+              <Text style={styles.specKey}>Condition</Text>
+              <Text style={[styles.specVal, isDark && styles.specValDark]}>{data.condition}</Text>
+            </View>
+
+            <View style={styles.specTableRow}>
+              <Text style={styles.specKey}>Stock Quantity</Text>
+              <Text style={[styles.specVal, isDark && styles.specValDark]}>{data.quantity || 1} unit</Text>
+            </View>
+
+            {data.location ? (
+              <View style={styles.specTableRow}>
+                <Text style={styles.specKey}>Location</Text>
+                <Text style={[styles.specVal, isDark && styles.specValDark]}>
+                  {data.location}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={[styles.specTableRow, { borderBottomWidth: 0 }]}>
+              <Text style={styles.specKey}>Listed Date</Text>
+              <Text style={[styles.specVal, isDark && styles.specValDark]}>
+                {new Date(data.createdAt).toLocaleDateString("en-IN", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </Text>
+            </View>
+          </View>
         </View>
 
-        {/* Tab 1: Overview & Technical Description */}
-        {(activeTab === "Overview" || activeTab === "Specifications") && (
+        {/* Technical Description */}
+        {data.description ? (
           <View style={[styles.sectionContainer, isDark && styles.sectionContainerDark]}>
             <View style={styles.sectionHeader}>
               <FileText size={18} color={colors.primaryContainer} />
               <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>
-                Technical Description & Summary
+                Technical Description
               </Text>
             </View>
             <Text style={[styles.descriptionText, isDark && styles.descriptionTextDark]}>
               {data.description}
             </Text>
           </View>
-        )}
+        ) : null}
 
-        {/* Tab 2: Technical Specifications Table */}
-        {(activeTab === "Overview" || activeTab === "Specifications") && (
-          <View style={[styles.sectionContainer, isDark && styles.sectionContainerDark]}>
-            <View style={styles.sectionHeader}>
-              <Layers size={18} color={colors.primaryContainer} />
-              <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>
-                Technical Specifications
+        {/* How this deal works */}
+        <View style={[styles.dealProcessContainer, isDark && styles.dealProcessContainerDark]}>
+          <Text style={[styles.dealProcessHeader, isDark && styles.dealProcessHeaderDark]}>
+            How this deal works
+          </Text>
+          <View style={styles.dealStepsRow}>
+            <View style={[styles.dealStepCard, isDark && styles.dealStepCardDark]}>
+              <Text style={styles.dealStepNum}>1</Text>
+              <Text style={[styles.dealStepTitle, isDark && styles.dealStepTitleDark]}>
+                Request quote
+              </Text>
+              <Text style={styles.dealStepDesc}>
+                Connect directly with LabMatrix deal desk
               </Text>
             </View>
 
-            <View style={styles.specTable}>
-              <View style={styles.specTableRow}>
-                <Text style={styles.specKey}>Category</Text>
-                <Text style={[styles.specVal, isDark && styles.specValDark]}>{data.category}</Text>
-              </View>
-
-              <View style={styles.specTableRow}>
-                <Text style={styles.specKey}>Catalog Classification</Text>
-                <Text style={[styles.specVal, isDark && styles.specValDark]}>
-                  {data.itemType === "MACHINE"
-                    ? "Pre-Owned Machine"
-                    : data.itemType === "NEW_INSTRUMENT"
-                    ? "Brand New Instrument"
-                    : "Spare Part / Board"}
-                </Text>
-              </View>
-
-              <View style={styles.specTableRow}>
-                <Text style={styles.specKey}>Condition</Text>
-                <Text style={[styles.specVal, isDark && styles.specValDark]}>{data.condition}</Text>
-              </View>
-
-              {data.partNumber ? (
-                <View style={styles.specTableRow}>
-                  <Text style={styles.specKey}>Part / Catalog Number</Text>
-                  <Text style={[styles.specValMono, isDark && styles.specValDark]}>
-                    {data.partNumber}
-                  </Text>
-                </View>
-              ) : null}
-
-              {data.compatibleWith ? (
-                <View style={styles.specTableRow}>
-                  <Text style={styles.specKey}>Compatible Instruments</Text>
-                  <Text style={[styles.specVal, isDark && styles.specValDark]}>
-                    {data.compatibleWith}
-                  </Text>
-                </View>
-              ) : null}
-
-              <View style={styles.specTableRow}>
-                <Text style={styles.specKey}>Stock Quantity</Text>
-                <Text style={[styles.specVal, isDark && styles.specValDark]}>{data.quantity || 1}</Text>
-              </View>
-
-              <View style={styles.specTableRow}>
-                <Text style={styles.specKey}>Inspection Location</Text>
-                <Text style={[styles.specVal, isDark && styles.specValDark]}>
-                  {data.location || "India"}
-                </Text>
-              </View>
-
-              <View style={[styles.specTableRow, { borderBottomWidth: 0 }]}>
-                <Text style={styles.specKey}>Cataloged Date</Text>
-                <Text style={[styles.specVal, isDark && styles.specValDark]}>
-                  {new Date(data.createdAt).toLocaleDateString("en-IN", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </Text>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Tab 3: Inspection & Verification Protocol */}
-        {(activeTab === "Overview" || activeTab === "Verification") && (
-          <View style={[styles.sectionContainer, isDark && styles.sectionContainerDark]}>
-            <View style={styles.sectionHeader}>
-              <ShieldCheck size={18} color={colors.primaryContainer} />
-              <Text style={[styles.sectionTitle, isDark && styles.sectionTitleDark]}>
-                Inspection & Verification Protocol
+            <View style={[styles.dealStepCard, isDark && styles.dealStepCardDark]}>
+              <Text style={styles.dealStepNum}>2</Text>
+              <Text style={[styles.dealStepTitle, isDark && styles.dealStepTitleDark]}>
+                Inspection
+              </Text>
+              <Text style={styles.dealStepDesc}>
+                Physical visit or live video diagnostics
               </Text>
             </View>
 
-            {/* Protocol Item 1 */}
-            <View style={styles.protocolCard}>
-              <View style={[styles.protocolIconCircle, { backgroundColor: "#dcfce7" }]}>
-                <CheckCircle2 size={18} color="#15803d" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.protocolTitle}>Operational Diagnostics Video</Text>
-                <Text style={styles.protocolDesc}>
-                  Verified pump pressure, baseline detector signals, and power-on self-test logs
-                  recorded for technical due diligence.
-                </Text>
-              </View>
+            <View style={[styles.dealStepCard, isDark && styles.dealStepCardDark]}>
+              <Text style={styles.dealStepNum}>3</Text>
+              <Text style={[styles.dealStepTitle, isDark && styles.dealStepTitleDark]}>
+                Handover
+              </Text>
+              <Text style={styles.dealStepDesc}>
+                Insured transit & secure release
+              </Text>
             </View>
-
-            {/* Protocol Item 2 */}
-            <View style={styles.protocolCard}>
-              <View style={[styles.protocolIconCircle, { backgroundColor: "#eff5fb" }]}>
-                <Video size={18} color={colors.primaryContainer} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.protocolTitle}>On-Site Physical Inspection</Text>
-                <Text style={styles.protocolDesc}>
-                  In-person facility inspection or scheduled video call inspection coordinated prior
-                  to commercial settlement.
-                </Text>
-              </View>
-            </View>
-
-            {/* Protocol Item 3 */}
-            <View style={styles.protocolCard}>
-              <View style={[styles.protocolIconCircle, { backgroundColor: "#fef3c7" }]}>
-                <Truck size={18} color="#b45309" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.protocolTitle}>Pan-India White-Glove Transport</Text>
-                <Text style={styles.protocolDesc}>
-                  Custom crating and fully insured transit coordinated with specialized logistics
-                  carriers across India.
-                </Text>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Tab 4: LabMatrix Assurance Guarantee */}
-        {(activeTab === "Overview" || activeTab === "Assurance") && (
-          <View style={styles.assuranceBanner}>
-            <View style={styles.assuranceHeader}>
-              <ShieldCheck size={24} color={colors.goldAccent} />
-              <Text style={styles.assuranceTitle}>LabMatrix Assurance Guarantee</Text>
-            </View>
-            <Text style={styles.assuranceText}>
-              Every refurbished and pre-owned instrument cataloged on LabMatrix undergoes rigorous
-              verification of specifications, operational history, and seller legitimacy. Direct
-              quotation requests are routed through verified operations with secure logistics
-              handling.
-            </Text>
-          </View>
-        )}
-
-        {/* Contact Desk Information Card */}
-        <View style={[styles.contactCard, isDark && styles.contactCardDark]}>
-          <Text style={styles.contactDeskTitle}>LABMATRIX INSTRUMENT INDIA PVT. LTD.</Text>
-          <View style={styles.contactRow}>
-            <Building2 size={14} color={colors.textMuted} />
-            <Text style={styles.contactText}>514/5, Mehrauli, New Delhi – 110030, India</Text>
-          </View>
-          <View style={styles.contactRow}>
-            <Mail size={14} color={colors.textMuted} />
-            <Text style={styles.contactText}>sales@labmatrixindia.com</Text>
           </View>
         </View>
       </ScrollView>
@@ -666,6 +583,7 @@ export default function ListingDetailScreen() {
           style={styles.callDeskBtn}
           activeOpacity={0.8}
           onPress={handleCall}
+          accessibilityLabel="Call LabMatrix Desk"
         >
           <Phone size={20} color={colors.primaryContainer} />
         </TouchableOpacity>
@@ -675,9 +593,16 @@ export default function ListingDetailScreen() {
           activeOpacity={0.85}
           onPress={() => {
             if (!isAuthenticated) {
-              Alert.alert("Sign In Required", "Please sign in to submit a direct inquiry.", [
+              Alert.alert("Sign In Required", "Please sign in to request a quote.", [
                 { text: "Cancel", style: "cancel" },
-                { text: "Sign In", onPress: () => router.push("/(auth)/login" as any) },
+                {
+                  text: "Sign In",
+                  onPress: () =>
+                    router.push({
+                      pathname: "/(auth)/login",
+                      params: { returnTo: `/listing/${id}?openInquiry=true` },
+                    } as any),
+                },
               ]);
               return;
             }
@@ -686,6 +611,7 @@ export default function ListingDetailScreen() {
                 `Hello, I saw that this ${data.title} was recently sold. I am looking for a similar or equivalent unit. Please let me know what options or incoming inventory are available.`
               );
             }
+            setInquirySuccess(false);
             setInquiryModalVisible(true);
           }}
         >
@@ -701,7 +627,10 @@ export default function ListingDetailScreen() {
         visible={inquiryModalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setInquiryModalVisible(false)}
+        onRequestClose={() => {
+          setInquirySuccess(false);
+          setInquiryModalVisible(false);
+        }}
       >
         <View style={[styles.modalOverlay, { paddingTop: insets.top }]}>
           <View style={[styles.modalSheet, isDark && styles.modalSheetDark, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
@@ -711,63 +640,136 @@ export default function ListingDetailScreen() {
                   {isSold ? "Request Equivalent Machine" : "Quotation Request"}
                 </Text>
                 <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]} numberOfLines={1}>
-                  {data.title}
+                  {inquirySuccess ? "Confirmation" : data.title}
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={() => setInquiryModalVisible(false)}
+                onPress={() => {
+                  setInquirySuccess(false);
+                  setInquiryModalVisible(false);
+                }}
                 style={styles.modalCloseBtn}
               >
                 <X size={20} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView
-              style={styles.modalForm}
-              contentContainerStyle={styles.modalFormContent}
-              showsVerticalScrollIndicator={false}
-            >
-              {/* Inquiries are sent from the signed-in account, so only the phone (for the deal desk) and the message are asked for */}
-              <Text style={styles.inputLabel}>Phone / WhatsApp *</Text>
-              <TextInput
-                style={[styles.input, isDark && styles.inputDark]}
-                value={inquiryPhone}
-                onChangeText={setInquiryPhone}
-                keyboardType="phone-pad"
-                placeholder="+91-XXXXXXXXXX"
-                placeholderTextColor="#94a3b8"
-              />
-
-              <Text style={styles.inputLabel}>Inquiry / Quotation Message *</Text>
-              <TextInput
-                style={[styles.textArea, isDark && styles.textAreaDark]}
-                value={inquiryMessage}
-                onChangeText={setInquiryMessage}
-                placeholder="Ask about warranty, operational logs, physical inspection, or offer your target price..."
-                placeholderTextColor="#94a3b8"
-                multiline
-                numberOfLines={4}
-              />
-
-              <TouchableOpacity
-                style={[
-                  styles.submitInquiryBtn,
-                  isSendingInquiry && styles.submitInquiryBtnDisabled,
-                ]}
-                activeOpacity={0.85}
-                onPress={handleSendInquiry}
-                disabled={isSendingInquiry}
+            {inquirySuccess ? (
+              <View style={styles.successContainer}>
+                <View style={styles.successCircle}>
+                  <CheckCircle2 size={36} color="#15803d" />
+                </View>
+                <Text style={[styles.successTitle, isDark && styles.successTitleDark]}>
+                  Quote Request Sent!
+                </Text>
+                <Text style={[styles.successDesc, isDark && styles.successDescDark]}>
+                  Your quotation request has been delivered to LabMatrix operations and the equipment seller. You will be contacted shortly on {inquiryPhone || "your phone"}.
+                </Text>
+                <TouchableOpacity
+                  style={styles.successDoneBtn}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    setInquirySuccess(false);
+                    setInquiryModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.successDoneBtnText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.modalForm}
+                contentContainerStyle={styles.modalFormContent}
+                showsVerticalScrollIndicator={false}
               >
-                {isSendingInquiry ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <>
-                    <Send size={16} color="#ffffff" />
-                    <Text style={styles.submitInquiryBtnText}>Request quote</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </ScrollView>
+                {/* Compact Listing Snippet Card */}
+                <View style={[styles.sheetListingCard, isDark && styles.sheetListingCardDark]}>
+                  {photos.length > 0 ? (
+                    <ExpoImage
+                      source={{ uri: getOptimizedImageUrl(photos[0], IMAGE_PRESETS.THUMBNAIL) }}
+                      style={styles.sheetListingThumb}
+                      contentFit="cover"
+                    />
+                  ) : (
+                    <View style={[styles.sheetListingThumb, { backgroundColor: "#e2e8f0", alignItems: "center", justifyContent: "center" }]}>
+                      <Tag size={20} color="#64748b" />
+                    </View>
+                  )}
+                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                    <Text style={[styles.sheetListingTitle, isDark && styles.sheetListingTitleDark]} numberOfLines={1}>
+                      {data.title}
+                    </Text>
+                    <Text style={styles.sheetListingPrice} numberOfLines={1}>
+                      {priceText}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Quick Topic Chips */}
+                <Text style={styles.topicHeaderTitle}>What would you like to know?</Text>
+                <View style={styles.topicChipsContainer}>
+                  {QUICK_TOPICS.map((topic) => {
+                    const isSelected = selectedTopics.includes(topic.id);
+                    return (
+                      <TouchableOpacity
+                        key={topic.id}
+                        style={[styles.topicChip, isSelected && styles.topicChipActive]}
+                        activeOpacity={0.75}
+                        onPress={() => handleToggleTopic(topic)}
+                      >
+                        <Text style={[styles.topicChipText, isSelected && styles.topicChipTextActive]}>
+                          {isSelected ? "✓ " : ""}{topic.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={styles.inputLabel}>Inquiry Message *</Text>
+                <TextInput
+                  style={[styles.textArea, isDark && styles.textAreaDark]}
+                  value={inquiryMessage}
+                  onChangeText={setInquiryMessage}
+                  placeholder="Select topics above or type your questions..."
+                  placeholderTextColor="#94a3b8"
+                  multiline
+                  numberOfLines={4}
+                />
+
+                <Text style={styles.inputLabel}>Deal desk will call</Text>
+                <TextInput
+                  style={[styles.input, isDark && styles.inputDark]}
+                  value={inquiryPhone}
+                  onChangeText={setInquiryPhone}
+                  keyboardType="phone-pad"
+                  placeholder="+91-XXXXXXXXXX"
+                  placeholderTextColor="#94a3b8"
+                />
+
+                <TouchableOpacity
+                  style={[
+                    styles.submitInquiryBtn,
+                    isSendingInquiry && styles.submitInquiryBtnDisabled,
+                  ]}
+                  activeOpacity={0.85}
+                  onPress={handleSendInquiry}
+                  disabled={isSendingInquiry}
+                >
+                  {isSendingInquiry ? (
+                    <ActivityIndicator color="#ffffff" />
+                  ) : (
+                    <>
+                      <Send size={16} color="#ffffff" />
+                      <Text style={styles.submitInquiryBtnText}>Send request</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <Text style={styles.privacyNoteText}>
+                  The seller never sees your phone number or email.
+                </Text>
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>
@@ -1614,6 +1616,189 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   submitInquiryBtnText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  classificationText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  dealProcessContainer: {
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 14,
+  },
+  dealProcessContainerDark: {
+    backgroundColor: "#0b1329",
+    borderColor: "#1e293b",
+  },
+  dealProcessHeader: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 10,
+  },
+  dealProcessHeaderDark: {
+    color: "#f8fafc",
+  },
+  dealStepsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  dealStepCard: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 10,
+    padding: 8,
+    gap: 3,
+  },
+  dealStepCardDark: {
+    backgroundColor: "#16203a",
+    borderColor: "#1e293b",
+  },
+  dealStepNum: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#033a7d",
+  },
+  dealStepTitle: {
+    fontSize: 11.5,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  dealStepTitleDark: {
+    color: "#f8fafc",
+  },
+  dealStepDesc: {
+    fontSize: 10,
+    color: "#64748b",
+    lineHeight: 13,
+  },
+  sheetListingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    padding: 8,
+    marginBottom: 10,
+  },
+  sheetListingCardDark: {
+    backgroundColor: "#16203a",
+    borderColor: "#1e293b",
+  },
+  sheetListingThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+  },
+  sheetListingTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0f172a",
+    lineHeight: 16,
+  },
+  sheetListingTitleDark: {
+    color: "#f8fafc",
+  },
+  sheetListingPrice: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#033a7d",
+  },
+  topicHeaderTitle: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#334155",
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  topicChipsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 10,
+  },
+  topicChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#ffffff",
+  },
+  topicChipActive: {
+    backgroundColor: "#033a7d",
+    borderColor: "#033a7d",
+  },
+  topicChipText: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  topicChipTextActive: {
+    color: "#ffffff",
+    fontWeight: "700",
+  },
+  privacyNoteText: {
+    fontSize: 11.5,
+    color: "#64748b",
+    textAlign: "center",
+    marginTop: 6,
+    marginBottom: 12,
+  },
+  successContainer: {
+    alignItems: "center",
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  successCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#dcfce7",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  successTitle: {
+    fontSize: 19,
+    fontWeight: "800",
+    color: "#0f172a",
+    textAlign: "center",
+  },
+  successTitleDark: {
+    color: "#f8fafc",
+  },
+  successDesc: {
+    fontSize: 13.5,
+    color: "#475569",
+    textAlign: "center",
+    lineHeight: 20,
+    paddingHorizontal: 8,
+  },
+  successDescDark: {
+    color: "#94a3b8",
+  },
+  successDoneBtn: {
+    backgroundColor: "#033a7d",
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    borderRadius: 12,
+    marginTop: 10,
+  },
+  successDoneBtnText: {
     color: "#ffffff",
     fontSize: 14,
     fontWeight: "800",

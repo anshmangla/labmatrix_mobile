@@ -16,7 +16,7 @@ import {
   Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import Svg, { Path } from "react-native-svg";
 import Lock from "lucide-react-native/icons/lock";
 import Mail from "lucide-react-native/icons/mail";
@@ -57,6 +57,7 @@ function GoogleLogo() {
 
 export default function LoginLandingScreen() {
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const { login, loginWithGoogle } = useAuth();
@@ -96,7 +97,11 @@ export default function LoginLandingScreen() {
     setIsLoading(false);
 
     if (res.success) {
-      router.replace("/(tabs)");
+      if (returnTo) {
+        router.replace(returnTo as any);
+      } else {
+        router.replace("/(tabs)");
+      }
     } else {
       setAuthError(
         res.error || "Incorrect email or password. Please verify your credentials and try again."
@@ -111,7 +116,11 @@ export default function LoginLandingScreen() {
     setIsGoogleLoading(false);
 
     if (res.success) {
-      router.replace("/(tabs)");
+      if (returnTo) {
+        router.replace(returnTo as any);
+      } else {
+        router.replace("/(tabs)");
+      }
     } else {
       if (res.error && !res.error.includes("cancelled")) {
         setAuthError(res.error);
