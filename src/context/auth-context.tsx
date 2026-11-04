@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { User } from "@/types/api";
-import { api, setAuthHeader } from "@/lib/api";
+import { api, isNetworkFailure, setAuthHeader } from "@/lib/api";
+
 import {
   getAuthToken,
   saveAuthToken,
@@ -11,6 +12,19 @@ import {
   removeCachedUser,
 } from "@/lib/storage";
 import { clearPersistedQueries, removeViewerSpecificQueries } from "@/lib/query-persistence";
+
+/**
+ * Runs a sign-in request, retrying once if no response arrived at all (timeout or a dead
+ * connection after the app was in the background). Safe for sign-in, which changes no data.
+ */
+async function withOneNetworkRetry<T>(request: () => Promise<T>): Promise<T> {
+  try {
+    return await request();
+  } catch (error) {
+    if (!isNetworkFailure(error)) throw error;
+    return await request();
+  }
+}
 
 const GOOGLE_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
@@ -131,10 +145,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      const res = await api.post("/api/auth/mobile/login", {
-        email: email.trim().toLowerCase(),
-        password,
-      });
+      const res = await withOneNetworkRetry(() =>
+        api.post("/api/auth/mobile/login", {
+          email: email.trim().toLowerCase(),
+          password,
+        })
+      );
       const { token: receivedToken, user: receivedUser } = res.data;
 
       // Drop any previous account's data (in memory and saved on the device) before switching
@@ -181,7 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     credential: { idToken: string }
   ): Promise<{ success: boolean; error?: string }> => {
     try {
-      const res = await api.post("/api/auth/mobile/google", credential);
+      const res = await withOneNetworkRetry(() => api.post("/api/auth/mobile/google", credential));
       const { token: receivedToken, user: receivedUser } = res.data;
 
       // Drop any previous account's data (in memory and saved on the device) before switching

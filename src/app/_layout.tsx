@@ -8,7 +8,7 @@ import {
   useSegments,
 } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useColorScheme, View, Image, ActivityIndicator, StyleSheet } from "react-native";
+import { useColorScheme, View, Image, ActivityIndicator, StyleSheet, AppState } from "react-native";
 import { QueryClient, useIsRestoring } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -21,6 +21,10 @@ import {
   removeViewerSpecificQueries,
   shouldPersistQuery,
 } from "@/lib/query-persistence";
+import { wakeServer } from "@/lib/wake-server";
+
+// After this long in the background, connections may have died and data may be out of date
+const RESUME_REFRESH_AFTER_MS = 30_000;
 
 SplashScreen.preventAutoHideAsync();
 
@@ -34,6 +38,8 @@ const queryClient = new QueryClient({
         if (status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
         return failureCount < 2;
       },
+      // Retry quickly (0.5s, then 1s): a failed attempt has usually already waited for its timeout
+      retryDelay: (attempt) => Math.min(500 * 2 ** attempt, 3000),
       staleTime: 1000 * 60 * 2, // 2 minutes
       // Keep loaded data (also needed for it to be saved on the device for PERSIST_MAX_AGE)
       gcTime: PERSIST_MAX_AGE,
@@ -50,6 +56,26 @@ function RootNavigation() {
   const isLoading = isAuthLoading || isRestoring;
   const segments = useSegments();
   const router = useRouter();
+
+  // Wake the server's database at launch. After time in the background, wake it again and
+  // refresh what's on screen: requests stuck on a connection that died while the app was away
+  // are cancelled and started again on a fresh one.
+  useEffect(() => {
+    wakeServer();
+    let backgroundedAt: number | null = null;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        if (backgroundedAt !== null && Date.now() - backgroundedAt > RESUME_REFRESH_AFTER_MS) {
+          wakeServer();
+          queryClient.invalidateQueries({ refetchType: "active" });
+        }
+        backgroundedAt = null;
+      } else if (backgroundedAt === null) {
+        backgroundedAt = Date.now();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     if (isLoading) return;

@@ -15,7 +15,7 @@ const getBaseUrl = (): string => {
 // eslint-disable-next-line import/no-named-as-default-member
 export const api = axios.create({
   baseURL: getBaseUrl(),
-  timeout: 15000,
+  // Per-request timeouts are set in the request interceptor below (by method)
   headers: {
     "Content-Type": "application/json",
   },
@@ -32,7 +32,19 @@ export const setAuthHeader = (token: string | null) => {
 
 // Public feeds that never read the session. Sending a token with them makes the CDN skip
 // its cache, so signed-in users would always wait for the server and database.
-const PUBLIC_GET_PATHS = new Set(["/api/listings", "/api/requirements"]);
+const PUBLIC_GET_PATHS = new Set(["/api/listings", "/api/requirements", "/api/health"]);
+
+// Reads give up sooner so a request stuck on a dead connection fails fast and is retried;
+// writes (sign-in, posting, photo uploads) get longer. A timeout set on a request is kept.
+const READ_TIMEOUT_MS = 10_000;
+const WRITE_TIMEOUT_MS = 20_000;
+
+/** True when no response arrived at all (timeout, dead connection, offline), not an HTTP error. */
+export function isNetworkFailure(error: unknown): boolean {
+  // axios marks its errors with isAxiosError; a missing response means nothing came back
+  const e = error as { isAxiosError?: boolean; response?: unknown } | null;
+  return !!e && e.isAxiosError === true && !e.response;
+}
 
 function isPublicFeedRequest(method?: string, url?: string): boolean {
   if ((method || "get").toLowerCase() !== "get" || !url) return false;
@@ -41,6 +53,9 @@ function isPublicFeedRequest(method?: string, url?: string): boolean {
 
 // Attach Authorization header if token exists
 api.interceptors.request.use(async (config) => {
+  if (!config.timeout) {
+    config.timeout = (config.method || "get").toLowerCase() === "get" ? READ_TIMEOUT_MS : WRITE_TIMEOUT_MS;
+  }
   try {
     if (isPublicFeedRequest(config.method, config.url)) {
       config.headers.delete("Authorization");

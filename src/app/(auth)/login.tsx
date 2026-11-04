@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -30,6 +30,7 @@ import HelpCircle from "lucide-react-native/icons/circle-question-mark";
 import Microscope from "lucide-react-native/icons/microscope";
 import CheckCircle2 from "lucide-react-native/icons/circle-check";
 import { useAuth } from "@/context/auth-context";
+import { wakeServer } from "@/lib/wake-server";
 
 function GoogleLogo() {
   return (
@@ -66,6 +67,22 @@ export default function LoginLandingScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [isSlowSignIn, setIsSlowSignIn] = useState(false);
+
+  // Start waking the server's database while the user types, so sign-in doesn't wait for it
+  useEffect(() => {
+    wakeServer();
+  }, []);
+
+  // If signing in takes a while (e.g. the server is waking up), say so instead of a silent spinner
+  useEffect(() => {
+    if (!isLoading) return;
+    const timer = setTimeout(() => setIsSlowSignIn(true), 4000);
+    return () => {
+      clearTimeout(timer);
+      setIsSlowSignIn(false);
+    };
+  }, [isLoading]);
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
@@ -354,6 +371,9 @@ export default function LoginLandingScreen() {
                 </>
               )}
             </TouchableOpacity>
+            {isSlowSignIn && (
+              <Text style={styles.connectingHint}>Connecting to server… this can take a few seconds.</Text>
+            )}
 
             {/* Masked Privacy Guarantee Box */}
             <View style={[styles.privacyBox, isDark && styles.privacyBoxDark]}>
@@ -759,6 +779,12 @@ const styles = StyleSheet.create({
   },
   submitButtonDisabled: {
     opacity: 0.6,
+  },
+  connectingHint: {
+    marginTop: 8,
+    textAlign: "center",
+    fontSize: 12,
+    color: "#64748b",
   },
   submitButtonText: {
     fontSize: 15,
