@@ -20,16 +20,20 @@ import * as ImagePicker from "expo-image-picker";
 import { prepareImageForUpload, type PickedImage } from "@/lib/upload-image";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
+import { useAuth } from "@/context/auth-context";
+import { api } from "@/lib/api";
+import { saveSellDraft, getSellDraft, clearSellDraft } from "@/lib/storage";
+
 import Upload from "lucide-react-native/icons/upload";
 import X from "lucide-react-native/icons/x";
 import Lock from "lucide-react-native/icons/lock";
 import Phone from "lucide-react-native/icons/phone";
 import Building2 from "lucide-react-native/icons/building-complex";
 import ArrowRight from "lucide-react-native/icons/arrow-right";
+import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import Clock from "lucide-react-native/icons/clock";
 import CheckCircle2 from "lucide-react-native/icons/circle-check";
 import Bell from "lucide-react-native/icons/bell";
-import User from "lucide-react-native/icons/user";
 import Sparkles from "lucide-react-native/icons/sparkles";
 import Wrench from "lucide-react-native/icons/wrench";
 import Microscope from "lucide-react-native/icons/microscope";
@@ -40,8 +44,7 @@ import Minus from "lucide-react-native/icons/minus";
 import Camera from "lucide-react-native/icons/camera";
 import ShieldCheck from "lucide-react-native/icons/shield-check";
 import Check from "lucide-react-native/icons/check";
-import { useAuth } from "@/context/auth-context";
-import { api } from "@/lib/api";
+import Tag from "lucide-react-native/icons/tag";
 
 const CATEGORIES = [
   "HPLC & UHPLC",
@@ -80,15 +83,25 @@ const SPARE_CONDITIONS = [
   "Refurbished / Repaired",
 ];
 
+const STEP_TITLES = {
+  1: "STEP 1 OF 4 · BASICS",
+  2: "STEP 2 OF 4 · PHOTOS",
+  3: "STEP 3 OF 4 · PRICING & LOCATION",
+  4: "STEP 4 OF 4 · REVIEW & CONTACT",
+};
+
 export default function SellScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { edit, type } = useLocalSearchParams<{ edit?: string; type?: string }>();
+  const { edit, type, duplicate } = useLocalSearchParams<{ edit?: string; type?: string; duplicate?: string }>();
   const isEditMode = !!edit;
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const { isAuthenticated, user } = useAuth();
   const queryClient = useQueryClient();
+
+  // Wizard Step (1: Basics, 2: Photos, 3: Pricing & Location, 4: Review & Contact)
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
 
   // Escrow Policy Modal
   const [escrowModalVisible, setEscrowModalVisible] = useState(false);
@@ -105,36 +118,19 @@ export default function SellScreen() {
   });
   const unreadCount = notificationsData?.unreadCount || 0;
 
-  const userInitials = React.useMemo(() => {
-    if (!user) return "LM";
-    if (user.name && user.name.trim().length > 0) {
-      const parts = user.name.trim().split(/\s+/);
-      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-      return user.name.slice(0, 2).toUpperCase();
-    }
-    if (user.email && user.email.trim().length > 0) {
-      return user.email.slice(0, 2).toUpperCase();
-    }
-    return "LM";
-  }, [user]);
-
+  // Form Fields - Start empty by default (as recommended by UX audit)
   const [itemType, setItemType] = useState<"MACHINE" | "NEW_INSTRUMENT" | "SPARE_PART">("MACHINE");
-
-  // Form Fields
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState(CATEGORIES[0]);
-  const [condition, setCondition] = useState(MACHINE_CONDITIONS[1]);
+  const [category, setCategory] = useState("");
+  const [condition, setCondition] = useState("");
   const [compatibleWith, setCompatibleWith] = useState("");
   const [partNumber, setPartNumber] = useState("");
   const [location, setLocation] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
+  const [isPriceOnRequest, setIsPriceOnRequest] = useState(false);
   const [quantity, setQuantity] = useState("1");
   const [description, setDescription] = useState("");
-
-  // Modals for Category & Condition Dropdowns
-  const [isCategoryModalVisible, setIsCategoryModalVisible] = useState(false);
-  const [isConditionModalVisible, setIsConditionModalVisible] = useState(false);
 
   // Photos
   const [photos, setPhotos] = useState<string[]>([]);
@@ -144,66 +140,54 @@ export default function SellScreen() {
   const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || "");
   const [companyName, setCompanyName] = useState(user?.companyName || "");
 
+  // Category Dropdown Modal
+  const [isCategoryModalVisible, setIsCategoryModalVisible] = useState(false);
+
+  // Draft Autosave state
+  const [isDraftSaved, setIsDraftSaved] = useState(false);
+  const draftSaveTimeoutRef = useRef<any>(null);
+
+  // Submission & Loading state
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Inline validation: every problem is shown under its field, and the form scrolls to the first one
-  type FieldKey = "title" | "price" | "description" | "phone";
-  const FIELD_ORDER: FieldKey[] = ["title", "price", "description", "phone"];
-  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
-  const [scrollToErrorToken, setScrollToErrorToken] = useState(0);
-  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
-  const scrollYRef = useRef(0);
-  const titleErrorRef = useRef<React.ComponentRef<typeof View>>(null);
-  const priceErrorRef = useRef<React.ComponentRef<typeof View>>(null);
-  const descriptionErrorRef = useRef<React.ComponentRef<typeof View>>(null);
-  const phoneErrorRef = useRef<React.ComponentRef<typeof View>>(null);
-
-  const clearFieldError = (key: FieldKey) => {
-    if (fieldErrors[key]) setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
-  };
-
-  useEffect(() => {
-    if (!scrollToErrorToken) return;
-    const first = FIELD_ORDER.find((key) => fieldErrors[key]);
-    if (!first) return;
-    const refs = { title: titleErrorRef, price: priceErrorRef, description: descriptionErrorRef, phone: phoneErrorRef };
-    const target = refs[first].current;
-    const scrollView = scrollRef.current;
-    if (!target || !scrollView) return;
-    target.measureInWindow((_x, errorY) => {
-      scrollView.measureInWindow((_sx, scrollTop) => {
-        // Leave room above the message so the field itself is visible too
-        const y = Math.max(0, scrollYRef.current + (errorY - scrollTop) - 140);
-        scrollRef.current?.scrollTo({ y, animated: true });
-      });
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scrollToErrorToken]);
   const [isLoadingEdit, setIsLoadingEdit] = useState(false);
   const [submittedData, setSubmittedData] = useState<{ id: string; title: string; itemType: string } | null>(null);
 
+  // Field validation errors
+  const [stepErrors, setStepErrors] = useState<Record<string, string>>({});
 
-  // Load listing for edit mode
+  // Prefill contact details from the profile when it loads
   useEffect(() => {
-    if (!edit) return;
+    if (user) {
+      if (user.phoneNumber && !phoneNumber) setPhoneNumber(user.phoneNumber);
+      if (user.companyName && !companyName) setCompanyName(user.companyName);
+    }
+  }, [user]);
+
+  // Load listing for edit or duplicate mode
+  useEffect(() => {
+    const listingIdToLoad = edit || duplicate;
+    if (!listingIdToLoad) return;
     let isMounted = true;
-    async function fetchListingToEdit() {
+    async function fetchListingData() {
       setIsLoadingEdit(true);
       try {
-        const res = await api.get(`/api/listings/${edit}`);
+        const res = await api.get(`/api/listings/${listingIdToLoad}`);
         const listing = res.data?.listing;
         if (listing && isMounted) {
-          setTitle(listing.title || "");
-          setCategory(listing.category || CATEGORIES[0]);
-          if (listing.itemType) {
-            setItemType(listing.itemType);
-          }
-          if (listing.condition) {
-            setCondition(listing.condition);
-          }
+          setTitle(duplicate ? `${listing.title} (Copy)` : listing.title || "");
+          setCategory(listing.category || "");
+          if (listing.itemType) setItemType(listing.itemType);
+          if (listing.condition) setCondition(listing.condition);
           setLocation(listing.location || "");
-          setMinPrice(listing.minPrice !== undefined && listing.minPrice !== null ? String(listing.minPrice) : "");
-          setMaxPrice(listing.maxPrice !== undefined && listing.maxPrice !== null ? String(listing.maxPrice) : "");
+          if (listing.minPrice === 0 && listing.maxPrice === 0) {
+            setIsPriceOnRequest(true);
+            setMinPrice("");
+            setMaxPrice("");
+          } else {
+            setIsPriceOnRequest(false);
+            setMinPrice(listing.minPrice !== undefined && listing.minPrice !== null ? String(listing.minPrice) : "");
+            setMaxPrice(listing.maxPrice !== undefined && listing.maxPrice !== null ? String(listing.maxPrice) : "");
+          }
           setQuantity(listing.quantity ? String(listing.quantity) : "1");
           setDescription(listing.description || "");
           setPhotos(listing.photos || []);
@@ -211,57 +195,106 @@ export default function SellScreen() {
           if (listing.compatibleWith) setCompatibleWith(listing.compatibleWith);
         }
       } catch (err: any) {
-        console.error("Failed to load listing for edit:", err);
-        Alert.alert("Error", "Could not load listing details to edit.");
+        console.error("Failed to load listing details:", err);
+        Alert.alert("Error", "Could not load listing details.");
       } finally {
         if (isMounted) setIsLoadingEdit(false);
       }
     }
-    fetchListingToEdit();
+    fetchListingData();
     return () => {
       isMounted = false;
     };
-  }, [edit]);
+  }, [edit, duplicate]);
 
+  // Restore draft on mount if not editing or duplicating
+  useEffect(() => {
+    if (isEditMode || duplicate) return;
+    getSellDraft().then((draft) => {
+      if (draft && !edit && !duplicate) {
+        if (draft.itemType) setItemType(draft.itemType);
+        if (draft.title) setTitle(draft.title);
+        if (draft.category) setCategory(draft.category);
+        if (draft.condition) setCondition(draft.condition);
+        if (draft.compatibleWith) setCompatibleWith(draft.compatibleWith);
+        if (draft.partNumber) setPartNumber(draft.partNumber);
+        if (draft.location) setLocation(draft.location);
+        if (draft.minPrice) setMinPrice(draft.minPrice);
+        if (draft.maxPrice) setMaxPrice(draft.maxPrice);
+        if (draft.isPriceOnRequest !== undefined) setIsPriceOnRequest(draft.isPriceOnRequest);
+        if (draft.quantity) setQuantity(draft.quantity);
+        if (draft.description) setDescription(draft.description);
+        if (draft.photos && Array.isArray(draft.photos)) setPhotos(draft.photos);
+        if (draft.phoneNumber) setPhoneNumber(draft.phoneNumber);
+        if (draft.companyName) setCompanyName(draft.companyName);
+        if (draft.currentStep && draft.currentStep >= 1 && draft.currentStep <= 4) {
+          setCurrentStep(draft.currentStep);
+        }
+        setIsDraftSaved(true);
+      }
+    });
+  }, [isEditMode, edit, duplicate]);
 
-  // Adjust conditions and category defaults when itemType changes
-  const handleItemTypeChange = (type: "MACHINE" | "NEW_INSTRUMENT" | "SPARE_PART") => {
-    setItemType(type);
-    if (type === "SPARE_PART") {
-      setCondition(SPARE_CONDITIONS[0]);
+  // Autosave draft on any field change
+  useEffect(() => {
+    if (isEditMode || duplicate || submittedData) return;
+    if (!title && !category && !condition && photos.length === 0 && !description) return;
+
+    if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
+    draftSaveTimeoutRef.current = setTimeout(async () => {
+      await saveSellDraft({
+        itemType,
+        title,
+        category,
+        condition,
+        compatibleWith,
+        partNumber,
+        location,
+        minPrice,
+        maxPrice,
+        isPriceOnRequest,
+        quantity,
+        description,
+        photos,
+        phoneNumber,
+        companyName,
+        currentStep,
+      });
+      setIsDraftSaved(true);
+    }, 600);
+
+    return () => {
+      if (draftSaveTimeoutRef.current) clearTimeout(draftSaveTimeoutRef.current);
+    };
+  }, [
+    isEditMode,
+    duplicate,
+    submittedData,
+    itemType,
+    title,
+    category,
+    condition,
+    compatibleWith,
+    partNumber,
+    location,
+    minPrice,
+    maxPrice,
+    isPriceOnRequest,
+    quantity,
+    description,
+    photos,
+    phoneNumber,
+    companyName,
+    currentStep,
+  ]);
+
+  const handleItemTypeChange = (nextType: "MACHINE" | "NEW_INSTRUMENT" | "SPARE_PART") => {
+    setItemType(nextType);
+    setCondition(""); // Keep empty so seller actively selects
+    if (nextType === "SPARE_PART" && !category) {
       setCategory("Spare Parts & Consumables");
-    } else if (type === "NEW_INSTRUMENT") {
-      setCondition(NEW_INSTRUMENT_CONDITIONS[0]);
-      if (category === "Spare Parts & Consumables") setCategory(CATEGORIES[0]);
-    } else {
-      setCondition(MACHINE_CONDITIONS[1]);
-      if (category === "Spare Parts & Consumables") setCategory(CATEGORIES[0]);
     }
   };
-
-  // Initialize itemType from query param if passed (handled during render, including the first one)
-  const typeParamKey = `${type ?? ""}|${edit ?? ""}`;
-  const [handledTypeParam, setHandledTypeParam] = useState<string | null>(null);
-  if (typeParamKey !== handledTypeParam) {
-    setHandledTypeParam(typeParamKey);
-    if (!edit && type) {
-      if (type === "SPARE_PART") {
-        handleItemTypeChange("SPARE_PART");
-      } else if (type === "NEW_INSTRUMENT") {
-        handleItemTypeChange("NEW_INSTRUMENT");
-      }
-    }
-  }
-
-  // Prefill contact details from the profile when it loads (without overwriting what was typed)
-  const [syncedUser, setSyncedUser] = useState<typeof user | undefined>(undefined);
-  if (user !== syncedUser) {
-    setSyncedUser(user);
-    if (user) {
-      if (user.phoneNumber && !phoneNumber) setPhoneNumber(user.phoneNumber);
-      if (user.companyName && !companyName) setCompanyName(user.companyName);
-    }
-  }
 
   const currentConditions =
     itemType === "SPARE_PART"
@@ -272,9 +305,7 @@ export default function SellScreen() {
 
   const handleQuantityMinus = () => {
     const q = parseInt(quantity, 10) || 1;
-    if (q > 1) {
-      setQuantity(String(q - 1));
-    }
+    if (q > 1) setQuantity(String(q - 1));
   };
 
   const handleQuantityPlus = () => {
@@ -282,85 +313,7 @@ export default function SellScreen() {
     setQuantity(String(q + 1));
   };
 
-  const pickImage = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert(
-          "Permission Required",
-          "Please allow photo library access to upload photos of your laboratory equipment."
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsMultipleSelection: true,
-        selectionLimit: 10 - photos.length,
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        await uploadImages(result.assets);
-      }
-    } catch (err) {
-      console.error("Image pick error:", err);
-      Alert.alert("Error", "Could not pick image.");
-    }
-  };
-
-  const takePhotoWithCamera = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert(
-          "Camera Permission Required",
-          "Please allow camera access to take benchmark photos of your laboratory equipment."
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        quality: 0.8,
-        allowsEditing: false,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        await uploadImages(result.assets);
-      }
-    } catch (err) {
-      console.error("Camera capture error:", err);
-      Alert.alert("Error", "Could not capture photo.");
-    }
-  };
-
-  const handleSelectPhotoOption = () => {
-    if (photos.length >= 10) {
-      Alert.alert("Limit Reached", "A maximum of 10 photos is allowed per listing.");
-      return;
-    }
-
-    Alert.alert(
-      "Add Equipment Photos",
-      "Capture live benchmark photos or select from your gallery",
-      [
-        {
-          text: "Take Photo (Camera)",
-          onPress: takePhotoWithCamera,
-        },
-        {
-          text: "Choose from Gallery",
-          onPress: pickImage,
-        },
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-      ]
-    );
-  };
-
-  /** Scales the photo down to upload size if needed, uploads it and returns its hosted URL. */
+  // Photo uploading handlers
   const uploadImage = async (image: PickedImage): Promise<string | null> => {
     const uri = await prepareImageForUpload(image);
     const formData = new FormData();
@@ -382,10 +335,6 @@ export default function SellScreen() {
     return res.data?.url || null;
   };
 
-  /**
-   * Uploads several photos a few at a time instead of one after another. Photos are added
-   * in the order they were picked, each as soon as it and the ones before it have finished.
-   */
   const uploadImages = async (images: PickedImage[]) => {
     const CONCURRENCY = 3;
     const results: (string | null | undefined)[] = new Array(images.length).fill(undefined);
@@ -428,42 +377,178 @@ export default function SellScreen() {
     }
   };
 
+  const pickImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert("Permission Required", "Please allow photo library access to upload photos.");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        selectionLimit: 10 - photos.length,
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        await uploadImages(result.assets);
+      }
+    } catch (err) {
+      console.error("Image pick error:", err);
+      Alert.alert("Error", "Could not pick image.");
+    }
+  };
+
+  const takePhotoWithCamera = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert("Permission Required", "Please allow camera access to take benchmark photos.");
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({ quality: 0.8, allowsEditing: false });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        await uploadImages(result.assets);
+      }
+    } catch (err) {
+      console.error("Camera capture error:", err);
+      Alert.alert("Error", "Could not capture photo.");
+    }
+  };
+
+  const handleSelectPhotoOption = () => {
+    if (photos.length >= 10) {
+      Alert.alert("Limit Reached", "A maximum of 10 photos is allowed per listing.");
+      return;
+    }
+    Alert.alert("Add Equipment Photos", "Take live photos or select from your gallery", [
+      { text: "Take Photo (Camera)", onPress: takePhotoWithCamera },
+      { text: "Choose from Gallery", onPress: pickImage },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
   const removePhoto = (index: number) => {
     setPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = async () => {
-    const errors: Partial<Record<FieldKey, string>> = {};
+  // Step Validation & Navigation
+  const handleStep1Next = () => {
+    const errors: Record<string, string> = {};
     if (!title.trim() || title.trim().length < 3) {
-      errors.title = "Enter a title of at least 3 characters.";
+      errors.title = "Please enter an equipment title of at least 3 characters.";
     }
-    if (!minPrice.trim() || !maxPrice.trim()) {
-      errors.price = "Enter both a minimum and a maximum price.";
-    } else if (parseFloat(minPrice.replace(/[^0-9.]/g, "")) > parseFloat(maxPrice.replace(/[^0-9.]/g, ""))) {
-      errors.price = "Minimum price can't be higher than the maximum price.";
+    if (!category.trim()) {
+      errors.category = "Please select an instrument category.";
+    }
+    if (!condition.trim()) {
+      errors.condition = "Please select the condition of your equipment.";
+    }
+    setStepErrors(errors);
+    if (Object.keys(errors).length === 0) {
+      setCurrentStep(2);
+    }
+  };
+
+  const handleStep2Next = () => {
+    const errors: Record<string, string> = {};
+    if (photos.length === 0) {
+      errors.photos = "Please add at least 1 photo of your equipment.";
+    }
+    setStepErrors(errors);
+    if (Object.keys(errors).length === 0) {
+      setCurrentStep(3);
+    }
+  };
+
+  const handleStep3Next = () => {
+    const errors: Record<string, string> = {};
+    if (!isPriceOnRequest) {
+      if (!minPrice.trim() || !maxPrice.trim()) {
+        errors.price = "Enter both a minimum and maximum price, or choose 'Price on request'.";
+      } else {
+        const min = parseFloat(minPrice.replace(/[^0-9.]/g, ""));
+        const max = parseFloat(maxPrice.replace(/[^0-9.]/g, ""));
+        if (isNaN(min) || isNaN(max)) {
+          errors.price = "Enter valid price numbers.";
+        } else if (min > max) {
+          errors.price = "Minimum price cannot be greater than maximum price.";
+        }
+      }
+    }
+    if (!location.trim() || location.trim().length < 2) {
+      errors.location = "Please enter facility location or city.";
     }
     if (!description.trim() || description.trim().length < 10) {
-      errors.description = "Describe the item in at least 10 characters.";
+      errors.description = "Provide at least 10 characters describing the instrument.";
     }
+    setStepErrors(errors);
+    if (Object.keys(errors).length === 0) {
+      setCurrentStep(4);
+    }
+  };
+
+  const handlePrevStep = () => {
+    setStepErrors({});
+    if (currentStep === 4) setCurrentStep(3);
+    else if (currentStep === 3) setCurrentStep(2);
+    else if (currentStep === 2) setCurrentStep(1);
+  };
+
+  const handleCloseOrReset = () => {
+    if (title || photos.length > 0 || description) {
+      Alert.alert(
+        "Discard listing draft?",
+        "You have unsaved changes. Discarding will clear your draft.",
+        [
+          { text: "Keep Editing", style: "cancel" },
+          {
+            text: "Discard Draft",
+            style: "destructive",
+            onPress: async () => {
+              await clearSellDraft();
+              setTitle("");
+              setCategory("");
+              setCondition("");
+              setPhotos([]);
+              setDescription("");
+              setMinPrice("");
+              setMaxPrice("");
+              setIsPriceOnRequest(false);
+              setLocation("");
+              setPartNumber("");
+              setCompatibleWith("");
+              setCurrentStep(1);
+              setIsDraftSaved(false);
+              if (isEditMode) router.back();
+            },
+          },
+        ]
+      );
+    } else {
+      if (isEditMode) router.back();
+    }
+  };
+
+  const handleSubmit = async () => {
     if (!phoneNumber.trim()) {
-      errors.phone = "Enter your mobile / WhatsApp number for deal notifications.";
-    }
-    setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) {
-      setScrollToErrorToken((token) => token + 1);
+      setStepErrors({ phone: "Enter your mobile / WhatsApp number for deal notifications." });
       return;
     }
 
     setIsSubmitting(true);
     try {
+      const minPriceVal = isPriceOnRequest ? 0 : parseFloat(minPrice.replace(/[^0-9.]/g, ""));
+      const maxPriceVal = isPriceOnRequest ? 0 : parseFloat(maxPrice.replace(/[^0-9.]/g, ""));
+
       const payload: any = {
         title: title.trim(),
         category,
         itemType,
         condition,
         location: location.trim() || undefined,
-        minPrice: parseFloat(minPrice.replace(/[^0-9.]/g, "")),
-        maxPrice: parseFloat(maxPrice.replace(/[^0-9.]/g, "")),
+        minPrice: minPriceVal,
+        maxPrice: maxPriceVal,
         quantity: Math.max(1, parseInt(quantity, 10) || 1),
         description: description.trim(),
         photos,
@@ -480,23 +565,22 @@ export default function SellScreen() {
         await api.patch(`/api/listings/${edit}`, payload);
         await queryClient.invalidateQueries({ queryKey: ["myItems"] });
         await queryClient.invalidateQueries({ queryKey: ["listings"] });
+        await clearSellDraft();
         setIsSubmitting(false);
-        Alert.alert(
-          "Listing Updated",
-          "Your equipment changes have been saved.",
-          [
-            {
-              text: "Done",
-              onPress: () => router.push("/(tabs)/profile" as any),
-            },
-          ]
-        );
+        Alert.alert("Listing Updated", "Your equipment changes have been saved.", [
+          {
+            text: "Done",
+            onPress: () => router.push("/(tabs)/profile" as any),
+          },
+        ]);
         return;
       }
 
       const res = await api.post("/api/listings", payload);
       await queryClient.invalidateQueries({ queryKey: ["myItems"] });
       await queryClient.invalidateQueries({ queryKey: ["listings"] });
+      await clearSellDraft();
+      setIsDraftSaved(false);
 
       setSubmittedData({
         id: res.data?.listingId || "success",
@@ -514,17 +598,13 @@ export default function SellScreen() {
     }
   };
 
-  // Auth Guard Screen
+  // Auth Guard
   if (!isAuthenticated) {
     return (
       <SafeAreaView edges={["top"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <View style={styles.topBar}>
-          <Image
-            source={require("@/assets/images/logo.png")}
-            style={styles.logoImg}
-            resizeMode="contain"
-          />
+          <Image source={require("@/assets/images/logo.png")} style={styles.logoImg} resizeMode="contain" />
         </View>
 
         <View style={styles.authRequiredContainer}>
@@ -535,8 +615,7 @@ export default function SellScreen() {
             Sign In Required to List Items
           </Text>
           <Text style={styles.authSubtitle}>
-            Please sign in with your LabMatrix account or register your facility to list analytical
-            instruments and spare parts.
+            Please sign in with your LabMatrix account or register your laboratory facility to list instruments and spare parts.
           </Text>
           <TouchableOpacity
             style={styles.signInButton}
@@ -551,17 +630,13 @@ export default function SellScreen() {
     );
   }
 
-  // Submitted Success Confirmation Screen
+  // Submitted Confirmation Screen
   if (submittedData) {
     return (
       <SafeAreaView edges={["top"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <View style={styles.topBar}>
-          <Image
-            source={require("@/assets/images/logo.png")}
-            style={styles.logoImg}
-            resizeMode="contain"
-          />
+          <Image source={require("@/assets/images/logo.png")} style={styles.logoImg} resizeMode="contain" />
         </View>
 
         <ScrollView contentContainerStyle={styles.successContainer}>
@@ -578,8 +653,7 @@ export default function SellScreen() {
             Entry Submitted for Approval!
           </Text>
           <Text style={styles.successSubtitle}>
-            Your listing for <Text style={{ fontWeight: "800", color: "#0f172a" }}>&quot;{submittedData.title}&quot;</Text> has
-            been created and sent to our admin team for verification.
+            Your listing for <Text style={{ fontWeight: "800", color: "#0f172a" }}>&quot;{submittedData.title}&quot;</Text> has been created and sent to our admin team for verification.
           </Text>
 
           <View style={[styles.successInfoCard, isDark && styles.successInfoCardDark]}>
@@ -617,12 +691,16 @@ export default function SellScreen() {
               onPress={() => {
                 setSubmittedData(null);
                 setTitle("");
+                setCategory("");
+                setCondition("");
                 setDescription("");
                 setMinPrice("");
                 setMaxPrice("");
+                setIsPriceOnRequest(false);
                 setPhotos([]);
                 setPartNumber("");
                 setCompatibleWith("");
+                setCurrentStep(1);
               }}
             >
               <Text style={styles.postAnotherBtnText}>List Another Item</Text>
@@ -633,609 +711,723 @@ export default function SellScreen() {
     );
   }
 
-  const section1Title =
-    itemType === "SPARE_PART"
-      ? "1. Spare Part Specifications"
-      : itemType === "NEW_INSTRUMENT"
-      ? "1. New Instrument Specifications"
-      : "1. Machine Specifications";
-
   return (
     <SafeAreaView edges={["top"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-      {/* 1. Top Focused Header Bar */}
-      <View style={[styles.topBar, isDark && styles.topBarDark]}>
-        <View>
-          <Text style={[styles.screenHeaderTitle, isDark && styles.screenHeaderTitleDark]}>
-            {isEditMode ? "Edit Listing" : "List Equipment"}
-          </Text>
-        </View>
-
-        <View style={styles.topRightIcons}>
+      {/* 1. Direction A Wizard Header */}
+      <View style={[styles.wizardHeader, isDark && styles.wizardHeaderDark]}>
+        <View style={styles.wizardTopRow}>
           <TouchableOpacity
-            style={styles.iconBtn}
+            style={styles.wizardNavBtn}
+            onPress={currentStep > 1 ? handlePrevStep : handleCloseOrReset}
             activeOpacity={0.7}
-            onPress={() => router.push("/notifications" as any)}
-            accessibilityLabel="Notifications"
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Bell size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-            {unreadCount > 0 && <View style={styles.redBadgeDot} />}
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {isLoadingEdit ? (
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 32 }}>
-          <ActivityIndicator size="large" color="#033a7d" />
-          <Text style={{ marginTop: 14, color: "#64748b", fontSize: 14, fontWeight: "600" }}>
-            Loading listing specifications...
-          </Text>
-        </View>
-      ) : (
-        <ScrollView
-          ref={scrollRef}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          scrollEventThrottle={32}
-          onScroll={(e) => {
-            scrollYRef.current = e.nativeEvent.contentOffset.y;
-          }}
-        >
-          {/* Title */}
-
-          <View style={styles.pageHeader}>
-            <Text style={[styles.pageTitle, isDark && styles.pageTitleDark]}>
-              {isEditMode ? "Edit Equipment Listing" : "List Equipment or Spare Parts"}
-            </Text>
-            <Text style={styles.pageSubtitle}>
-              {isEditMode
-                ? "Update machine specifications, operational condition, or expected pricing."
-                : "Your contact details remain completely private. Inquiries and proposals are coordinated securely."}
-            </Text>
-          </View>
-
-        {/* What are you listing for sale? Selector Cards */}
-        <View style={styles.itemTypeSection}>
-          <Text style={[styles.sectionHeadingTitle, isDark && styles.sectionHeadingTitleDark]}>
-            What are you listing for sale? <Text style={{ color: "#ba1a1a" }}>*</Text>
-          </Text>
-
-          <View style={styles.itemTypeCardsCol}>
-            {/* Card 1: Pre-Owned Machine */}
-            <TouchableOpacity
-              style={[
-                styles.itemTypeCard,
-                itemType === "MACHINE" && styles.itemTypeCardActive,
-                isDark && styles.itemTypeCardDark,
-              ]}
-              activeOpacity={0.85}
-              onPress={() => handleItemTypeChange("MACHINE")}
-            >
-              <View style={[styles.typeIconBox, { backgroundColor: "#011936" }]}>
-                <Microscope size={22} color="#ffffff" />
-              </View>
-              <View style={styles.typeTextCol}>
-                <Text style={[styles.typeCardTitle, isDark && styles.typeCardTitleDark]}>
-                  Pre-Owned Machine
-                </Text>
-                <Text style={styles.typeCardSub}>Refurbished / Used instruments</Text>
-              </View>
-              {itemType === "MACHINE" && (
-                <CheckCircle2 size={22} color="#033a7d" />
-              )}
-            </TouchableOpacity>
-
-            {/* Card 2: Brand New Instrument */}
-            <TouchableOpacity
-              style={[
-                styles.itemTypeCard,
-                itemType === "NEW_INSTRUMENT" && styles.itemTypeCardActive,
-                isDark && styles.itemTypeCardDark,
-              ]}
-              activeOpacity={0.85}
-              onPress={() => handleItemTypeChange("NEW_INSTRUMENT")}
-            >
-              <View style={[styles.typeIconBox, { backgroundColor: "#eff5fb" }]}>
-                <Sparkles size={22} color="#1d4ed8" />
-              </View>
-              <View style={styles.typeTextCol}>
-                <Text style={[styles.typeCardTitle, isDark && styles.typeCardTitleDark]}>
-                  Brand New Instrument
-                </Text>
-                <Text style={styles.typeCardSub}>Factory sealed with OEM warranty</Text>
-              </View>
-              {itemType === "NEW_INSTRUMENT" && (
-                <CheckCircle2 size={22} color="#033a7d" />
-              )}
-            </TouchableOpacity>
-
-            {/* Card 3: Spare Part / Consumable */}
-            <TouchableOpacity
-              style={[
-                styles.itemTypeCard,
-                itemType === "SPARE_PART" && styles.itemTypeCardActive,
-                isDark && styles.itemTypeCardDark,
-              ]}
-              activeOpacity={0.85}
-              onPress={() => handleItemTypeChange("SPARE_PART")}
-            >
-              <View style={[styles.typeIconBox, { backgroundColor: "#eff5fb" }]}>
-                <Wrench size={22} color="#334155" />
-              </View>
-              <View style={styles.typeTextCol}>
-                <Text style={[styles.typeCardTitle, isDark && styles.typeCardTitleDark]}>
-                  Spare Part / Consumable
-                </Text>
-                <Text style={styles.typeCardSub}>Lamps, columns, modules, valves...</Text>
-              </View>
-              {itemType === "SPARE_PART" && (
-                <CheckCircle2 size={22} color="#033a7d" />
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Section 1: Specifications Card */}
-        <View style={[styles.sectionCard, isDark && styles.sectionCardDark]}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={styles.sectionBarIndicator} />
-            <Text style={[styles.sectionHeading, isDark && styles.sectionHeadingDark]}>
-              {section1Title}
-            </Text>
-          </View>
-
-          {/* Equipment Title & Model */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>
-              {itemType === "SPARE_PART"
-                ? "Part / Consumable Title & Name"
-                : "Equipment Title & Model"}{" "}
-              <Text style={{ color: "#ba1a1a" }}>*</Text>
-            </Text>
-            <TextInput
-              style={[styles.input, isDark && styles.inputDark, fieldErrors.title && styles.inputError]}
-              placeholder="Waters Acquity UPLC System with PDA Detector"
-              placeholderTextColor="#94a3b8"
-              value={title}
-              onChangeText={(value) => {
-                setTitle(value);
-                clearFieldError("title");
-              }}
-            />
-            {fieldErrors.title ? (
-              <View ref={titleErrorRef}>
-                <Text style={styles.fieldErrorText}>{fieldErrors.title}</Text>
-              </View>
-            ) : null}
-          </View>
-
-          {/* Spare Part Specific Fields */}
-          {itemType === "SPARE_PART" && (
-            <>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Compatible Instrument / OEM Model</Text>
-                <TextInput
-                  style={[styles.input, isDark && styles.inputDark]}
-                  placeholder="e.g. Agilent 1100 / 1200 / 1260 Series, Waters Alliance"
-                  placeholderTextColor="#94a3b8"
-                  value={compatibleWith}
-                  onChangeText={setCompatibleWith}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Part Number / Catalog Number (Optional)</Text>
-                <TextInput
-                  style={[styles.input, isDark && styles.inputDark]}
-                  placeholder="e.g. G1315-60012, 5063-6589"
-                  placeholderTextColor="#94a3b8"
-                  value={partNumber}
-                  onChangeText={setPartNumber}
-                />
-              </View>
-            </>
-          )}
-
-          {/* 2-Column Row: Category & Condition Dropdown Pickers */}
-          <View style={styles.twoColRow}>
-            <View style={styles.col}>
-              <Text style={styles.inputLabel}>
-                Category <Text style={{ color: "#ba1a1a" }}>*</Text>
-              </Text>
-              <TouchableOpacity
-                style={[styles.dropdownPickerBox, isDark && styles.dropdownPickerBoxDark]}
-                activeOpacity={0.8}
-                onPress={() => setIsCategoryModalVisible(true)}
-              >
-                <Text style={[styles.dropdownPickerText, isDark && styles.dropdownPickerTextDark]} numberOfLines={1}>
-                  {category}
-                </Text>
-                <ChevronDown size={16} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.col}>
-              <Text style={styles.inputLabel}>
-                Condition <Text style={{ color: "#ba1a1a" }}>*</Text>
-              </Text>
-              <TouchableOpacity
-                style={[styles.dropdownPickerBox, isDark && styles.dropdownPickerBoxDark]}
-                activeOpacity={0.8}
-                onPress={() => setIsConditionModalVisible(true)}
-              >
-                <Text style={[styles.dropdownPickerText, isDark && styles.dropdownPickerTextDark]} numberOfLines={1}>
-                  {condition}
-                </Text>
-                <ChevronDown size={16} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* 2-Column Row: Location & Quantity Available Stepper */}
-          <View style={styles.twoColRow}>
-            <View style={styles.col}>
-              <Text style={styles.inputLabel}>
-                Current Location <Text style={{ color: "#ba1a1a" }}>*</Text>
-              </Text>
-              <View style={[styles.iconInputBox, isDark && styles.iconInputBoxDark]}>
-                <MapPin size={16} color="#033a7d" style={{ marginLeft: 10 }} />
-                <TextInput
-                  style={[styles.iconInputField, isDark && styles.iconInputFieldDark]}
-                  placeholder="Hyderabad, Telangana"
-                  placeholderTextColor="#94a3b8"
-                  value={location}
-                  onChangeText={setLocation}
-                />
-              </View>
-            </View>
-
-            <View style={styles.col}>
-              <Text style={styles.inputLabel}>
-                Quantity Available <Text style={{ color: "#ba1a1a" }}>*</Text>
-              </Text>
-              <View style={[styles.stepperContainer, isDark && styles.stepperContainerDark]}>
-                <TouchableOpacity
-                  style={styles.stepperBtn}
-                  activeOpacity={0.7}
-                  onPress={handleQuantityMinus}
-                >
-                  <Minus size={16} color="#033a7d" />
-                </TouchableOpacity>
-
-                <Text style={[styles.stepperValueText, isDark && styles.stepperValueTextDark]}>
-                  {quantity}
-                </Text>
-
-                <TouchableOpacity
-                  style={styles.stepperBtn}
-                  activeOpacity={0.7}
-                  onPress={handleQuantityPlus}
-                >
-                  <Plus size={16} color="#033a7d" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-
-          {/* Price Expectation Row with Target Bidding Range */}
-          <View style={styles.inputGroup}>
-            <View style={styles.priceHeaderRow}>
-              <Text style={styles.inputLabel}>
-                Price Expectation (₹) <Text style={{ color: "#ba1a1a" }}>*</Text>
-              </Text>
-              <Text style={styles.priceTargetSubtitle}>Target Bidding Range</Text>
-            </View>
-
-            <View style={styles.twoColRow}>
-              <View style={styles.col}>
-                <View style={[styles.iconInputBox, isDark && styles.iconInputBoxDark]}>
-                  <Text style={styles.rupeePrefix}>₹</Text>
-                  <TextInput
-                    style={[styles.iconInputField, isDark && styles.iconInputFieldDark]}
-                    placeholder="280,000"
-                    placeholderTextColor="#94a3b8"
-                    keyboardType="numeric"
-                    value={minPrice}
-                    onChangeText={(value) => {
-                      setMinPrice(value);
-                      clearFieldError("price");
-                    }}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.col}>
-                <View style={[styles.iconInputBox, isDark && styles.iconInputBoxDark]}>
-                  <Text style={styles.rupeePrefix}>₹</Text>
-                  <TextInput
-                    style={[styles.iconInputField, isDark && styles.iconInputFieldDark]}
-                    placeholder="340,000"
-                    placeholderTextColor="#94a3b8"
-                    keyboardType="numeric"
-                    value={maxPrice}
-                    onChangeText={(value) => {
-                      setMaxPrice(value);
-                      clearFieldError("price");
-                    }}
-                  />
-                </View>
-              </View>
-            </View>
-            {fieldErrors.price ? (
-              <View ref={priceErrorRef}>
-                <Text style={styles.fieldErrorText}>{fieldErrors.price}</Text>
-              </View>
-            ) : null}
-          </View>
-
-          {/* Detailed Description & Specifications */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>
-              Detailed Description & Specifications <Text style={{ color: "#ba1a1a" }}>*</Text>
-            </Text>
-            <TextInput
-              style={[styles.textArea, isDark && styles.textAreaDark, fieldErrors.description && styles.inputError]}
-              placeholder="Waters Acquity UPLC H-Class configured with Sample Manager FTN, Quaternary Solvent Manager (QSM), and PDA detector. Decommissioned directly from pharma analytical laboratory. Last calibrated October..."
-              placeholderTextColor="#94a3b8"
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              value={description}
-              onChangeText={(value) => {
-                setDescription(value);
-                clearFieldError("description");
-              }}
-            />
-            {fieldErrors.description ? (
-              <View ref={descriptionErrorRef}>
-                <Text style={styles.fieldErrorText}>{fieldErrors.description}</Text>
-              </View>
-            ) : null}
-          </View>
-        </View>
-
-        {/* Section 2: Photos & Documentation */}
-        <View style={[styles.sectionCard, isDark && styles.sectionCardDark]}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={styles.sectionBarIndicator} />
-            <Text style={[styles.sectionHeading, isDark && styles.sectionHeadingDark]}>
-              2. Photos & Documentation
-            </Text>
-          </View>
-
-          <Text style={styles.sectionSubtext}>
-            High-quality photos of the serial plate, modules, and condition increase buyer interest.
-          </Text>
-
-          {/* Dashed Upload Box */}
-          <TouchableOpacity
-            style={[styles.dashedUploadBox, isDark && styles.dashedUploadBoxDark]}
-            activeOpacity={0.8}
-            onPress={handleSelectPhotoOption}
-            disabled={isUploadingPhoto}
-          >
-            {isUploadingPhoto ? (
-              <ActivityIndicator size="large" color="#033a7d" />
+            {currentStep > 1 ? (
+              <ArrowLeft size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
             ) : (
-              <>
-                <View style={styles.cloudIconCircle}>
-                  <Upload size={22} color="#033a7d" />
-                </View>
-                <Text style={styles.uploadBoxTitle}>Add Photos & Specs</Text>
-                <Text style={styles.uploadBoxSub}>Take live camera photo or select from gallery</Text>
-              </>
+              <X size={20} color={isDark ? "#94a3b8" : "#475569"} />
             )}
           </TouchableOpacity>
 
-          {/* Photo Thumbnails Gallery */}
-          {photos.length > 0 && (
-            <View style={styles.thumbnailsContainer}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbnailsRow}>
-                {photos.map((uri, index) => (
-                  <View key={index} style={styles.thumbnailWrapper}>
-                    <Image source={{ uri }} style={styles.thumbnailImage} />
+          <Text style={[styles.wizardHeaderTitle, isDark && styles.wizardHeaderTitleDark]}>
+            {isEditMode ? "Edit Listing" : duplicate ? "Duplicate Listing" : "New Listing"}
+          </Text>
+
+          <View style={styles.draftBadgeContainer}>
+            {isDraftSaved && !isEditMode && !duplicate ? (
+              <View style={styles.draftBadge}>
+                <Check size={11} color="#15803d" strokeWidth={3} />
+                <Text style={styles.draftBadgeText}>Draft saved</Text>
+              </View>
+            ) : (
+              <View style={{ width: 70 }} />
+            )}
+          </View>
+        </View>
+
+        {/* 4 Step Progress Indicators */}
+        <View style={styles.progressBarRow}>
+          {[1, 2, 3, 4].map((step) => (
+            <View
+              key={step}
+              style={[
+                styles.progressBarSegment,
+                step <= currentStep && styles.progressBarSegmentActive,
+              ]}
+            />
+          ))}
+        </View>
+
+        <Text style={styles.stepSubtitleText}>{STEP_TITLES[currentStep]}</Text>
+      </View>
+
+      {/* Form Content per Step */}
+      {isLoadingEdit ? (
+        <View style={styles.centerLoading}>
+          <ActivityIndicator size="large" color="#033a7d" />
+          <Text style={styles.loadingText}>Loading listing specifications...</Text>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scrollFlex}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* STEP 1: BASICS */}
+          {currentStep === 1 && (
+            <View style={styles.stepContainer}>
+              {/* Item Type 3-card Row */}
+              <View style={styles.fieldBlock}>
+                <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                  What are you listing? <Text style={{ color: "#ba1a1a" }}>*</Text>
+                </Text>
+                <View style={styles.itemTypeRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.itemTypePill,
+                      itemType === "MACHINE" && styles.itemTypePillActive,
+                      isDark && styles.itemTypePillDark,
+                    ]}
+                    activeOpacity={0.8}
+                    onPress={() => handleItemTypeChange("MACHINE")}
+                  >
+                    <Text
+                      style={[
+                        styles.itemTypePillText,
+                        itemType === "MACHINE" && styles.itemTypePillTextActive,
+                        isDark && styles.itemTypePillTextDark,
+                      ]}
+                    >
+                      Pre-owned machine
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.itemTypePill,
+                      itemType === "NEW_INSTRUMENT" && styles.itemTypePillActive,
+                      isDark && styles.itemTypePillDark,
+                    ]}
+                    activeOpacity={0.8}
+                    onPress={() => handleItemTypeChange("NEW_INSTRUMENT")}
+                  >
+                    <Text
+                      style={[
+                        styles.itemTypePillText,
+                        itemType === "NEW_INSTRUMENT" && styles.itemTypePillTextActive,
+                        isDark && styles.itemTypePillTextDark,
+                      ]}
+                    >
+                      Brand new
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.itemTypePill,
+                      itemType === "SPARE_PART" && styles.itemTypePillActive,
+                      isDark && styles.itemTypePillDark,
+                    ]}
+                    activeOpacity={0.8}
+                    onPress={() => handleItemTypeChange("SPARE_PART")}
+                  >
+                    <Text
+                      style={[
+                        styles.itemTypePillText,
+                        itemType === "SPARE_PART" && styles.itemTypePillTextActive,
+                        isDark && styles.itemTypePillTextDark,
+                      ]}
+                    >
+                      Spare part
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Title & Model */}
+              <View style={styles.fieldBlock}>
+                <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                  {itemType === "SPARE_PART" ? "Part Title & OEM Model" : "Instrument Name & Model"}{" "}
+                  <Text style={{ color: "#ba1a1a" }}>*</Text>
+                </Text>
+                <TextInput
+                  style={[
+                    styles.textInput,
+                    isDark && styles.textInputDark,
+                    stepErrors.title && styles.textInputError,
+                  ]}
+                  placeholder={
+                    itemType === "SPARE_PART"
+                      ? "e.g. Deuterium Lamp for Agilent 1100/1200 DAD"
+                      : "e.g. Agilent 1260 Infinity II Quaternary LC"
+                  }
+                  placeholderTextColor="#94a3b8"
+                  value={title}
+                  onChangeText={(val) => {
+                    setTitle(val);
+                    if (stepErrors.title) setStepErrors((prev) => ({ ...prev, title: "" }));
+                  }}
+                />
+                {stepErrors.title ? <Text style={styles.errorText}>{stepErrors.title}</Text> : null}
+              </View>
+
+              {/* Category Dropdown Picker */}
+              <View style={styles.fieldBlock}>
+                <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                  Category <Text style={{ color: "#ba1a1a" }}>*</Text>
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.selectorCard,
+                    isDark && styles.selectorCardDark,
+                    stepErrors.category && styles.textInputError,
+                  ]}
+                  activeOpacity={0.8}
+                  onPress={() => setIsCategoryModalVisible(true)}
+                >
+                  <Text
+                    style={[
+                      styles.selectorCardText,
+                      !category && styles.selectorCardPlaceholder,
+                      isDark && styles.selectorCardTextDark,
+                    ]}
+                  >
+                    {category || "Select category"}
+                  </Text>
+                  <ChevronDown size={18} color="#64748b" />
+                </TouchableOpacity>
+                {stepErrors.category ? <Text style={styles.errorText}>{stepErrors.category}</Text> : null}
+              </View>
+
+              {/* Condition Options Radio List */}
+              <View style={styles.fieldBlock}>
+                <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                  Condition <Text style={{ color: "#ba1a1a" }}>*</Text>
+                </Text>
+                <View style={styles.conditionOptionsCol}>
+                  {currentConditions.map((cond) => {
+                    const isSelected = condition === cond;
+                    return (
+                      <TouchableOpacity
+                        key={cond}
+                        style={[
+                          styles.conditionRadioCard,
+                          isSelected && styles.conditionRadioCardActive,
+                          isDark && styles.conditionRadioCardDark,
+                        ]}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setCondition(cond);
+                          if (stepErrors.condition) setStepErrors((prev) => ({ ...prev, condition: "" }));
+                        }}
+                      >
+                        <View style={[styles.radioCircle, isSelected && styles.radioCircleActive]}>
+                          {isSelected && <View style={styles.radioDot} />}
+                        </View>
+                        <Text
+                          style={[
+                            styles.conditionRadioText,
+                            isSelected && styles.conditionRadioTextActive,
+                            isDark && styles.conditionRadioTextDark,
+                          ]}
+                        >
+                          {cond}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                {stepErrors.condition ? <Text style={styles.errorText}>{stepErrors.condition}</Text> : null}
+              </View>
+
+              {/* Spare Part Specific Fields */}
+              {itemType === "SPARE_PART" && (
+                <>
+                  <View style={styles.fieldBlock}>
+                    <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                      Part Number / Catalog No.
+                    </Text>
+                    <TextInput
+                      style={[styles.textInput, isDark && styles.textInputDark]}
+                      placeholder="e.g. 2140-0590, G1315-60012"
+                      placeholderTextColor="#94a3b8"
+                      value={partNumber}
+                      onChangeText={setPartNumber}
+                    />
+                  </View>
+
+                  <View style={styles.fieldBlock}>
+                    <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                      Compatible Instrument Model
+                    </Text>
+                    <TextInput
+                      style={[styles.textInput, isDark && styles.textInputDark]}
+                      placeholder="e.g. Agilent 1100 / 1200 / 1260 Series"
+                      placeholderTextColor="#94a3b8"
+                      value={compatibleWith}
+                      onChangeText={setCompatibleWith}
+                    />
+                  </View>
+
+                  <View style={styles.fieldBlock}>
+                    <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                      Available Quantity in Stock
+                    </Text>
+                    <View style={styles.stepperRow}>
+                      <TouchableOpacity
+                        style={styles.stepperBtn}
+                        onPress={handleQuantityMinus}
+                        activeOpacity={0.7}
+                      >
+                        <Minus size={18} color="#0f172a" />
+                      </TouchableOpacity>
+                      <Text style={[styles.stepperValueText, isDark && styles.fieldLabelDark]}>
+                        {quantity}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.stepperBtn}
+                        onPress={handleQuantityPlus}
+                        activeOpacity={0.7}
+                      >
+                        <Plus size={18} color="#0f172a" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </>
+              )}
+            </View>
+          )}
+
+          {/* STEP 2: PHOTOS */}
+          {currentStep === 2 && (
+            <View style={styles.stepContainer}>
+              <View style={styles.photosHeaderRow}>
+                <View>
+                  <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                    Equipment Photos <Text style={{ color: "#ba1a1a" }}>*</Text>
+                  </Text>
+                  <Text style={styles.photosSubHint}>
+                    The first photo is your listing cover. Add nameplate & module photos for faster buyer quotes.
+                  </Text>
+                </View>
+                <View style={styles.photoCountBadge}>
+                  <Text style={styles.photoCountBadgeText}>{photos.length} / 10</Text>
+                </View>
+              </View>
+
+              {/* Photo Upload Slots Grid */}
+              <View style={styles.photoGrid}>
+                {photos.map((photoUrl, index) => (
+                  <View key={index} style={styles.photoSlot}>
+                    <Image source={{ uri: photoUrl }} style={styles.uploadedPhotoImg} resizeMode="cover" />
                     {index === 0 && (
-                      <View style={styles.primaryBadge}>
-                        <Text style={styles.primaryBadgeText}>Primary</Text>
+                      <View style={styles.coverBadge}>
+                        <Text style={styles.coverBadgeText}>COVER</Text>
                       </View>
                     )}
                     <TouchableOpacity
                       style={styles.removePhotoBtn}
                       activeOpacity={0.8}
                       onPress={() => removePhoto(index)}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     >
-                      <X size={12} color="#ffffff" />
+                      <X size={12} color="#ffffff" strokeWidth={3} />
                     </TouchableOpacity>
                   </View>
                 ))}
 
-                {/* Add More Squircle */}
-                <TouchableOpacity
-                  style={styles.addMoreSquircle}
-                  activeOpacity={0.8}
-                  onPress={handleSelectPhotoOption}
-                  disabled={isUploadingPhoto}
-                >
-                  <Camera size={20} color="#033a7d" />
-                  <Text style={styles.addMoreText}>Add More</Text>
-                </TouchableOpacity>
-              </ScrollView>
+                {/* Next available slot prompts */}
+                {photos.length < 10 && (
+                  <TouchableOpacity
+                    style={[styles.addSlotCard, isDark && styles.addSlotCardDark]}
+                    activeOpacity={0.8}
+                    onPress={handleSelectPhotoOption}
+                    disabled={isUploadingPhoto}
+                  >
+                    {isUploadingPhoto ? (
+                      <ActivityIndicator size="small" color="#033a7d" />
+                    ) : (
+                      <>
+                        <Camera size={22} color="#033a7d" />
+                        <Text style={styles.addSlotCardText}>
+                          {photos.length === 0
+                            ? "+ Cover Photo"
+                            : photos.length === 1
+                            ? "+ Nameplate"
+                            : photos.length === 2
+                            ? "+ Modules"
+                            : "+ More Photos"}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
 
-              {/* Verified Status Line */}
-              <View style={styles.verifiedPhotosLine}>
-                <CheckCircle2 size={15} color="#15803d" />
-                <Text style={styles.verifiedPhotosText}>
-                  {photos.length} photo{photos.length > 1 ? "s" : ""} added
+              {stepErrors.photos ? <Text style={styles.errorText}>{stepErrors.photos}</Text> : null}
+
+              {/* Photo Upload Guidance Box */}
+              <View style={[styles.guidanceCard, isDark && styles.guidanceCardDark]}>
+                <ShieldCheck size={20} color="#033a7d" style={{ marginTop: 2 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.guidanceCardTitle, isDark && styles.fieldLabelDark]}>
+                    Engineering Review Tip
+                  </Text>
+                  <Text style={styles.guidanceCardText}>
+                    Listings with clear photos of the serial number nameplate and detector modules receive quote inquiries 3x faster.
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* STEP 3: PRICING & LOCATION */}
+          {currentStep === 3 && (
+            <View style={styles.stepContainer}>
+              {/* Expected Price Box */}
+              <View style={[styles.pricingCard, isDark && styles.pricingCardDark]}>
+                <View style={styles.pricingCardHeader}>
+                  <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>Expected Price</Text>
+                  <TouchableOpacity
+                    style={styles.priceOnRequestToggle}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setIsPriceOnRequest((prev) => !prev);
+                      if (stepErrors.price) setStepErrors((prev) => ({ ...prev, price: "" }));
+                    }}
+                  >
+                    <Text style={styles.toggleLabel}>Show &quot;Price on request&quot;</Text>
+                    <View
+                      style={[
+                        styles.toggleTrack,
+                        isPriceOnRequest && styles.toggleTrackActive,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.toggleThumb,
+                          isPriceOnRequest && styles.toggleThumbActive,
+                        ]}
+                      />
+                    </View>
+                  </TouchableOpacity>
+                </View>
+
+                {!isPriceOnRequest ? (
+                  <View style={styles.twoInputsRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.inputSubLabel}>Min Price (₹)</Text>
+                      <TextInput
+                        style={[
+                          styles.textInput,
+                          isDark && styles.textInputDark,
+                          stepErrors.price && styles.textInputError,
+                        ]}
+                        placeholder="e.g. 850000"
+                        placeholderTextColor="#94a3b8"
+                        keyboardType="numeric"
+                        value={minPrice}
+                        onChangeText={(val) => {
+                          setMinPrice(val);
+                          if (stepErrors.price) setStepErrors((prev) => ({ ...prev, price: "" }));
+                        }}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.inputSubLabel}>Max Price (₹)</Text>
+                      <TextInput
+                        style={[
+                          styles.textInput,
+                          isDark && styles.textInputDark,
+                          stepErrors.price && styles.textInputError,
+                        ]}
+                        placeholder="e.g. 1000000"
+                        placeholderTextColor="#94a3b8"
+                        keyboardType="numeric"
+                        value={maxPrice}
+                        onChangeText={(val) => {
+                          setMaxPrice(val);
+                          if (stepErrors.price) setStepErrors((prev) => ({ ...prev, price: "" }));
+                        }}
+                      />
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.priceOnRequestNotice}>
+                    <Text style={styles.priceOnRequestNoticeText}>
+                      ✓ Buyers will see &quot;Price on request&quot; and negotiate directly through verified proposals.
+                    </Text>
+                  </View>
+                )}
+
+                {stepErrors.price ? <Text style={styles.errorText}>{stepErrors.price}</Text> : null}
+              </View>
+
+              {/* Facility Location */}
+              <View style={styles.fieldBlock}>
+                <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                  Facility Location / City <Text style={{ color: "#ba1a1a" }}>*</Text>
                 </Text>
+                <TextInput
+                  style={[
+                    styles.textInput,
+                    isDark && styles.textInputDark,
+                    stepErrors.location && styles.textInputError,
+                  ]}
+                  placeholder="e.g. Hyderabad, Telangana"
+                  placeholderTextColor="#94a3b8"
+                  value={location}
+                  onChangeText={(val) => {
+                    setLocation(val);
+                    if (stepErrors.location) setStepErrors((prev) => ({ ...prev, location: "" }));
+                  }}
+                />
+                {stepErrors.location ? <Text style={styles.errorText}>{stepErrors.location}</Text> : null}
+              </View>
+
+              {/* Technical Description */}
+              <View style={styles.fieldBlock}>
+                <View style={styles.descriptionHeaderRow}>
+                  <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                    Technical Description & Maintenance History <Text style={{ color: "#ba1a1a" }}>*</Text>
+                  </Text>
+                  <Text style={styles.charCountText}>
+                    {description.trim().length} chars (min 10)
+                  </Text>
+                </View>
+                <TextInput
+                  style={[
+                    styles.textAreaInput,
+                    isDark && styles.textInputDark,
+                    stepErrors.description && styles.textInputError,
+                  ]}
+                  placeholder="Describe operational status, installed modules, detector type, calibration history, and included accessories..."
+                  placeholderTextColor="#94a3b8"
+                  multiline
+                  numberOfLines={5}
+                  textAlignVertical="top"
+                  value={description}
+                  onChangeText={(val) => {
+                    setDescription(val);
+                    if (stepErrors.description) setStepErrors((prev) => ({ ...prev, description: "" }));
+                  }}
+                />
+                {stepErrors.description ? (
+                  <Text style={styles.errorText}>{stepErrors.description}</Text>
+                ) : null}
               </View>
             </View>
           )}
-        </View>
 
-        {/* Section 3: Contact & Notification Details (Dark Navy Container) */}
-        <View style={styles.darkNavyCard}>
-          <View style={styles.darkCardHeaderRow}>
-            <Lock size={20} color="#fdc836" />
-            <Text style={styles.darkCardTitle}>3. Contact & Notification Details</Text>
-          </View>
-
-          <Text style={styles.darkCardSubtitle}>
-            Your phone number will <Text style={{ fontWeight: "800", color: "#ffffff" }}>NEVER</Text> be displayed
-            publicly on this listing. It is used strictly for deal notifications and verifying interested buyers.
-          </Text>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.darkCardLabel}>
-              Your Mobile / WhatsApp Number <Text style={{ color: "#fdc836" }}>*</Text>
-            </Text>
-            <View style={styles.darkCardInputBox}>
-              <Phone size={16} color="#033a7d" style={{ marginLeft: 12 }} />
-              <TextInput
-                style={styles.darkCardInputField}
-                placeholder="+91 8920798971"
-                placeholderTextColor="#94a3b8"
-                keyboardType="phone-pad"
-                value={phoneNumber}
-                onChangeText={(value) => {
-                  setPhoneNumber(value);
-                  clearFieldError("phone");
-                }}
-              />
-            </View>
-            {fieldErrors.phone ? (
-              <View ref={phoneErrorRef}>
-                <Text style={[styles.fieldErrorText, styles.fieldErrorTextOnDark]}>{fieldErrors.phone}</Text>
-              </View>
-            ) : null}
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.darkCardLabel}>Company / Laboratory Name (Optional)</Text>
-            <View style={styles.darkCardInputBox}>
-              <Building2 size={16} color="#033a7d" style={{ marginLeft: 12 }} />
-              <TextInput
-                style={styles.darkCardInputField}
-                placeholder="Labmatrix Analytical Lab"
-                placeholderTextColor="#94a3b8"
-                value={companyName}
-                onChangeText={setCompanyName}
-              />
-            </View>
-          </View>
-
-          {/* Verification Badge Footer */}
-          <View style={styles.darkCardFooter}>
-            <ShieldCheck size={16} color="#fdc836" />
-            <Text style={styles.darkCardFooterText}>
-              Phone on file: used for inquiry alerts
-            </Text>
-          </View>
-        </View>
-
-        {/* Big Yellow CTA Button */}
-        <TouchableOpacity
-          style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-          activeOpacity={0.85}
-          disabled={isSubmitting}
-          onPress={handleSubmit}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator size="small" color="#0f172a" />
-          ) : (
-            <>
-              <Text style={styles.submitButtonText}>
-                {isEditMode ? "Save changes" : "Submit for review"}
+          {/* STEP 4: REVIEW & CONTACT */}
+          {currentStep === 4 && (
+            <View style={styles.stepContainer}>
+              <Text style={[styles.sectionHeadingTitle, isDark && styles.fieldLabelDark]}>
+                Review Your Listing
               </Text>
-            </>
-          )}
-        </TouchableOpacity>
 
-        {/* Assurance Text Below Button */}
-        <View style={styles.reassuranceRow}>
-          <CheckCircle2 size={16} color="#033a7d" style={{ marginTop: 1 }} />
-          <Text style={styles.reassuranceText}>
-            Your listing is reviewed by the LabMatrix team before it appears live on the marketplace.
-          </Text>
-        </View>
-      </ScrollView>
+              {/* Preview Card */}
+              <View style={[styles.previewCard, isDark && styles.previewCardDark]}>
+                <View style={styles.previewThumbContainer}>
+                  {photos.length > 0 ? (
+                    <Image source={{ uri: photos[0] }} style={styles.previewThumbImg} resizeMode="cover" />
+                  ) : (
+                    <View style={styles.previewThumbPlaceholder}>
+                      <Tag size={24} color="#94a3b8" />
+                    </View>
+                  )}
+                </View>
+                <View style={styles.previewInfoCol}>
+                  <View style={styles.previewBadgeRow}>
+                    <View style={styles.previewPill}>
+                      <Text style={styles.previewPillText}>{category || "Equipment"}</Text>
+                    </View>
+                    <Text style={styles.previewConditionText}>
+                      {condition || "Pre-Owned"}
+                    </Text>
+                  </View>
+
+                  <Text style={[styles.previewTitle, isDark && styles.fieldLabelDark]} numberOfLines={2}>
+                    {title || "Untitled Equipment"}
+                  </Text>
+
+                  <Text style={styles.previewLocationText}>
+                    <MapPin size={11} color="#64748b" /> {location || "India"}
+                  </Text>
+
+                  <Text style={styles.previewPriceText}>
+                    {isPriceOnRequest
+                      ? "Price on request"
+                      : minPrice && maxPrice
+                      ? `₹${parseFloat(minPrice).toLocaleString("en-IN")} - ₹${parseFloat(maxPrice).toLocaleString("en-IN")}`
+                      : minPrice
+                      ? `₹${parseFloat(minPrice).toLocaleString("en-IN")}`
+                      : "Price on request"}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Verified Seller Contact Box */}
+              <View style={[styles.contactCard, isDark && styles.contactCardDark]}>
+                <Text style={[styles.fieldLabel, isDark && styles.fieldLabelDark]}>
+                  Private Contact Information
+                </Text>
+                <Text style={styles.contactNoticeText}>
+                  The buyer never sees your phone number or email. All proposals are verified by LabMatrix engineers before introduction.
+                </Text>
+
+                <View style={{ marginTop: 10 }}>
+                  <Text style={styles.inputSubLabel}>WhatsApp / Mobile Phone *</Text>
+                  <TextInput
+                    style={[styles.textInput, isDark && styles.textInputDark, stepErrors.phone && styles.textInputError]}
+                    placeholder="+91 98765 43210"
+                    placeholderTextColor="#94a3b8"
+                    keyboardType="phone-pad"
+                    value={phoneNumber}
+                    onChangeText={(val) => {
+                      setPhoneNumber(val);
+                      if (stepErrors.phone) setStepErrors((prev) => ({ ...prev, phone: "" }));
+                    }}
+                  />
+                  {stepErrors.phone ? <Text style={styles.errorText}>{stepErrors.phone}</Text> : null}
+                </View>
+
+                <View style={{ marginTop: 10 }}>
+                  <Text style={styles.inputSubLabel}>Facility / Laboratory Name (Optional)</Text>
+                  <TextInput
+                    style={[styles.textInput, isDark && styles.textInputDark]}
+                    placeholder="e.g. Apex Pharma Labs Ltd."
+                    placeholderTextColor="#94a3b8"
+                    value={companyName}
+                    onChangeText={setCompanyName}
+                  />
+                </View>
+              </View>
+
+              {/* Escrow Guarantee Policy */}
+              <TouchableOpacity
+                style={styles.escrowLinkCard}
+                activeOpacity={0.8}
+                onPress={() => setEscrowModalVisible(true)}
+              >
+                <ShieldCheck size={20} color="#15803d" />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.escrowLinkTitle}>Protected by LabMatrix Escrow Protocol</Text>
+                  <Text style={styles.escrowLinkSub}>
+                    Payout is securely released to you once technical inspection and delivery are accepted.
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
       )}
 
-      {/* Category Selection Modal */}
+      {/* Direction A Fixed Bottom Action Bar */}
+      <View style={[styles.bottomActionBar, { paddingBottom: Math.max(insets.bottom + 10, 16) }]}>
+        {currentStep === 1 ? (
+          <TouchableOpacity
+            style={styles.fullWidthNextBtn}
+            activeOpacity={0.85}
+            onPress={handleStep1Next}
+          >
+            <Text style={styles.fullWidthNextBtnText}>Continue to photos</Text>
+          </TouchableOpacity>
+        ) : currentStep === 2 ? (
+          <View style={styles.actionButtonsRow}>
+            <TouchableOpacity style={styles.actionBackBtn} activeOpacity={0.8} onPress={handlePrevStep}>
+              <Text style={styles.actionBackBtnText}>Back</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionNextBtn} activeOpacity={0.85} onPress={handleStep2Next}>
+              <Text style={styles.actionNextBtnText}>Continue to pricing</Text>
+            </TouchableOpacity>
+          </View>
+        ) : currentStep === 3 ? (
+          <View style={styles.actionButtonsRow}>
+            <TouchableOpacity style={styles.actionBackBtn} activeOpacity={0.8} onPress={handlePrevStep}>
+              <Text style={styles.actionBackBtnText}>Back</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionNextBtn} activeOpacity={0.85} onPress={handleStep3Next}>
+              <Text style={styles.actionNextBtnText}>Review listing</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.actionButtonsRow}>
+            <TouchableOpacity style={styles.actionBackBtn} activeOpacity={0.8} onPress={handlePrevStep}>
+              <Text style={styles.actionBackBtnText}>Back</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.submitFinalBtn, isSubmitting && { opacity: 0.7 }]}
+              activeOpacity={0.85}
+              onPress={handleSubmit}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color="#002555" />
+              ) : (
+                <Text style={styles.submitFinalBtnText}>
+                  {isEditMode ? "Save changes" : "Submit for review"}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* Category Dropdown Picker Modal */}
       <Modal
         visible={isCategoryModalVisible}
-        transparent
         animationType="slide"
+        transparent={true}
         onRequestClose={() => setIsCategoryModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContentCard, isDark && styles.modalContentCardDark, { paddingBottom: Math.max(insets.bottom + 8, 18) }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>Select Category</Text>
-              <TouchableOpacity onPress={() => setIsCategoryModalVisible(false)}>
+        <View style={[styles.modalOverlay, { paddingTop: insets.top }]}>
+          <View style={[styles.modalSheet, isDark && styles.modalSheetDark, { paddingBottom: insets.bottom + 20 }]}>
+            <View style={styles.modalSheetHeader}>
+              <Text style={[styles.modalSheetTitle, isDark && styles.fieldLabelDark]}>
+                Select Category
+              </Text>
+              <TouchableOpacity onPress={() => setIsCategoryModalVisible(false)} style={styles.modalCloseBtn}>
                 <X size={20} color="#64748b" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ maxHeight: 380 }}>
-              {CATEGORIES.map((cat) => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[styles.modalItemRow, category === cat && styles.modalItemRowSelected]}
-                  onPress={() => {
-                    setCategory(cat);
-                    setIsCategoryModalVisible(false);
-                  }}
-                >
-                  <Text style={[styles.modalItemText, category === cat && styles.modalItemTextSelected]}>
-                    {cat}
-                  </Text>
-                  {category === cat && <Check size={18} color="#033a7d" />}
-                </TouchableOpacity>
-              ))}
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {CATEGORIES.map((cat) => {
+                const isSelected = category === cat;
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.categoryOptionItem, isSelected && styles.categoryOptionItemActive]}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setCategory(cat);
+                      setIsCategoryModalVisible(false);
+                      if (stepErrors.category) setStepErrors((prev) => ({ ...prev, category: "" }));
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryOptionText,
+                        isSelected && styles.categoryOptionTextActive,
+                        isDark && styles.fieldLabelDark,
+                      ]}
+                    >
+                      {cat}
+                    </Text>
+                    {isSelected && <Check size={18} color="#033a7d" />}
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
         </View>
       </Modal>
 
-      {/* Condition Selection Modal */}
-      <Modal
-        visible={isConditionModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setIsConditionModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContentCard, isDark && styles.modalContentCardDark, { paddingBottom: Math.max(insets.bottom + 8, 18) }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>Select Condition</Text>
-              <TouchableOpacity onPress={() => setIsConditionModalVisible(false)}>
-                <X size={20} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={{ maxHeight: 380 }}>
-              {currentConditions.map((cond) => (
-                <TouchableOpacity
-                  key={cond}
-                  style={[styles.modalItemRow, condition === cond && styles.modalItemRowSelected]}
-                  onPress={() => {
-                    setCondition(cond);
-                    setIsConditionModalVisible(false);
-                  }}
-                >
-                  <Text style={[styles.modalItemText, condition === cond && styles.modalItemTextSelected]}>
-                    {cond}
-                  </Text>
-                  {condition === cond && <Check size={18} color="#033a7d" />}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Global Escrow & Verification Protocol Modal */}
+      {/* Escrow Policy Modal */}
       <EscrowPolicyModal
         visible={escrowModalVisible}
         onClose={() => setEscrowModalVisible(false)}
@@ -1247,411 +1439,360 @@ export default function SellScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#ffffff",
   },
   safeAreaDark: {
     backgroundColor: "#010f22",
   },
   topBar: {
-    height: 58,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 16,
-    backgroundColor: "#ffffff",
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
   },
-  topBarDark: {
-    backgroundColor: "#011936",
+  logoImg: {
+    width: 130,
+    height: 30,
+  },
+
+  // Direction A Wizard Header
+  wizardHeader: {
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  wizardHeaderDark: {
+    backgroundColor: "#0b1329",
     borderBottomColor: "#1e293b",
   },
-  logoRow: {
+  wizardTopRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
   },
-  logoImg: {
-    width: 140,
-    height: 32,
-  },
-  topRightIcons: {
-    flexDirection: "row",
+  wizardNavBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
-    gap: 10,
+    justifyContent: "center",
+    backgroundColor: "#f1f5f9",
   },
-  screenHeaderTitle: {
-    fontSize: 22,
+  wizardHeaderTitle: {
+    fontSize: 16,
     fontWeight: "800",
-    color: "#033a7d",
-    letterSpacing: -0.3,
+    color: "#0f172a",
   },
-  screenHeaderTitleDark: {
+  wizardHeaderTitleDark: {
     color: "#f8fafc",
   },
-  iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#eff5fb",
+  draftBadgeContainer: {
+    alignItems: "flex-end",
+  },
+  draftBadge: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
+    gap: 4,
+    backgroundColor: "#dcfce7",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  redBadgeDot: {
-    position: "absolute",
-    top: 7,
-    right: 7,
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: "#ba1a1a",
+  draftBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#15803d",
   },
-  avatarCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#011936",
-    alignItems: "center",
-    justifyContent: "center",
+  progressBarRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 6,
   },
-  avatarText: {
-    color: "#ffffff",
-    fontWeight: "900",
-    fontSize: 12,
+  progressBarSegment: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#e2e8f0",
+  },
+  progressBarSegmentActive: {
+    backgroundColor: "#033a7d",
+  },
+  stepSubtitleText: {
+    fontFamily: Platform.select({ ios: "Courier", android: "monospace" }),
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: "#64748b",
     letterSpacing: 0.5,
+  },
+
+  // Scroll Content
+  scrollFlex: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
   },
   scrollContent: {
     padding: 16,
-    gap: 16,
     paddingBottom: 40,
   },
-  pageHeader: {
-    gap: 4,
+  stepContainer: {
+    gap: 16,
   },
-  pageTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#0f172a",
-    letterSpacing: -0.3,
+  fieldBlock: {
+    gap: 6,
   },
-  pageTitleDark: {
-    color: "#f8fafc",
-  },
-  pageSubtitle: {
-    fontSize: 13,
-    color: "#64748b",
-    lineHeight: 18,
-  },
-  itemTypeSection: {
-    gap: 10,
-  },
-  sectionHeadingTitle: {
-    fontSize: 14,
+  fieldLabel: {
+    fontSize: 13.5,
     fontWeight: "700",
     color: "#0f172a",
   },
-  sectionHeadingTitleDark: {
+  fieldLabelDark: {
     color: "#f8fafc",
   },
-  itemTypeCardsCol: {
+  inputSubLabel: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: "#64748b",
+    marginBottom: 4,
+  },
+
+  // Item Type 3-pill Row
+  itemTypeRow: {
+    flexDirection: "row",
     gap: 8,
   },
-  itemTypeCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#ffffff",
+  itemTypePill: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    borderRadius: 12,
-    padding: 12,
-    gap: 12,
-  },
-  itemTypeCardDark: {
-    backgroundColor: "#03142e",
-    borderColor: "#1e293b",
-  },
-  itemTypeCardActive: {
-    borderColor: "#033a7d",
-    backgroundColor: "#f2f7fd",
-  },
-  typeIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
   },
-  typeTextCol: {
-    flex: 1,
-  },
-  typeCardTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#0f172a",
-  },
-  typeCardTitleDark: {
-    color: "#f8fafc",
-  },
-  typeCardSub: {
-    fontSize: 12,
-    color: "#64748b",
-    marginTop: 2,
-  },
-  sectionCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    gap: 14,
-  },
-  sectionCardDark: {
-    backgroundColor: "#03142e",
+  itemTypePillDark: {
+    backgroundColor: "#0b1329",
     borderColor: "#1e293b",
   },
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  itemTypePillActive: {
+    borderColor: "#033a7d",
+    backgroundColor: "#eff5fb",
+    borderWidth: 2,
   },
-  sectionBarIndicator: {
-    width: 4,
-    height: 18,
-    borderRadius: 2,
-    backgroundColor: "#033a7d",
-    marginRight: 8,
-  },
-  sectionHeading: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  sectionHeadingDark: {
-    color: "#f8fafc",
-  },
-  sectionSubtext: {
-    fontSize: 12,
-    color: "#64748b",
-    lineHeight: 16,
-  },
-  inputGroup: {
-    gap: 6,
-  },
-  inputLabel: {
-    fontSize: 12,
+  itemTypePillText: {
+    fontSize: 11.5,
     fontWeight: "700",
-    color: "#0f172a",
+    color: "#475569",
+    textAlign: "center",
   },
-  inputError: {
-    borderColor: "#dc2626",
+  itemTypePillTextDark: {
+    color: "#94a3b8",
   },
-  fieldErrorText: {
-    marginTop: 6,
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#b91c1c",
+  itemTypePillTextActive: {
+    color: "#033a7d",
+    fontWeight: "800",
   },
-  fieldErrorTextOnDark: {
-    color: "#fca5a5",
-  },
-  input: {
+
+  // Inputs & Cards
+  textInput: {
+    backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: "#cbd5e1",
-    borderRadius: 8,
+    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: 13.5,
     color: "#0f172a",
-    backgroundColor: "#ffffff",
   },
-  inputDark: {
-    backgroundColor: "#020d1c",
-    borderColor: "#334155",
+  textInputDark: {
+    backgroundColor: "#0b1329",
+    borderColor: "#1e293b",
     color: "#f8fafc",
   },
-  twoColRow: {
+  textInputError: {
+    borderColor: "#dc2626",
+    backgroundColor: "#fff5f5",
+  },
+  textAreaInput: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13.5,
+    color: "#0f172a",
+    minHeight: 100,
+  },
+  selectorCard: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  selectorCardDark: {
+    backgroundColor: "#0b1329",
+    borderColor: "#1e293b",
+  },
+  selectorCardText: {
+    fontSize: 13.5,
+    fontWeight: "600",
+    color: "#0f172a",
+  },
+  selectorCardTextDark: {
+    color: "#f8fafc",
+  },
+  selectorCardPlaceholder: {
+    color: "#94a3b8",
+    fontWeight: "400",
+  },
+  errorText: {
+    fontSize: 11.5,
+    color: "#dc2626",
+    fontWeight: "600",
+    marginTop: 2,
+  },
+
+  // Condition Radio Cards
+  conditionOptionsCol: {
+    gap: 8,
+  },
+  conditionRadioCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     gap: 10,
   },
-  col: {
-    flex: 1,
-    gap: 6,
+  conditionRadioCardDark: {
+    backgroundColor: "#0b1329",
+    borderColor: "#1e293b",
   },
-  dropdownPickerBox: {
-    flexDirection: "row",
+  conditionRadioCardActive: {
+    borderColor: "#033a7d",
+    backgroundColor: "#eff5fb",
+  },
+  radioCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: "#94a3b8",
     alignItems: "center",
-    justifyContent: "space-between",
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: "#ffffff",
+    justifyContent: "center",
   },
-  dropdownPickerBoxDark: {
-    backgroundColor: "#020d1c",
-    borderColor: "#334155",
+  radioCircleActive: {
+    borderColor: "#033a7d",
   },
-  dropdownPickerText: {
-    fontSize: 13,
-    color: "#0f172a",
-    fontWeight: "500",
+  radioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#033a7d",
+  },
+  conditionRadioText: {
+    fontSize: 12.5,
+    fontWeight: "600",
+    color: "#334155",
     flex: 1,
-    marginRight: 4,
   },
-  dropdownPickerTextDark: {
-    color: "#f8fafc",
+  conditionRadioTextDark: {
+    color: "#cbd5e1",
   },
-  iconInputBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 8,
-    backgroundColor: "#ffffff",
-  },
-  iconInputBoxDark: {
-    backgroundColor: "#020d1c",
-    borderColor: "#334155",
-  },
-  iconInputField: {
-    flex: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    fontSize: 13,
-    color: "#0f172a",
-  },
-  iconInputFieldDark: {
-    color: "#f8fafc",
-  },
-  rupeePrefix: {
-    fontSize: 14,
+  conditionRadioTextActive: {
+    color: "#033a7d",
     fontWeight: "700",
-    color: "#64748b",
-    marginLeft: 12,
   },
-  stepperContainer: {
+
+  // Stepper
+  stepperRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 8,
-    padding: 3,
-    backgroundColor: "#ffffff",
-  },
-  stepperContainerDark: {
-    backgroundColor: "#020d1c",
-    borderColor: "#334155",
+    gap: 12,
   },
   stepperBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
-    backgroundColor: "#eff5fb",
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
   },
   stepperValueText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "800",
     color: "#0f172a",
+    minWidth: 28,
+    textAlign: "center",
   },
-  stepperValueTextDark: {
-    color: "#f8fafc",
-  },
-  priceHeaderRow: {
+
+  // Photos
+  photosHeaderRow: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
+    alignItems: "flex-start",
   },
-  priceTargetSubtitle: {
-    fontSize: 11,
-    fontWeight: "600",
+  photosSubHint: {
+    fontSize: 11.5,
     color: "#64748b",
+    marginTop: 2,
+    maxWidth: 240,
   },
-  textArea: {
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 13,
-    color: "#0f172a",
-    backgroundColor: "#ffffff",
-    minHeight: 88,
-  },
-  textAreaDark: {
-    backgroundColor: "#020d1c",
-    borderColor: "#334155",
-    color: "#f8fafc",
-  },
-  dashedUploadBox: {
+  photoCountBadge: {
     backgroundColor: "#eff5fb",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 10,
-    borderWidth: 1.5,
-    borderStyle: "dashed",
-    borderColor: "#bfdbfe",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 24,
-    gap: 6,
   },
-  dashedUploadBoxDark: {
-    backgroundColor: "#021533",
-    borderColor: "#1e40af",
-  },
-  cloudIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#dbeaf7",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  uploadBoxTitle: {
-    fontSize: 15,
-    fontWeight: "800",
+  photoCountBadgeText: {
+    fontSize: 11.5,
+    fontWeight: "700",
     color: "#033a7d",
   },
-  uploadBoxSub: {
-    fontSize: 12,
-    color: "#64748b",
+  photoGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
   },
-  thumbnailsContainer: {
-    gap: 10,
-    marginTop: 4,
-  },
-  thumbnailsRow: {
-    gap: 10,
-    alignItems: "center",
-  },
-  thumbnailWrapper: {
-    width: 82,
-    height: 82,
-    borderRadius: 8,
+  photoSlot: {
+    width: "31%",
+    aspectRatio: 1,
+    borderRadius: 10,
     overflow: "hidden",
     position: "relative",
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
+    backgroundColor: "#f1f5f9",
   },
-  thumbnailImage: {
+  uploadedPhotoImg: {
     width: "100%",
     height: "100%",
   },
-  primaryBadge: {
+  coverBadge: {
     position: "absolute",
     bottom: 4,
     left: 4,
-    backgroundColor: "rgba(15, 23, 42, 0.85)",
+    backgroundColor: "#033a7d",
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
   },
-  primaryBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
+  coverBadgeText: {
     color: "#ffffff",
+    fontSize: 9,
+    fontWeight: "900",
   },
   removePhotoBtn: {
     position: "absolute",
@@ -1664,177 +1805,368 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  addMoreSquircle: {
-    width: 82,
-    height: 82,
-    borderRadius: 8,
-    backgroundColor: "#eff5fb",
-    borderWidth: 1,
-    borderColor: "#dbeaf7",
+  addSlotCard: {
+    width: "31%",
+    aspectRatio: 1,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: "#94a3b8",
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
+    padding: 4,
+    backgroundColor: "#ffffff",
   },
-  addMoreText: {
+  addSlotCardDark: {
+    backgroundColor: "#0b1329",
+    borderColor: "#475569",
+  },
+  addSlotCardText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#033a7d",
+    textAlign: "center",
+  },
+  guidanceCard: {
+    flexDirection: "row",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#dbeaf7",
+    borderRadius: 12,
+    padding: 12,
+    gap: 10,
+    marginTop: 6,
+  },
+  guidanceCardDark: {
+    backgroundColor: "#0b1329",
+    borderColor: "#1e293b",
+  },
+  guidanceCardTitle: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#033a7d",
+    marginBottom: 2,
+  },
+  guidanceCardText: {
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: "#475569",
+  },
+
+  // Step 3 Pricing
+  pricingCard: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    padding: 14,
+    gap: 10,
+  },
+  pricingCardDark: {
+    backgroundColor: "#0b1329",
+    borderColor: "#1e293b",
+  },
+  pricingCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  priceOnRequestToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  toggleLabel: {
+    fontSize: 12,
+    color: "#475569",
+    fontWeight: "600",
+  },
+  toggleTrack: {
+    width: 36,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#cbd5e1",
+    padding: 2,
+    justifyContent: "center",
+  },
+  toggleTrackActive: {
+    backgroundColor: "#033a7d",
+  },
+  toggleThumb: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#ffffff",
+  },
+  toggleThumbActive: {
+    alignSelf: "flex-end",
+  },
+  twoInputsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  priceOnRequestNotice: {
+    backgroundColor: "#eff5fb",
+    padding: 10,
+    borderRadius: 8,
+  },
+  priceOnRequestNoticeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#033a7d",
+  },
+  descriptionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+  },
+  charCountText: {
     fontSize: 11,
+    color: "#94a3b8",
+  },
+
+  // Step 4 Review
+  sectionHeadingTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  previewCard: {
+    flexDirection: "row",
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 10,
+    gap: 12,
+  },
+  previewCardDark: {
+    backgroundColor: "#0b1329",
+    borderColor: "#1e293b",
+  },
+  previewThumbContainer: {
+    width: 90,
+    height: 90,
+    borderRadius: 10,
+    backgroundColor: "#f1f5f9",
+    overflow: "hidden",
+  },
+  previewThumbImg: {
+    width: "100%",
+    height: "100%",
+  },
+  previewThumbPlaceholder: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewInfoCol: {
+    flex: 1,
+    justifyContent: "space-between",
+  },
+  previewBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  previewPill: {
+    backgroundColor: "#eff5fb",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  previewPillText: {
+    fontSize: 10.5,
     fontWeight: "700",
     color: "#033a7d",
   },
-  verifiedPhotosLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 2,
+  previewConditionText: {
+    fontSize: 10.5,
+    color: "#64748b",
   },
-  verifiedPhotosText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#15803d",
-  },
-  darkNavyCard: {
-    backgroundColor: "#01142f",
-    borderRadius: 14,
-    padding: 18,
-    gap: 14,
-  },
-  darkCardHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  darkCardTitle: {
-    fontSize: 16,
+  previewTitle: {
+    fontSize: 13.5,
     fontWeight: "800",
-    color: "#ffffff",
-  },
-  darkCardSubtitle: {
-    fontSize: 12,
-    color: "#94a3b8",
-    lineHeight: 17,
-  },
-  darkCardLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  darkCardInputBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-  },
-  darkCardInputField: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 13,
     color: "#0f172a",
   },
-  darkCardFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingTop: 4,
+  previewLocationText: {
+    fontSize: 11,
+    color: "#64748b",
   },
-  darkCardFooterText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#fdc836",
+  previewPriceText: {
+    fontSize: 14.5,
+    fontWeight: "900",
+    color: "#002555",
   },
-  submitButton: {
-    backgroundColor: "#fbc634",
-    paddingVertical: 15,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+  contactCard: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    padding: 14,
+  },
+  contactCardDark: {
+    backgroundColor: "#0b1329",
+    borderColor: "#1e293b",
+  },
+  contactNoticeText: {
+    fontSize: 11.5,
+    color: "#64748b",
+    lineHeight: 16,
     marginTop: 4,
   },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  reassuranceRow: {
+  escrowLinkCard: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    paddingHorizontal: 4,
+    backgroundColor: "#f0fdf4",
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    borderRadius: 12,
+    padding: 12,
+    gap: 10,
+    alignItems: "center",
   },
-  reassuranceText: {
+  escrowLinkTitle: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#166534",
+  },
+  escrowLinkSub: {
+    fontSize: 11,
+    color: "#15803d",
+    lineHeight: 15,
+  },
+
+  // Fixed Bottom Bar
+  bottomActionBar: {
+    backgroundColor: "#ffffff",
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
+  fullWidthNextBtn: {
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#033a7d",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fullWidthNextBtnText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#ffffff",
+  },
+  actionButtonsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  actionBackBtn: {
     flex: 1,
-    fontSize: 12,
-    color: "#475569",
-    lineHeight: 16,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
   },
+  actionBackBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#475569",
+  },
+  actionNextBtn: {
+    flex: 2,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#033a7d",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionNextBtnText: {
+    fontSize: 14.5,
+    fontWeight: "800",
+    color: "#ffffff",
+  },
+  submitFinalBtn: {
+    flex: 2,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#fbc634",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  submitFinalBtnText: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#002555",
+  },
+
+  // Category Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
     justifyContent: "flex-end",
   },
-  modalContentCard: {
+  modalSheet: {
     backgroundColor: "#ffffff",
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    padding: 18,
-    gap: 12,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    maxHeight: "80%",
   },
-  modalContentCardDark: {
-    backgroundColor: "#011936",
+  modalSheetDark: {
+    backgroundColor: "#0b1329",
   },
-  modalHeader: {
+  modalSheetHeader: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  modalTitleDark: {
-    color: "#f8fafc",
-  },
-  modalItemRow: {
-    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#f1f5f9",
   },
-  modalItemRowSelected: {
+  modalSheetTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  categoryOptionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f8fafc",
+  },
+  categoryOptionItemActive: {
     backgroundColor: "#eff5fb",
     marginHorizontal: -8,
     paddingHorizontal: 8,
-    borderRadius: 6,
+    borderRadius: 8,
   },
-  modalItemText: {
+  categoryOptionText: {
     fontSize: 14,
-    color: "#0f172a",
-    fontWeight: "500",
+    color: "#334155",
+    fontWeight: "600",
   },
-  modalItemTextSelected: {
+  categoryOptionTextActive: {
     color: "#033a7d",
-    fontWeight: "700",
+    fontWeight: "800",
   },
+
+  // Auth Guard
   authRequiredContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: 24,
+    paddingHorizontal: 32,
     gap: 14,
   },
   authLockCircle: {
@@ -1844,9 +2176,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#eff5fb",
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 4,
   },
   authTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "800",
     color: "#0f172a",
     textAlign: "center",
@@ -1855,11 +2188,10 @@ const styles = StyleSheet.create({
     color: "#f8fafc",
   },
   authSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#64748b",
     textAlign: "center",
-    lineHeight: 20,
-    maxWidth: 320,
+    lineHeight: 18,
   },
   signInButton: {
     flexDirection: "row",
@@ -1868,7 +2200,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#033a7d",
     paddingHorizontal: 22,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 12,
     marginTop: 8,
   },
   signInButtonText: {
@@ -1876,19 +2208,21 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#ffffff",
   },
+
+  // Success Confirmation Screen
   successContainer: {
     padding: 24,
     alignItems: "center",
-    gap: 14,
+    gap: 12,
   },
   successIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: "#fef3c7",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 20,
+    marginTop: 10,
   },
   pendingBadge: {
     flexDirection: "row",
@@ -1896,16 +2230,16 @@ const styles = StyleSheet.create({
     gap: 5,
     backgroundColor: "#fef3c7",
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   pendingBadgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     color: "#b45309",
   },
   successTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "800",
     color: "#0f172a",
     textAlign: "center",
@@ -1914,60 +2248,75 @@ const styles = StyleSheet.create({
     color: "#f8fafc",
   },
   successSubtitle: {
-    fontSize: 14,
+    fontSize: 13.5,
     color: "#64748b",
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: 19,
   },
   successInfoCard: {
-    backgroundColor: "#eff5fb",
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
     borderRadius: 12,
-    padding: 16,
-    gap: 12,
+    padding: 14,
+    gap: 10,
     width: "100%",
-    marginTop: 6,
+    marginTop: 8,
   },
   successInfoCardDark: {
-    backgroundColor: "#03142e",
+    backgroundColor: "#0b1329",
+    borderColor: "#1e293b",
   },
   successInfoRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
+    gap: 8,
   },
   successInfoText: {
+    fontSize: 12,
+    color: "#475569",
     flex: 1,
-    fontSize: 13,
-    color: "#1e293b",
-    lineHeight: 18,
+    lineHeight: 16,
   },
   successActionCol: {
     width: "100%",
     gap: 10,
-    marginTop: 14,
+    marginTop: 16,
   },
   goToMarketplaceBtn: {
     backgroundColor: "#033a7d",
     paddingVertical: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: "center",
   },
   goToMarketplaceBtnText: {
-    fontSize: 15,
-    fontWeight: "700",
     color: "#ffffff",
+    fontWeight: "800",
+    fontSize: 14,
   },
   postAnotherBtn: {
     backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: "#cbd5e1",
     paddingVertical: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: "center",
   },
   postAnotherBtnText: {
-    fontSize: 14,
-    fontWeight: "700",
     color: "#0f172a",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+
+  centerLoading: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#64748b",
   },
 });

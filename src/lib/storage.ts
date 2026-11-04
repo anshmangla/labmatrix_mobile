@@ -131,3 +131,44 @@ export async function toggleSavedListingId(id: string): Promise<boolean> {
     return false;
   }
 }
+
+const DRAFT_KEY = "labmatrix_sell_draft";
+
+export async function saveSellDraft(draft: any): Promise<void> {
+  try {
+    const json = JSON.stringify(draft);
+    if (Platform.OS === "web") {
+      localStorage.setItem(DRAFT_KEY, json);
+    } else {
+      await SecureStore.setItemAsync(DRAFT_KEY, json);
+    }
+  } catch (err) {
+    console.error("Failed to save draft:", err);
+  }
+}
+
+export async function getSellDraft(): Promise<any | null> {
+  try {
+    let json: string | null = null;
+    if (Platform.OS === "web") {
+      json = localStorage.getItem(DRAFT_KEY);
+    } else {
+      json = await SecureStore.getItemAsync(DRAFT_KEY);
+    }
+    return json ? JSON.parse(json) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearSellDraft(): Promise<void> {
+  try {
+    if (Platform.OS === "web") {
+      localStorage.removeItem(DRAFT_KEY);
+    } else {
+      await SecureStore.deleteItemAsync(DRAFT_KEY);
+    }
+  } catch (err) {
+    console.error("Failed to clear draft:", err);
+  }
+}
