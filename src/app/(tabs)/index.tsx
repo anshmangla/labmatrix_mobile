@@ -18,7 +18,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image as ExpoImage } from "expo-image";
 import { useRouter } from "expo-router";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import Search from "lucide-react-native/icons/search";
 import MapPin from "lucide-react-native/icons/map-pin";
 import Tag from "lucide-react-native/icons/tag";
@@ -197,18 +197,22 @@ const ListingCard = memo(function ListingCard({
       {/* Card Body */}
       <View style={styles.cardBody}>
         {/* Tag Row: Condition + Model/Part Code */}
-        <View style={styles.tagRow}>
-          <View style={styles.conditionPill}>
-            <Text style={styles.conditionPillText} numberOfLines={1}>
-              {item.condition || "Used - Good Working Condition"}
-            </Text>
+        {(item.condition || itemCode) ? (
+          <View style={styles.tagRow}>
+            {item.condition ? (
+              <View style={styles.conditionPill}>
+                <Text style={styles.conditionPillText} numberOfLines={1}>
+                  {item.condition}
+                </Text>
+              </View>
+            ) : null}
+            {itemCode ? (
+              <Text style={styles.itemCodeText} numberOfLines={1}>
+                {itemCode}
+              </Text>
+            ) : null}
           </View>
-          {itemCode ? (
-            <Text style={styles.itemCodeText} numberOfLines={1}>
-              {itemCode}
-            </Text>
-          ) : null}
-        </View>
+        ) : null}
 
         {/* Instrument Title */}
         <Text style={[styles.cardTitle, isDark && styles.cardTitleDark]} numberOfLines={2}>
@@ -239,12 +243,16 @@ const ListingCard = memo(function ListingCard({
 
         {/* Card Footer: Location & Action Button */}
         <View style={styles.cardFooter}>
-          <View style={styles.locationRow}>
-            <MapPin size={13} color="#64748b" />
-            <Text style={styles.locationText} numberOfLines={1}>
-              {item.location || "India Hub"}
-            </Text>
-          </View>
+          {item.location ? (
+            <View style={styles.locationRow}>
+              <MapPin size={13} color="#64748b" />
+              <Text style={styles.locationText} numberOfLines={1}>
+                {item.location}
+              </Text>
+            </View>
+          ) : (
+            <View />
+          )}
 
           {/* Inquire / Request Similar Action Button */}
           {isSold ? (
@@ -328,6 +336,18 @@ export default function MarketplaceScreen() {
     if (selectedPriceTier !== 0) count++;
     return count;
   }, [selectedStatus, selectedCategory, selectedPriceTier]);
+
+  // Fetch unread notifications count
+  const { data: notificationsData } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: async () => {
+      const res = await api.get("/api/notifications");
+      return res.data as { notifications: any[]; unreadCount: number };
+    },
+    enabled: isAuthenticated,
+    staleTime: 30000,
+  });
+  const unreadCount = notificationsData?.unreadCount || 0;
 
   // Query Backend Listings
   const {
@@ -437,7 +457,7 @@ export default function MarketplaceScreen() {
             onPress={() => router.push("/notifications" as any)}
           >
             <Bell size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-            <View style={styles.redDot} />
+            {unreadCount > 0 && <View style={styles.redDot} />}
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -555,7 +575,7 @@ export default function MarketplaceScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.errorTitle}>Connection Error</Text>
             <Text style={styles.errorMessage}>
-              Could not reach {(api.defaults.baseURL || "backend")}. Ensure internet connection.
+              Unable to load listings right now. Please check your internet connection.
             </Text>
           </View>
           <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()}>
@@ -878,22 +898,26 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   iconBtn: {
-    padding: 4,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
     position: "relative",
   },
   redDot: {
     position: "absolute",
-    top: 3,
-    right: 3,
+    top: 7,
+    right: 8,
     width: 7,
     height: 7,
     borderRadius: 3.5,
     backgroundColor: "#f43f5e",
   },
   avatarCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#002555",
     alignItems: "center",
     justifyContent: "center",

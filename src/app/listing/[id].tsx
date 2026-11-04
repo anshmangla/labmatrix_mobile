@@ -323,7 +323,7 @@ export default function ListingDetailScreen() {
           ) : (
             <View style={[styles.noImageContainer, isDark && styles.noImageContainerDark]}>
               <Tag size={44} color="#94a3b8" />
-              <Text style={styles.noImageText}>Laboratory Inspection Photos Pending</Text>
+              <Text style={styles.noImageText}>No photos yet</Text>
             </View>
           )}
 
@@ -691,7 +691,7 @@ export default function ListingDetailScreen() {
         >
           <Send size={18} color="#ffffff" />
           <Text style={styles.primaryInquireBtnText}>
-            {isSold ? "Request Similar Equipment" : "Send Inquiry / Request Quote"}
+            {isSold ? "Request similar" : "Request quote"}
           </Text>
         </TouchableOpacity>
       </View>
@@ -763,7 +763,7 @@ export default function ListingDetailScreen() {
                 ) : (
                   <>
                     <Send size={16} color="#ffffff" />
-                    <Text style={styles.submitInquiryBtnText}>Submit Quotation Request</Text>
+                    <Text style={styles.submitInquiryBtnText}>Request quote</Text>
                   </>
                 )}
               </TouchableOpacity>

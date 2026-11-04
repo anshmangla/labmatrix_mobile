@@ -18,7 +18,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import Search from "lucide-react-native/icons/search";
 import Clock from "lucide-react-native/icons/clock";
 import ShieldCheck from "lucide-react-native/icons/shield-check";
@@ -37,7 +37,6 @@ import { LoadErrorState } from "@/components/LoadErrorState";
 import { Requirement } from "@/types/api";
 import { useAuth } from "@/context/auth-context";
 import { LabMatrixTokens } from "@/constants/theme";
-import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
@@ -72,9 +71,20 @@ export default function RequestsScreen() {
   const queryClient = useQueryClient();
   const searchInputRef = useRef<any>(null);
 
-  // Quick Profile Menu & Escrow Modals
-  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
+  // Escrow Policy Modal
   const [escrowModalVisible, setEscrowModalVisible] = useState(false);
+
+  // Fetch unread notifications count
+  const { data: notificationsData } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: async () => {
+      const res = await api.get("/api/notifications");
+      return res.data as { notifications: any[]; unreadCount: number };
+    },
+    enabled: isAuthenticated,
+    staleTime: 30000,
+  });
+  const unreadCount = notificationsData?.unreadCount || 0;
 
   const userInitials = useMemo(() => {
     if (!user) return "LM";
@@ -332,7 +342,7 @@ export default function RequestsScreen() {
   const getTargetBudget = (item: Requirement) => {
     const desc = item.description;
     const match = desc.match(/₹[\d,]+(\s*-\s*₹[\d,]+)?/i) || desc.match(/budget:?\s*₹?[\d,]+/i);
-    return match ? match[0] : "On quotation";
+    return match ? match[0] : null;
   };
 
   const getPreferredOEM = (item: Requirement) => {
@@ -353,13 +363,12 @@ export default function RequestsScreen() {
 
   const renderRequirementCard = ({ item }: { item: Requirement }) => {
     const isFulfilled = item.status === "FULFILLED";
-    const shortCode = item.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 5).toUpperCase();
     const targetBudget = getTargetBudget(item);
     const preferredOEM = getPreferredOEM(item);
 
     return (
       <TouchableOpacity
-        style={[styles.card, isDark && styles.cardDark]}
+        style={[styles.card, isDark && styles.cardDark, isFulfilled && { opacity: 0.75 }]}
         activeOpacity={0.92}
         onPress={() => router.push(`/requests/${item.id}`)}
       >
@@ -368,7 +377,6 @@ export default function RequestsScreen() {
           <View style={styles.categoryBadge}>
             <Text style={styles.categoryBadgeText}>{item.category}</Text>
           </View>
-
         </View>
 
         {/* Row 2: Status Pill */}
@@ -386,14 +394,12 @@ export default function RequestsScreen() {
           )}
         </View>
 
-        {/* Row 3: Timestamp & REQ Code */}
+        {/* Row 3: Timestamp */}
         <View style={styles.metaRow}>
           <Clock size={12} color="#64748b" />
           <Text style={styles.metaDate}>
             Posted on {new Date(item.createdAt).toLocaleDateString("en-GB")}
           </Text>
-          <Text style={styles.metaDot}>•</Text>
-          <Text style={styles.reqCodeText}>REQ-2026-{shortCode}</Text>
         </View>
 
         {/* Row 4: Title */}
@@ -409,39 +415,44 @@ export default function RequestsScreen() {
           {item.description}
         </Text>
 
-        {/* Row 6: Structured Specs Grid (Gray Box) */}
-        <View style={[styles.specsBox, isDark && styles.specsBoxDark]}>
-          <View style={styles.specsGrid}>
-            {preferredOEM ? (
-              <View style={styles.specsCol}>
-                <Text style={styles.specsLabel}>PREFERRED OEM</Text>
-                <Text style={[styles.specsValue, isDark && styles.specsValueDark]} numberOfLines={1}>
-                  {preferredOEM}
-                </Text>
-              </View>
-            ) : null}
+        {/* Row 6: Structured Specs Grid (only if real budget or OEM provided) */}
+        {(preferredOEM || targetBudget) ? (
+          <View style={[styles.specsBox, isDark && styles.specsBoxDark]}>
+            <View style={styles.specsGrid}>
+              {preferredOEM ? (
+                <View style={styles.specsCol}>
+                  <Text style={styles.specsLabel}>PREFERRED OEM</Text>
+                  <Text style={[styles.specsValue, isDark && styles.specsValueDark]} numberOfLines={1}>
+                    {preferredOEM}
+                  </Text>
+                </View>
+              ) : null}
 
-            <View style={styles.specsCol}>
-              <Text style={styles.specsLabel}>TARGET BUDGET</Text>
-              <Text style={styles.specsBudgetValue} numberOfLines={1}>
-                {targetBudget}
-              </Text>
+              {targetBudget ? (
+                <View style={styles.specsCol}>
+                  <Text style={styles.specsLabel}>TARGET BUDGET</Text>
+                  <Text style={styles.specsBudgetValue} numberOfLines={1}>
+                    {targetBudget}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           </View>
+        ) : null}
 
-        </View>
-
-        {/* Row 7: Action CTA */}
-        <View style={styles.cardFooter}>
-          <TouchableOpacity
-            style={styles.fulfillBtn}
-            activeOpacity={0.85}
-            onPress={() => router.push(`/requests/${item.id}`)}
-          >
-            <Text style={styles.fulfillBtnText}>Submit Quotation Proposal</Text>
-            <ArrowRight size={14} color="#ffffff" />
-          </TouchableOpacity>
-        </View>
+        {/* Row 7: Action CTA - only for open requests */}
+        {!isFulfilled ? (
+          <View style={styles.cardFooter}>
+            <TouchableOpacity
+              style={styles.fulfillBtn}
+              activeOpacity={0.85}
+              onPress={() => router.push(`/requests/${item.id}`)}
+            >
+              <Text style={styles.fulfillBtnText}>Propose quote</Text>
+              <ArrowRight size={14} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </TouchableOpacity>
     );
   };
@@ -450,17 +461,35 @@ export default function RequestsScreen() {
     <SafeAreaView edges={["top"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-      {/* 1. Top Branding Header Bar */}
+      {/* 1. Top Focused Header Bar */}
       <View style={[styles.topBar, isDark && styles.topBarDark]}>
-        <View style={styles.logoRow}>
-          <Image
-            source={require("@/assets/images/logo.png")}
-            style={styles.logoImg}
-            resizeMode="contain"
-          />
-        </View>
+        <Text style={[styles.screenHeaderTitle, isDark && styles.screenHeaderTitleDark]}>
+          Buyer Requests
+        </Text>
 
         <View style={styles.topRightIcons}>
+          <TouchableOpacity
+            style={styles.headerPostBtn}
+            activeOpacity={0.85}
+            onPress={() => {
+              if (!isAuthenticated) {
+                Alert.alert(
+                  "Sign In Required",
+                  "Please sign in to post your laboratory equipment requirement.",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Sign In", onPress: () => router.push("/(auth)/login" as any) },
+                  ]
+                );
+                return;
+              }
+              setPostModalVisible(true);
+            }}
+          >
+            <PlusCircle size={14} color="#002555" />
+            <Text style={styles.headerPostBtnText}>Post</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.iconBtn}
             activeOpacity={0.7}
@@ -473,28 +502,10 @@ export default function RequestsScreen() {
             style={styles.iconBtn}
             activeOpacity={0.7}
             onPress={() => router.push("/notifications" as any)}
+            accessibilityLabel="Notifications"
           >
             <Bell size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-            <View style={styles.redDot} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.avatarCircle}
-            activeOpacity={0.7}
-            onPress={() => {
-              if (isAuthenticated) {
-                setProfileMenuVisible(true);
-              } else {
-                router.push("/(auth)/login" as any);
-              }
-            }}
-            accessibilityLabel="Open Profile Menu"
-          >
-            {isAuthenticated ? (
-              <Text style={styles.avatarText}>{userInitials}</Text>
-            ) : (
-              <User size={16} color="#ffffff" />
-            )}
+            {unreadCount > 0 && <View style={styles.redDot} />}
           </TouchableOpacity>
         </View>
       </View>
@@ -551,7 +562,7 @@ export default function RequestsScreen() {
                     Need equipment or spares?
                   </Text>
                   <Text style={styles.postCalloutSub}>
-                    Broadcast requirements to verified labs
+                    Post requirements to verified labs
                   </Text>
                 </View>
               </View>
@@ -563,7 +574,7 @@ export default function RequestsScreen() {
                   if (!isAuthenticated) {
                     Alert.alert(
                       "Sign In Required",
-                      "Please sign in to broadcast your laboratory equipment requirement.",
+                      "Please sign in to post your laboratory equipment requirement.",
                       [
                         { text: "Cancel", style: "cancel" },
                         { text: "Sign In", onPress: () => router.push("/(auth)/login" as any) },
@@ -575,7 +586,7 @@ export default function RequestsScreen() {
                 }}
               >
                 <PlusCircle size={15} color="#0f172a" />
-                <Text style={styles.postWantedBtnText}>+ Post Wanted</Text>
+                <Text style={styles.postWantedBtnText}>+ Post requirement</Text>
               </TouchableOpacity>
             </View>
 
@@ -775,7 +786,7 @@ export default function RequestsScreen() {
             <View style={styles.modalHeader}>
               <View>
                 <Text style={styles.modalSubHeader}>
-                  {editingId ? "Update Sourcing Request" : "Broadcast Sourcing Request"}
+                  {editingId ? "Update requirement" : "Post requirement"}
                 </Text>
                 <Text style={[styles.modalTitle, isDark && styles.modalTitleDark]}>
                   {editingId ? "Edit Equipment Wanted" : "Post Equipment Wanted"}
@@ -942,7 +953,7 @@ export default function RequestsScreen() {
                   <>
                     <PlusCircle size={16} color="#0f172a" />
                     <Text style={styles.modalSubmitBtnText}>
-                      {editingId ? "Save Changes" : "Broadcast Sourcing Request"}
+                      {editingId ? "Save changes" : "Post requirement"}
                     </Text>
                   </>
                 )}
@@ -951,16 +962,6 @@ export default function RequestsScreen() {
           </View>
         </View>
       </Modal>
-
-      {/* Global Quick Profile Menu Sheet */}
-      <ProfileQuickMenuModal
-        visible={profileMenuVisible}
-        onClose={() => setProfileMenuVisible(false)}
-        onOpenEscrow={() => {
-          setProfileMenuVisible(false);
-          setEscrowModalVisible(true);
-        }}
-      />
 
       {/* Global Escrow & Verification Protocol Modal */}
       <EscrowPolicyModal
@@ -991,45 +992,50 @@ const styles = StyleSheet.create({
   topBarDark: {
     backgroundColor: "#0b1329",
   },
-  logoRow: {
+  screenHeaderTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#033a7d",
+    letterSpacing: -0.3,
+  },
+  screenHeaderTitleDark: {
+    color: "#f8fafc",
+  },
+  headerPostBtn: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 5,
+    backgroundColor: "#fbc634",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
   },
-  logoImg: {
-    width: 140,
-    height: 32,
+  headerPostBtnText: {
+    color: "#002555",
+    fontSize: 13,
+    fontWeight: "800",
   },
   topRightIcons: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 10,
   },
   iconBtn: {
-    padding: 4,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
     position: "relative",
   },
   redDot: {
     position: "absolute",
-    top: 3,
-    right: 3,
+    top: 7,
+    right: 8,
     width: 7,
     height: 7,
     borderRadius: 3.5,
     backgroundColor: "#f43f5e",
-  },
-  avatarCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#002555",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    color: "#ffffff",
-    fontWeight: "900",
-    fontSize: 12,
-    letterSpacing: 0.5,
   },
   headerContainer: {
     paddingHorizontal: 16,

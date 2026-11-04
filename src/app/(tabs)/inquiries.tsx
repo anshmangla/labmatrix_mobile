@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import MessageSquare from "lucide-react-native/icons/message-square";
 import Building2 from "lucide-react-native/icons/building-complex";
 import Clock from "lucide-react-native/icons/clock";
@@ -32,7 +32,6 @@ import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { Inquiry } from "@/types/api";
-import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 
@@ -51,9 +50,20 @@ export default function InquiriesScreen() {
   const isDark = colorScheme === "dark";
   const { isAuthenticated, user } = useAuth();
 
-  // Quick Profile Menu & Escrow Modals
-  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
+  // Escrow Policy Modal
   const [escrowModalVisible, setEscrowModalVisible] = useState(false);
+
+  // Fetch unread notifications count
+  const { data: notificationsData } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: async () => {
+      const res = await api.get("/api/notifications");
+      return res.data as { notifications: any[]; unreadCount: number };
+    },
+    enabled: isAuthenticated,
+    staleTime: 30000,
+  });
+  const unreadCount = notificationsData?.unreadCount || 0;
 
   const userInitials = useMemo(() => {
     if (!user) return "LM";
@@ -311,48 +321,8 @@ export default function InquiriesScreen() {
     <SafeAreaView edges={["top"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-      {/* 1. Branded Top Header Bar */}
+      {/* 1. Header Bar: Title, Deals Badge & Bell */}
       <View style={[styles.topBar, isDark && styles.topBarDark]}>
-        <View style={styles.logoRow}>
-          <Image
-            source={require("@/assets/images/logo.png")}
-            style={styles.logoImg}
-            resizeMode="contain"
-          />
-        </View>
-
-        <View style={styles.topRightIcons}>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            activeOpacity={0.7}
-            onPress={() => router.push("/notifications" as any)}
-          >
-            <Bell size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.avatarCircle}
-            activeOpacity={0.7}
-            onPress={() => {
-              if (isAuthenticated) {
-                setProfileMenuVisible(true);
-              } else {
-                router.push("/(auth)/login" as any);
-              }
-            }}
-            accessibilityLabel="Open Profile Menu"
-          >
-            {isAuthenticated ? (
-              <Text style={styles.avatarText}>{userInitials}</Text>
-            ) : (
-              <User size={16} color="#ffffff" />
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* 2. Page Title & Dual Segment Selector */}
-      <View style={[styles.headerSection, isDark && styles.headerSectionDark]}>
         <View style={styles.titleRow}>
           <Text style={[styles.pageTitle, isDark && styles.pageTitleDark]}>
             Inquiries & Deals
@@ -363,6 +333,20 @@ export default function InquiriesScreen() {
             </Text>
           </View>
         </View>
+
+        <TouchableOpacity
+          style={styles.iconBtn}
+          activeOpacity={0.7}
+          onPress={() => router.push("/notifications" as any)}
+          accessibilityLabel="Notifications"
+        >
+          <Bell size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+          {unreadCount > 0 && <View style={styles.redDot} />}
+        </TouchableOpacity>
+      </View>
+
+      {/* 2. Dual Segment Selector */}
+      <View style={[styles.headerSection, isDark && styles.headerSectionDark]}>
         <Text style={styles.pageSubtitle}>
           Direct lab buyer communications, quotation notes, and supply offers.
         </Text>
@@ -507,16 +491,6 @@ export default function InquiriesScreen() {
         />
       )}
 
-      {/* Global Quick Profile Menu Sheet */}
-      <ProfileQuickMenuModal
-        visible={profileMenuVisible}
-        onClose={() => setProfileMenuVisible(false)}
-        onOpenEscrow={() => {
-          setProfileMenuVisible(false);
-          setEscrowModalVisible(true);
-        }}
-      />
-
       {/* Global Escrow & Verification Protocol Modal */}
       <EscrowPolicyModal
         visible={escrowModalVisible}
@@ -570,12 +544,22 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "#eff5fb",
     alignItems: "center",
     justifyContent: "center",
+    position: "relative",
+  },
+  redDot: {
+    position: "absolute",
+    top: 7,
+    right: 8,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "#ba1a1a",
   },
   avatarCircle: {
     width: 34,

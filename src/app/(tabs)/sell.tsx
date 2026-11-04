@@ -18,8 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { prepareImageForUpload, type PickedImage } from "@/lib/upload-image";
-import { useQueryClient } from "@tanstack/react-query";
-import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 import Upload from "lucide-react-native/icons/upload";
 import X from "lucide-react-native/icons/x";
@@ -91,9 +90,20 @@ export default function SellScreen() {
   const { isAuthenticated, user } = useAuth();
   const queryClient = useQueryClient();
 
-  // Quick Profile Menu & Escrow Modals
-  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
+  // Escrow Policy Modal
   const [escrowModalVisible, setEscrowModalVisible] = useState(false);
+
+  // Fetch unread notifications count
+  const { data: notificationsData } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: async () => {
+      const res = await api.get("/api/notifications");
+      return res.data as { notifications: any[]; unreadCount: number };
+    },
+    enabled: isAuthenticated,
+    staleTime: 30000,
+  });
+  const unreadCount = notificationsData?.unreadCount || 0;
 
   const userInitials = React.useMemo(() => {
     if (!user) return "LM";
@@ -451,7 +461,7 @@ export default function SellScreen() {
         category,
         itemType,
         condition,
-        location: location.trim() || "India",
+        location: location.trim() || undefined,
         minPrice: parseFloat(minPrice.replace(/[^0-9.]/g, "")),
         maxPrice: parseFloat(maxPrice.replace(/[^0-9.]/g, "")),
         quantity: Math.max(1, parseInt(quantity, 10) || 1),
@@ -634,14 +644,12 @@ export default function SellScreen() {
     <SafeAreaView edges={["top"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-      {/* 1. Top Branding Header Bar with Search, Bell, Profile */}
+      {/* 1. Top Focused Header Bar */}
       <View style={[styles.topBar, isDark && styles.topBarDark]}>
-        <View style={styles.logoRow}>
-          <Image
-            source={require("@/assets/images/logo.png")}
-            style={styles.logoImg}
-            resizeMode="contain"
-          />
+        <View>
+          <Text style={[styles.screenHeaderTitle, isDark && styles.screenHeaderTitleDark]}>
+            {isEditMode ? "Edit Listing" : "List Equipment"}
+          </Text>
         </View>
 
         <View style={styles.topRightIcons}>
@@ -649,28 +657,10 @@ export default function SellScreen() {
             style={styles.iconBtn}
             activeOpacity={0.7}
             onPress={() => router.push("/notifications" as any)}
+            accessibilityLabel="Notifications"
           >
             <Bell size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
-            <View style={styles.redBadgeDot} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.avatarCircle}
-            activeOpacity={0.7}
-            onPress={() => {
-              if (isAuthenticated) {
-                setProfileMenuVisible(true);
-              } else {
-                router.push("/(auth)/login" as any);
-              }
-            }}
-            accessibilityLabel="Open Profile Menu"
-          >
-            {isAuthenticated ? (
-              <Text style={styles.avatarText}>{userInitials}</Text>
-            ) : (
-              <User size={16} color="#ffffff" />
-            )}
+            {unreadCount > 0 && <View style={styles.redBadgeDot} />}
           </TouchableOpacity>
         </View>
       </View>
@@ -1155,7 +1145,7 @@ export default function SellScreen() {
           ) : (
             <>
               <Text style={styles.submitButtonText}>
-                {isEditMode ? "Save & Update Listing →" : "Submit Listing for Verification →"}
+                {isEditMode ? "Save changes" : "Submit for review"}
               </Text>
             </>
           )}
@@ -1245,16 +1235,6 @@ export default function SellScreen() {
         </View>
       </Modal>
 
-      {/* Global Quick Profile Menu Sheet */}
-      <ProfileQuickMenuModal
-        visible={profileMenuVisible}
-        onClose={() => setProfileMenuVisible(false)}
-        onOpenEscrow={() => {
-          setProfileMenuVisible(false);
-          setEscrowModalVisible(true);
-        }}
-      />
-
       {/* Global Escrow & Verification Protocol Modal */}
       <EscrowPolicyModal
         visible={escrowModalVisible}
@@ -1299,10 +1279,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+  screenHeaderTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#033a7d",
+    letterSpacing: -0.3,
+  },
+  screenHeaderTitleDark: {
+    color: "#f8fafc",
+  },
   iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "#eff5fb",
     alignItems: "center",
     justifyContent: "center",
