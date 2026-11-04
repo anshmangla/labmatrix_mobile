@@ -22,6 +22,7 @@ import {
   shouldPersistQuery,
 } from "@/lib/query-persistence";
 import { wakeServer } from "@/lib/wake-server";
+import { OTAUpdateBanner } from "@/components/OTAUpdateBanner";
 
 // After this long in the background, connections may have died and data may be out of date
 const RESUME_REFRESH_AFTER_MS = 30_000;
@@ -109,21 +110,24 @@ function RootNavigation() {
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }}>
-        {/* Auth Group: full screen entry gate */}
-        <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)/register" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)/forgot-password" options={{ headerShown: false }} />
+      <View style={{ flex: 1 }}>
+        <Stack screenOptions={{ headerShown: false }}>
+          {/* Auth Group: full screen entry gate */}
+          <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)/register" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)/forgot-password" options={{ headerShown: false }} />
 
-        {/* Authenticated Application */}
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        {/* These screens draw their own header with a back button */}
-        <Stack.Screen name="listing/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="requests/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="notifications" options={{ headerShown: false }} />
-        <Stack.Screen name="admin" options={{ headerShown: false }} />
-        <Stack.Screen name="contact" options={{ headerShown: false }} />
-      </Stack>
+          {/* Authenticated Application */}
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          {/* These screens draw their own header with a back button */}
+          <Stack.Screen name="listing/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="requests/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="notifications" options={{ headerShown: false }} />
+          <Stack.Screen name="admin" options={{ headerShown: false }} />
+          <Stack.Screen name="contact" options={{ headerShown: false }} />
+        </Stack>
+        <OTAUpdateBanner />
+      </View>
     </ThemeProvider>
   );
 }
