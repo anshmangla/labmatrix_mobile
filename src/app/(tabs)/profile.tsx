@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useEffectEvent } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -15,11 +15,10 @@ import {
   ActivityIndicator,
   Share,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import UserIcon from "lucide-react-native/icons/user";
-import Mail from "lucide-react-native/icons/mail";
 import Phone from "lucide-react-native/icons/phone";
 import Building2 from "lucide-react-native/icons/building-complex";
 import ShieldCheck from "lucide-react-native/icons/shield-check";
@@ -27,28 +26,57 @@ import LogOut from "lucide-react-native/icons/log-out";
 import Trash2 from "lucide-react-native/icons/trash";
 import LogIn from "lucide-react-native/icons/log-in";
 import Package from "lucide-react-native/icons/package";
-import ExternalLink from "lucide-react-native/icons/external-link";
 import CheckCircle2 from "lucide-react-native/icons/circle-check";
 import Clock from "lucide-react-native/icons/clock";
 import Pencil from "lucide-react-native/icons/pencil";
 import Copy from "lucide-react-native/icons/copy";
-import ChevronDown from "lucide-react-native/icons/chevron-down";
+import ExternalLink from "lucide-react-native/icons/external-link";
 import ArrowRight from "lucide-react-native/icons/arrow-right";
-import Bell from "lucide-react-native/icons/bell";
-import AlertTriangle from "lucide-react-native/icons/triangle-alert";
 import X from "lucide-react-native/icons/x";
-import Share2 from "lucide-react-native/icons/share-2";
 import Settings from "lucide-react-native/icons/settings";
 import Plus from "lucide-react-native/icons/plus";
-import Wrench from "lucide-react-native/icons/wrench";
 import FileQuestion from "lucide-react-native/icons/file-question-mark";
+import Heart from "lucide-react-native/icons/heart";
+import ChevronRight from "lucide-react-native/icons/chevron-right";
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/lib/api";
 import { LoadErrorState } from "@/components/LoadErrorState";
-import { ProfileQuickMenuModal } from "@/components/ProfileQuickMenuModal";
 import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
+import { getSavedListingIds, toggleSavedListingId } from "@/lib/storage";
+
+function formatRelativeTime(dateString: string): string {
+  try {
+    const diffMs = Date.now() - new Date(dateString).getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    if (diffMins < 60) return "Just now";
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 30) return `${diffDays} days ago`;
+    const diffMonths = Math.floor(diffDays / 30);
+    if (diffMonths === 1) return "1 month ago";
+    return `${diffMonths} months ago`;
+  } catch {
+    return "Recently";
+  }
+}
+
+function getListingThumbnail(item: any): string | null {
+  if (Array.isArray(item.images) && item.images.length > 0) {
+    const primary = item.images.find(
+      (img: any) => typeof img === "object" && img.isPrimary
+    );
+    if (primary?.url) return primary.url;
+    const first = item.images[0];
+    if (typeof first === "string") return first;
+    if (first?.url) return first.url;
+  }
+  return null;
+}
 
 export default function ProfileScreen() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { tab } = useLocalSearchParams<{ tab?: string }>();
   const colorScheme = useColorScheme();
@@ -56,54 +84,46 @@ export default function ProfileScreen() {
   const { user, isAuthenticated, logout, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
 
-  // Active Tab: "listings" | "requests" | "inquiries" | "settings"
-  const [activeTab, setActiveTab] = useState<
-    "listings" | "requests" | "inquiries" | "settings"
-  >("listings");
+  // Active Tab: "listings" | "requests" | "saved"
+  const [activeTab, setActiveTab] = useState<"listings" | "requests" | "saved">(
+    "listings"
+  );
+  const [listingFilter, setListingFilter] = useState<"ALL" | "LIVE" | "IN_REVIEW">("ALL");
 
-  // Synchronize incoming tab route param (handled during render, including the first one)
-  const [handledTab, setHandledTab] = useState<string | undefined | null>(null);
-  if (tab !== handledTab) {
-    setHandledTab(tab);
-    if (tab === "settings") setActiveTab("settings");
-    else if (tab === "requests") setActiveTab("requests");
-    else if (tab === "listings") setActiveTab("listings");
-  }
-
-  // ?tab=inquiries opens the Inquiries tab instead
-  const openInquiriesTab = useEffectEvent(() => {
-    router.push("/(tabs)/inquiries" as any);
-  });
+  // Sync incoming route param
   useEffect(() => {
-    if (tab === "inquiries") openInquiriesTab();
-  }, [tab]);
+    if (tab === "requests") setActiveTab("requests");
+    else if (tab === "saved") setActiveTab("saved");
+    else if (tab === "listings") setActiveTab("listings");
+    else if (tab === "settings") setSettingsModalVisible(true);
+    else if (tab === "inquiries") router.push("/(tabs)/inquiries" as any);
+  }, [tab, router]);
 
-  // Quick Profile Menu & Escrow modal states
-  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
+  // Modals
+  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [escrowModalVisible, setEscrowModalVisible] = useState(false);
 
-  // Status updating state
+  // Manage Bottom Sheets
+  const [manageListing, setManageListing] = useState<any | null>(null);
+  const [manageRequest, setManageRequest] = useState<any | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  // Status picker modal for listings & requests
-  const [statusPickerItem, setStatusPickerItem] = useState<{
-    id: string;
-    type: "listing" | "requirement";
-    currentStatus: string;
-  } | null>(null);
+  // Account Settings / Editing Form State
+  const [editName, setEditName] = useState(user?.name || "");
+  const [editPhone, setEditPhone] = useState(user?.phoneNumber || "");
+  const [editCompany, setEditCompany] = useState(user?.companyName || "");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Self-deletion modal state
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deletePassword, setDeletePassword] = useState("");
-
-  // Profile editing
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [editName, setEditName] = useState("");
-  const [editPhone, setEditPhone] = useState("");
-  const [editCompany, setEditCompany] = useState("");
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Saved items state
+  const [savedIds, setSavedIds] = useState<string[]>([]);
+  const [savedListings, setSavedListings] = useState<any[]>([]);
+  const [isLoadingSaved, setIsLoadingSaved] = useState(false);
 
   // Fetch user's listings and requirements
   const {
@@ -120,7 +140,7 @@ export default function ProfileScreen() {
     },
   });
 
-  // Fetch account profile (hasPassword decides how account deletion is confirmed)
+  // Account profile for password info
   const { data: accountProfile } = useQuery({
     queryKey: ["userProfile"],
     enabled: isAuthenticated,
@@ -131,10 +151,8 @@ export default function ProfileScreen() {
   });
   const requiresPassword = accountProfile?.hasPassword === true;
 
-  // Fetch notifications
-  const {
-    data: notificationsData,
-  } = useQuery({
+  // Notifications
+  const { data: notificationsData } = useQuery({
     queryKey: ["notifications"],
     enabled: isAuthenticated,
     queryFn: async () => {
@@ -143,14 +161,56 @@ export default function ProfileScreen() {
     },
   });
 
-  const handleShareApp = async () => {
+  // Load saved listing IDs
+  const loadSavedItems = async () => {
     try {
-      await Share.share({
-        title: "LabMatrix Surplus Marketplace",
-        message:
-          "Explore verified pre-owned analytical & clinical laboratory instruments on LabMatrix: https://surplus.labmatrixindia.com",
+      setIsLoadingSaved(true);
+      const ids = await getSavedListingIds();
+      setSavedIds(ids);
+      if (ids.length === 0) {
+        setSavedListings([]);
+        return;
+      }
+      const results = await Promise.allSettled(
+        ids.map((id) => api.get(`/api/listings/${encodeURIComponent(id)}`))
+      );
+      const loaded: any[] = [];
+      results.forEach((r) => {
+        if (r.status === "fulfilled" && r.value.data?.listing) {
+          loaded.push(r.value.data.listing);
+        }
       });
-    } catch {}
+      setSavedListings(loaded);
+    } catch (err) {
+      console.warn("Failed to load saved items", err);
+    } finally {
+      setIsLoadingSaved(false);
+    }
+  };
+
+  useEffect(() => {
+    // Load count on mount
+    getSavedListingIds().then(setSavedIds).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "saved") {
+      loadSavedItems();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (user) {
+      setEditName(user.name || "");
+      setEditPhone(user.phoneNumber || "");
+      setEditCompany(user.companyName || "");
+    }
+  }, [user]);
+
+  const handleRemoveSaved = async (id: string) => {
+    await toggleSavedListingId(id);
+    setSavedIds((prev) => prev.filter((i) => i !== id));
+    setSavedListings((prev) => prev.filter((l) => l.id !== id));
   };
 
   const handleLogout = () => {
@@ -163,18 +223,12 @@ export default function ProfileScreen() {
           text: "Sign Out",
           style: "destructive",
           onPress: async () => {
+            setSettingsModalVisible(false);
             await logout();
           },
         },
       ]
     );
-  };
-
-  const startEditingProfile = () => {
-    setEditName(user?.name || "");
-    setEditPhone(user?.phoneNumber || "");
-    setEditCompany(user?.companyName || "");
-    setIsEditingProfile(true);
   };
 
   const handleSaveProfile = async () => {
@@ -187,10 +241,12 @@ export default function ProfileScreen() {
       });
       await refreshProfile();
       queryClient.invalidateQueries({ queryKey: ["userProfile"] });
-      setIsEditingProfile(false);
       Alert.alert("Profile Updated", "Your account details have been saved.");
     } catch (err: any) {
-      Alert.alert("Update Failed", err.response?.data?.error || "Could not update your profile. Please try again.");
+      Alert.alert(
+        "Update Failed",
+        err.response?.data?.error || "Could not update your profile. Please try again."
+      );
     } finally {
       setIsSavingProfile(false);
     }
@@ -217,6 +273,7 @@ export default function ProfileScreen() {
         ...(deletePassword ? { password: deletePassword } : {}),
       });
       setIsDeleteModalVisible(false);
+      setSettingsModalVisible(false);
       setDeletePassword("");
       Alert.alert(
         "Account Deactivated",
@@ -235,7 +292,6 @@ export default function ProfileScreen() {
 
   const handleUpdateListingStatus = async (id: string, newStatus: string) => {
     setUpdatingId(id);
-    setStatusPickerItem(null);
     try {
       await api.patch(`/api/listings/${id}`, { status: newStatus });
       queryClient.setQueryData(["myItems"], (old: any) => {
@@ -247,26 +303,52 @@ export default function ProfileScreen() {
           ),
         };
       });
-      Alert.alert(
-        "Status Updated",
-        `Machine status changed to ${newStatus}.`
-      );
+      if (manageListing?.id === id) {
+        setManageListing({ ...manageListing, status: newStatus });
+      }
+      Alert.alert("Status Updated", `Equipment status changed to ${newStatus}.`);
     } catch (err: any) {
-      Alert.alert(
-        "Update Failed",
-        err.response?.data?.error || "Failed to update listing status."
-      );
+      Alert.alert("Update Failed", err.response?.data?.error || "Failed to update listing status.");
     } finally {
       setUpdatingId(null);
     }
   };
 
-  const handleUpdateRequirementStatus = async (
-    id: string,
-    newStatus: string
-  ) => {
+  const handleDeleteListing = (id: string) => {
+    Alert.alert(
+      "Delete Listing",
+      "Are you sure you want to permanently delete this listing? This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setUpdatingId(id);
+            try {
+              await api.delete(`/api/listings/${encodeURIComponent(id)}`);
+              queryClient.setQueryData(["myItems"], (old: any) => {
+                if (!old?.listings) return old;
+                return {
+                  ...old,
+                  listings: old.listings.filter((l: any) => l.id !== id),
+                };
+              });
+              setManageListing(null);
+              Alert.alert("Listing Deleted", "Your listing has been removed from LabMatrix.");
+            } catch (err: any) {
+              Alert.alert("Delete Failed", err.response?.data?.error || "Could not delete listing.");
+            } finally {
+              setUpdatingId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleUpdateRequirementStatus = async (id: string, newStatus: string) => {
     setUpdatingId(id);
-    setStatusPickerItem(null);
     try {
       await api.patch(`/api/requirements/${id}`, { status: newStatus });
       queryClient.setQueryData(["myItems"], (old: any) => {
@@ -278,36 +360,60 @@ export default function ProfileScreen() {
           ),
         };
       });
-      Alert.alert(
-        "Status Updated",
-        `Requirement status changed to ${newStatus}.`
-      );
+      if (manageRequest?.id === id) {
+        setManageRequest({ ...manageRequest, status: newStatus });
+      }
+      Alert.alert("Status Updated", `Requirement status changed to ${newStatus}.`);
     } catch (err: any) {
-      Alert.alert(
-        "Update Failed",
-        err.response?.data?.error || "Failed to update requirement status."
-      );
+      Alert.alert("Update Failed", err.response?.data?.error || "Failed to update requirement status.");
     } finally {
       setUpdatingId(null);
     }
   };
 
+  const handleDeleteRequirement = (id: string) => {
+    Alert.alert(
+      "Delete Request",
+      "Are you sure you want to permanently delete this sourcing request?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setUpdatingId(id);
+            try {
+              await api.delete(`/api/requirements/${encodeURIComponent(id)}`);
+              queryClient.setQueryData(["myItems"], (old: any) => {
+                if (!old?.requirements) return old;
+                return {
+                  ...old,
+                  requirements: old.requirements.filter((r: any) => r.id !== id),
+                };
+              });
+              setManageRequest(null);
+              Alert.alert("Request Deleted", "Your sourcing request has been removed.");
+            } catch (err: any) {
+              Alert.alert("Delete Failed", err.response?.data?.error || "Could not delete request.");
+            } finally {
+              setUpdatingId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleCallSupport = () => {
     Linking.openURL("tel:+917303040804").catch(() => {
-      Alert.alert(
-        "Support Desk",
-        "Helpline: +91 73030 40804\nAvailable Mon-Sat 9AM - 7PM IST"
-      );
+      Alert.alert("Support Desk", "Helpline: +91 73030 40804\nAvailable Mon-Sat 9AM - 7PM IST");
     });
   };
 
-  // Helper to extract initials: "Manish Mangla" -> "MM"
   const getInitials = (name?: string | null, email?: string | null) => {
     if (name && name.trim().length > 0) {
       const parts = name.trim().split(/\s+/);
-      if (parts.length >= 2) {
-        return (parts[0][0] + parts[1][0]).toUpperCase();
-      }
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
       return name.slice(0, 2).toUpperCase();
     }
     if (email && email.trim().length > 0) {
@@ -324,7 +430,6 @@ export default function ProfileScreen() {
       <SafeAreaView edges={["top"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-        {/* Top Header */}
         <View style={[styles.topBar, isDark && styles.topBarDark]}>
           <Image
             source={require("@/assets/images/logo.png")}
@@ -333,100 +438,57 @@ export default function ProfileScreen() {
           />
         </View>
 
-        <ScrollView
-          contentContainerStyle={styles.loggedOutScroll}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView contentContainerStyle={styles.loggedOutScroll} showsVerticalScrollIndicator={false}>
           <View style={styles.loggedOutHero}>
             <View style={styles.loggedOutIconCircle}>
               <UserIcon size={38} color="#033a7d" />
             </View>
-            <Text
-              style={[
-                styles.loggedOutTitle,
-                isDark && styles.loggedOutTitleDark,
-              ]}
-            >
+            <Text style={[styles.loggedOutTitle, isDark && styles.loggedOutTitleDark]}>
               Sign In to Your Laboratory Profile
             </Text>
             <Text style={styles.loggedOutSubtitle}>
-              Access your listed equipment, track inquiries, manage buyer
-              sourcing requests, and receive deal desk quotes.
+              Access your listed equipment, track inquiries, manage buyer sourcing requests, and receive deal desk quotes.
             </Text>
           </View>
 
-          {/* Value Props Card */}
-          <View
-            style={[styles.benefitsCard, isDark && styles.benefitsCardDark]}
-          >
+          <View style={[styles.benefitsCard, isDark && styles.benefitsCardDark]}>
             <View style={styles.benefitRow}>
-              <CheckCircle2
-                size={18}
-                color="#15803d"
-                style={{ marginTop: 2 }}
-              />
+              <CheckCircle2 size={18} color="#15803d" style={{ marginTop: 2 }} />
               <View style={{ flex: 1 }}>
-                <Text
-                  style={[
-                    styles.benefitHeading,
-                    isDark && styles.benefitHeadingDark,
-                  ]}
-                >
+                <Text style={[styles.benefitHeading, isDark && styles.benefitHeadingDark]}>
                   List Surplus Instruments & Spares
                 </Text>
                 <Text style={styles.benefitDesc}>
-                  Post pre-owned HPLC, GC-MS, spectrophotometers, or spare parts
-                  with zero listing fees.
+                  Post pre-owned HPLC, GC-MS, spectrophotometers, or spare parts with zero listing fees.
                 </Text>
               </View>
             </View>
 
             <View style={styles.benefitRow}>
-              <CheckCircle2
-                size={18}
-                color="#15803d"
-                style={{ marginTop: 2 }}
-              />
+              <CheckCircle2 size={18} color="#15803d" style={{ marginTop: 2 }} />
               <View style={{ flex: 1 }}>
-                <Text
-                  style={[
-                    styles.benefitHeading,
-                    isDark && styles.benefitHeadingDark,
-                  ]}
-                >
+                <Text style={[styles.benefitHeading, isDark && styles.benefitHeadingDark]}>
                   Verified Sourcing Network
                 </Text>
                 <Text style={styles.benefitDesc}>
-                  Post wanted instrument requirements and receive quotes from
-                  audited laboratories.
+                  Post wanted instrument requirements and receive quotes from audited laboratories.
                 </Text>
               </View>
             </View>
 
             <View style={styles.benefitRow}>
-              <CheckCircle2
-                size={18}
-                color="#15803d"
-                style={{ marginTop: 2 }}
-              />
+              <CheckCircle2 size={18} color="#15803d" style={{ marginTop: 2 }} />
               <View style={{ flex: 1 }}>
-                <Text
-                  style={[
-                    styles.benefitHeading,
-                    isDark && styles.benefitHeadingDark,
-                  ]}
-                >
+                <Text style={[styles.benefitHeading, isDark && styles.benefitHeadingDark]}>
                   Secure Escrow & Physical Audit
                 </Text>
                 <Text style={styles.benefitDesc}>
-                  Every instrument undergoes diagnostic inspection prior to
-                  handover and dispatch.
+                  Every instrument undergoes diagnostic inspection prior to handover and dispatch.
                 </Text>
               </View>
             </View>
           </View>
 
-          {/* Action CTAs */}
           <View style={styles.loggedOutActions}>
             <TouchableOpacity
               style={styles.primaryLoginBtn}
@@ -442,21 +504,15 @@ export default function ProfileScreen() {
               activeOpacity={0.85}
               onPress={() => router.push("/(auth)/register" as any)}
             >
-              <Text style={styles.secondaryRegisterBtnText}>
-                Register Facility Account
-              </Text>
+              <Text style={styles.secondaryRegisterBtnText}>Register Facility Account</Text>
               <ArrowRight size={16} color="#033a7d" />
             </TouchableOpacity>
           </View>
 
-          {/* Helpline Footer */}
           <View style={styles.supportFooter}>
             <Text style={styles.supportFooterText}>
               Need assistance? Call Engineering Desk:{" "}
-              <Text
-                style={{ fontWeight: "700", color: "#033a7d" }}
-                onPress={handleCallSupport}
-              >
+              <Text style={{ fontWeight: "700", color: "#033a7d" }} onPress={handleCallSupport}>
                 +91 73030 40804
               </Text>
             </Text>
@@ -467,1202 +523,874 @@ export default function ProfileScreen() {
   }
 
   // ==========================================
-  // 2. LOGGED-IN DASHBOARD (Exact Match to Mockup)
+  // 2. LOGGED-IN DIRECTION A DASHBOARD
   // ==========================================
   const listings = myItems?.listings || [];
   const requirements = myItems?.requirements || [];
-  const unreadCount = notificationsData?.unreadCount || 0;
+
+  const liveCount = listings.filter((l: any) => l.isApproved && l.status === "AVAILABLE").length;
+  const inReviewCount = listings.filter((l: any) => !l.isApproved).length;
+  const inquiriesCount = listings.reduce((sum: number, l: any) => sum + (l.inquiryCount || 0), 0);
 
   const userInitials = getInitials(user.name, user.email);
+
+  // Filtered listings for display
+  const displayedListings = useMemo(() => {
+    if (listingFilter === "LIVE") {
+      return listings.filter((l: any) => l.isApproved && l.status === "AVAILABLE");
+    }
+    if (listingFilter === "IN_REVIEW") {
+      return listings.filter((l: any) => !l.isApproved);
+    }
+    return listings;
+  }, [listings, listingFilter]);
 
   return (
     <SafeAreaView edges={["top"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-      {/* Top Header Bar matching Mockup */}
+      {/* Header: Title "Profile" + Settings Gear ⚙ */}
       <View style={[styles.topBar, isDark && styles.topBarDark]}>
-        <View style={styles.logoRow}>
-          <Image
-            source={require("@/assets/images/logo.png")}
-            style={styles.logoImg}
-            resizeMode="contain"
-          />
-        </View>
+        <Text style={[styles.headerTitle, isDark && styles.headerTitleDark]}>Profile</Text>
 
-        <View style={styles.topRightIcons}>
-          <TouchableOpacity
-            style={styles.headerIconBtn}
-            activeOpacity={0.7}
-            onPress={handleShareApp}
-            accessibilityLabel="Share App"
-          >
-            <Share2 size={19} color={isDark ? "#cbd5e1" : "#475569"} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.headerIconBtn}
-            activeOpacity={0.7}
-            onPress={() => router.push("/notifications" as any)}
-            accessibilityLabel="Notifications"
-          >
-            <Bell size={19} color={isDark ? "#cbd5e1" : "#475569"} />
-            {unreadCount > 0 && <View style={styles.headerNotificationDot} />}
-          </TouchableOpacity>
-
-          {/* User Avatar Mini Pill - Opens Quick Profile Menu */}
-          <TouchableOpacity
-            style={styles.headerAvatarPill}
-            activeOpacity={0.7}
-            onPress={() => setProfileMenuVisible(true)}
-            accessibilityLabel="Open Profile Menu"
-          >
-            <Text style={styles.headerAvatarText}>{userInitials}</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.settingsIconBtn}
+          activeOpacity={0.7}
+          onPress={() => setSettingsModalVisible(true)}
+          accessibilityLabel="Account Settings"
+        >
+          <Settings size={18} color="#475569" />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ==================================================== */}
-        {/* USER PROFILE HERO CARD                               */}
-        {/* ==================================================== */}
-        <View style={[styles.profileHeroCard, isDark && styles.profileHeroCardDark]}>
-          <View style={styles.profileTopRow}>
-            {/* Dark Navy Squircle Initials Avatar */}
-            <View style={styles.heroInitialsAvatar}>
-              <Text style={styles.heroInitialsText}>{userInitials}</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Hero Card: Initials Avatar, Name, Company */}
+        <View style={[styles.heroCard, isDark && styles.heroCardDark]}>
+          <View style={styles.heroRow}>
+            <View style={styles.avatarSquircle}>
+              <Text style={styles.avatarText}>{userInitials}</Text>
             </View>
 
             <View style={styles.heroTextCol}>
-              <View style={styles.heroNameRow}>
-                <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <Text
-                    style={[styles.heroName, isDark && styles.heroNameDark]}
-                    numberOfLines={1}
-                  >
-                    {user.name || "Laboratory Representative"}
-                  </Text>
-                  {/* Verified LabMatrix Badge */}
-                  <View style={styles.labmatrixVerifiedBadge}>
-                    <CheckCircle2 size={11} color="#033a7d" />
-                    <Text style={styles.labmatrixVerifiedText}>Labmatrix</Text>
-                  </View>
-                </View>
-
-                {/* Visible Sign Out Button */}
-                <TouchableOpacity
-                  style={styles.heroSignOutPill}
-                  activeOpacity={0.75}
-                  onPress={handleLogout}
-                  accessibilityLabel="Sign Out"
-                >
-                  <LogOut size={12} color="#dc2626" />
-                  <Text style={styles.heroSignOutText}>Sign Out</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Email */}
-              <View style={styles.heroMetaLine}>
-                <Mail size={12} color="#64748b" style={{ marginRight: 5 }} />
-                <Text style={styles.heroMetaText} numberOfLines={1}>
-                  {user.email}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <Text style={[styles.userName, isDark && styles.userNameDark]} numberOfLines={1}>
+                  {user.name || "Laboratory Representative"}
                 </Text>
-              </View>
-
-              {/* Phone */}
-              <View style={styles.heroMetaLine}>
-                <Phone size={12} color="#64748b" style={{ marginRight: 5 }} />
-                <Text style={styles.heroMetaText} numberOfLines={1}>
-                  {user.phoneNumber || (
-                    <Text style={{ color: "#d97706" }}>No mobile on file yet</Text>
-                  )}
-                </Text>
-              </View>
-
-              {/* Company / Lab Name if present */}
-              {user.companyName ? (
-                <View style={styles.heroMetaLine}>
-                  <Building2 size={12} color="#64748b" style={{ marginRight: 5 }} />
-                  <Text style={styles.heroMetaText} numberOfLines={1}>
-                    {user.companyName}
-                  </Text>
+                <View style={styles.verifiedBadge}>
+                  <CheckCircle2 size={11} color="#033a7d" />
+                  <Text style={styles.verifiedText}>Labmatrix</Text>
                 </View>
-              ) : null}
+              </View>
+
+              <Text style={styles.userCompany} numberOfLines={1}>
+                {user.companyName || user.email || "Analytical Facility"}
+              </Text>
             </View>
           </View>
 
-          {/* Quick Action Buttons Row */}
-          <View style={styles.heroActionsRow}>
-            {/* 1. + List Machine */}
+          {/* Tappable Stats Row (3 tiles) */}
+          <View style={styles.statsRow}>
+            {/* Live */}
             <TouchableOpacity
-              style={styles.heroBtnGold}
+              style={[
+                styles.statTile,
+                activeTab === "listings" && listingFilter === "LIVE" && styles.statTileActive,
+              ]}
+              activeOpacity={0.75}
+              onPress={() => {
+                setActiveTab("listings");
+                setListingFilter(listingFilter === "LIVE" ? "ALL" : "LIVE");
+              }}
+            >
+              <Text style={[styles.statValue, { color: "#002555" }]}>{liveCount}</Text>
+              <Text style={styles.statLabel}>Live</Text>
+            </TouchableOpacity>
+
+            {/* In Review */}
+            <TouchableOpacity
+              style={[
+                styles.statTile,
+                activeTab === "listings" && listingFilter === "IN_REVIEW" && styles.statTileActive,
+              ]}
+              activeOpacity={0.75}
+              onPress={() => {
+                setActiveTab("listings");
+                setListingFilter(listingFilter === "IN_REVIEW" ? "ALL" : "IN_REVIEW");
+              }}
+            >
+              <Text style={[styles.statValue, { color: "#b45309" }]}>{inReviewCount}</Text>
+              <Text style={styles.statLabel}>In review</Text>
+            </TouchableOpacity>
+
+            {/* Inquiries */}
+            <TouchableOpacity
+              style={styles.statTile}
+              activeOpacity={0.75}
+              onPress={() => router.push("/(tabs)/inquiries" as any)}
+            >
+              <Text style={[styles.statValue, { color: "#002555" }]}>{inquiriesCount}</Text>
+              <Text style={styles.statLabel}>Inquiries</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Quick Action Buttons Row */}
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              style={styles.listEquipBtn}
               activeOpacity={0.85}
               onPress={() => router.push("/(tabs)/sell" as any)}
             >
-              <Plus size={14} color="#011936" />
-              <Text style={styles.heroBtnGoldText}>List Machine</Text>
+              <Text style={styles.listEquipBtnText}>+ List equipment</Text>
             </TouchableOpacity>
 
-            {/* 2. List Spare Part */}
             <TouchableOpacity
-              style={styles.heroBtnWhite}
+              style={styles.postReqBtn}
               activeOpacity={0.85}
-              onPress={() =>
-                router.push({
-                  pathname: "/(tabs)/sell",
-                  params: { type: "SPARE_PART" },
-                } as any)
-              }
+              onPress={() => router.push("/(tabs)/requests?openPost=true" as any)}
             >
-              <Wrench size={13} color="#033a7d" />
-              <Text style={styles.heroBtnWhiteText}>List Spare Part</Text>
+              <Text style={styles.postReqBtnText}>Post requirement</Text>
             </TouchableOpacity>
-
-            {/* 3. Post Request */}
-            <TouchableOpacity
-              style={styles.heroBtnNavy}
-              activeOpacity={0.85}
-              onPress={() => router.push("/(tabs)/requests" as any)}
-            >
-              <FileQuestion size={13} color="#ffffff" />
-              <Text style={styles.heroBtnNavyText}>Post Request</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Master Admin Console Shortcut (Only visible if user.role === "ADMIN") */}
-          {user.role === "ADMIN" && (
-            <TouchableOpacity
-              style={styles.adminConsoleShortcut}
-              activeOpacity={0.85}
-              onPress={() => router.push("/admin" as any)}
-            >
-              <View style={styles.adminConsoleLeft}>
-                <ShieldCheck size={18} color="#fbc634" />
-                <View style={{ marginLeft: 8 }}>
-                  <Text style={styles.adminConsoleTitle}>
-                    Operations & Deal Console
-                  </Text>
-                  <Text style={styles.adminConsoleSub}>
-                    Master Admin Access • Moderation & Pipeline
-                  </Text>
-                </View>
-              </View>
-              <ArrowRight size={16} color="#fbc634" />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* ==================================================== */}
-        {/* FULL PRIVACY GUARANTEE BANNER                        */}
-        {/* ==================================================== */}
-        <View style={styles.privacyBanner}>
-          <View style={styles.privacyIconCircle}>
-            <ShieldCheck size={18} color="#fbc634" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.privacyHeader}>
-              FULL PRIVACY GUARANTEE ACTIVE
-            </Text>
-            <Text style={styles.privacyDesc}>
-              Your personal phone number and email remain private. Inquiries and
-              deal notifications are managed securely through your dashboard.
-            </Text>
           </View>
         </View>
 
-        {/* ==================================================== */}
-        {/* HORIZONTAL TABS CONTROLS                             */}
-        {/* ==================================================== */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabsScrollRow}
-        >
+        {/* Segmented Switcher: Listings · X | Requests · Y | Saved · Z */}
+        <View style={styles.segmentBar}>
           <TouchableOpacity
-            style={[
-              styles.tabPill,
-              activeTab === "listings" && styles.tabPillActive,
-            ]}
-            activeOpacity={0.75}
-            onPress={() => setActiveTab("listings")}
+            style={[styles.segmentTab, activeTab === "listings" && styles.segmentTabActive]}
+            onPress={() => {
+              setActiveTab("listings");
+              setListingFilter("ALL");
+            }}
           >
             <Text
               style={[
-                styles.tabPillText,
-                activeTab === "listings" && styles.tabPillTextActive,
+                styles.segmentTabText,
+                activeTab === "listings" && styles.segmentTabTextActive,
               ]}
             >
-              My Listed Equipment ({listings.length})
+              Listings · {listings.length}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[
-              styles.tabPill,
-              activeTab === "requests" && styles.tabPillActive,
-            ]}
-            activeOpacity={0.75}
+            style={[styles.segmentTab, activeTab === "requests" && styles.segmentTabActive]}
             onPress={() => setActiveTab("requests")}
           >
             <Text
               style={[
-                styles.tabPillText,
-                activeTab === "requests" && styles.tabPillTextActive,
+                styles.segmentTabText,
+                activeTab === "requests" && styles.segmentTabTextActive,
               ]}
             >
-              My Machine Requests ({requirements.length})
+              Requests · {requirements.length}
             </Text>
           </TouchableOpacity>
 
-
           <TouchableOpacity
-            style={[
-              styles.tabPill,
-              activeTab === "settings" && styles.tabPillActive,
-            ]}
-            activeOpacity={0.75}
-            onPress={() => setActiveTab("settings")}
+            style={[styles.segmentTab, activeTab === "saved" && styles.segmentTabActive]}
+            onPress={() => setActiveTab("saved")}
           >
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <Settings
-                size={13}
-                color={activeTab === "settings" ? "#ffffff" : "#475569"}
-                style={{ marginRight: 5 }}
-              />
-              <Text
-                style={[
-                  styles.tabPillText,
-                  activeTab === "settings" && styles.tabPillTextActive,
-                ]}
-              >
-                Account Settings
-              </Text>
-            </View>
+            <Text
+              style={[
+                styles.segmentTabText,
+                activeTab === "saved" && styles.segmentTabTextActive,
+              ]}
+            >
+              Saved · {savedIds.length}
+            </Text>
           </TouchableOpacity>
-        </ScrollView>
+        </View>
+
+        {/* Active Filter Indicator for Listings */}
+        {activeTab === "listings" && listingFilter !== "ALL" && (
+          <View style={styles.activeFilterPillRow}>
+            <Text style={styles.activeFilterPillText}>
+              Showing {listingFilter === "LIVE" ? "Live" : "In Review"} ({displayedListings.length})
+            </Text>
+            <TouchableOpacity onPress={() => setListingFilter("ALL")}>
+              <Text style={styles.resetFilterText}>Show All</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* ==================================================== */}
-        {/* TAB 1: MY LISTED EQUIPMENT                           */}
+        {/* TAB 1: LISTINGS                                      */}
         {/* ==================================================== */}
         {activeTab === "listings" && (
-          <View style={styles.tabContentContainer}>
+          <View style={styles.feedContainer}>
             {isLoadingItems ? (
-              <View style={styles.tabLoadingCard}>
+              <View style={styles.loadingContainer}>
                 <ActivityIndicator size="small" color="#033a7d" />
-                <Text style={styles.tabLoadingText}>Loading your equipment...</Text>
+                <Text style={styles.loadingText}>Loading equipment...</Text>
               </View>
             ) : isItemsError ? (
-              <LoadErrorState message="Couldn't load your listings. Please try again." onRetry={() => refetchMyItems()} />
-            ) : listings.length === 0 ? (
-              <View style={[styles.emptyCard, isDark && styles.emptyCardDark]}>
-                <Package size={36} color="#94a3b8" />
+              <LoadErrorState message="Could not load your listings." onRetry={() => refetchMyItems()} />
+            ) : displayedListings.length === 0 ? (
+              <View style={[styles.emptyBox, isDark && styles.emptyBoxDark]}>
+                <Package size={34} color="#94a3b8" />
                 <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>
-                  You haven&apos;t listed any machines yet
+                  {listingFilter === "ALL" ? "No equipment listed yet" : "No matching equipment"}
                 </Text>
-                <Text style={styles.emptySubtitle}>
-                  Have surplus HPLC, GC-MS, or testing instruments? List them on
-                  LabMatrix and connect with buyers across India.
+                <Text style={styles.emptyDesc}>
+                  List surplus HPLC, GC-MS, or spare parts to connect with verified labs across India.
                 </Text>
                 <TouchableOpacity
-                  style={styles.emptyActionBtn}
-                  activeOpacity={0.85}
+                  style={styles.emptyAddBtn}
                   onPress={() => router.push("/(tabs)/sell" as any)}
                 >
-                  <Plus size={15} color="#011936" />
-                  <Text style={styles.emptyActionBtnText}>
-                    List Your First Machine
-                  </Text>
+                  <Plus size={15} color="#002555" />
+                  <Text style={styles.emptyAddBtnText}>List Equipment</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.cardsList}>
-                {listings.map((item: any) => {
-                  const isAvailable = item.status === "AVAILABLE";
-                  return (
-                    <View
-                      key={item.id}
-                      style={[styles.itemCard, isDark && styles.itemCardDark]}
-                    >
-                      {/* Top Badges Row */}
-                      <View style={styles.itemCardTopBadges}>
-                        <View style={styles.itemBadgesLeft}>
-                          {/* Category Badge */}
-                          <View style={styles.categoryBadge}>
-                            <Text style={styles.categoryBadgeText}>
-                              {item.category}
-                            </Text>
-                          </View>
+              displayedListings.map((item: any) => {
+                const thumb = getListingThumbnail(item);
+                const isLive = item.isApproved && item.status === "AVAILABLE";
+                const isSold = item.status === "SOLD";
 
-                          {/* Item Type Badge */}
-                          {item.itemType === "NEW_INSTRUMENT" && (
-                            <View style={styles.newInstrumentBadge}>
-                              <Text style={styles.newInstrumentText}>
-                                ✨ New Instrument
-                              </Text>
-                            </View>
-                          )}
-                          {item.itemType === "SPARE_PART" && (
-                            <View style={styles.sparePartBadge}>
-                              <Text style={styles.sparePartText}>
-                                ⚙️ Spare Part
-                              </Text>
-                            </View>
-                          )}
-
-                          {/* Quantity Badge */}
-                          {item.quantity && item.quantity > 1 ? (
-                            <View style={styles.qtyBadge}>
-                              <Text style={styles.qtyBadgeText}>
-                                Qty: {item.quantity}
-                              </Text>
-                            </View>
-                          ) : null}
-                        </View>
-
-                        {/* Approval Status */}
-                        {item.isApproved ? (
-                          <View style={styles.approvedBadge}>
-                            <CheckCircle2 size={11} color="#15803d" />
-                            <Text style={styles.approvedText}>
-                              Approved & Live
-                            </Text>
-                          </View>
-                        ) : (
-                          <View style={styles.pendingBadge}>
-                            <Clock size={11} color="#b45309" />
-                            <Text style={styles.pendingText}>
-                              Pending Admin Approval
-                            </Text>
-                          </View>
-                        )}
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.listingRow, isDark && styles.listingRowDark]}
+                    activeOpacity={0.75}
+                    onPress={() => setManageListing(item)}
+                  >
+                    {/* 48x48 Thumbnail */}
+                    {thumb ? (
+                      <Image source={{ uri: thumb }} style={styles.listingThumb} resizeMode="cover" />
+                    ) : (
+                      <View style={styles.listingThumbPlaceholder}>
+                        <Package size={20} color="#94a3b8" />
                       </View>
+                    )}
 
-                      {/* Title & Description */}
+                    {/* Content Column */}
+                    <View style={styles.listingContentCol}>
                       <Text
-                        style={[styles.itemTitle, isDark && styles.itemTitleDark]}
-                        numberOfLines={2}
+                        style={[styles.listingTitle, isDark && styles.listingTitleDark]}
+                        numberOfLines={1}
                       >
                         {item.title}
                       </Text>
-                      {item.description ? (
-                        <Text style={styles.itemDescription} numberOfLines={2}>
-                          {item.description}
-                        </Text>
-                      ) : null}
 
-                      {/* Pending Review Notice */}
-                      {!item.isApproved && (
-                        <View style={styles.pendingReviewNotice}>
-                          <Clock size={13} color="#b45309" style={{ marginTop: 1 }} />
-                          <Text style={styles.pendingReviewNoticeText}>
-                            Under admin review. Once approved, it will appear
-                            publicly on the marketplace.
+                      <View style={styles.listingMetaRow}>
+                        {isSold ? (
+                          <Text style={[styles.statusDotText, { color: "#64748b" }]}>● Sold</Text>
+                        ) : isLive ? (
+                          <Text style={[styles.statusDotText, { color: "#15803d" }]}>● Live</Text>
+                        ) : (
+                          <Text style={[styles.statusDotText, { color: "#b45309" }]}>● In review</Text>
+                        )}
+
+                        {item.inquiryCount > 0 ? (
+                          <Text style={styles.inquiryBadgeText}>
+                            · {item.inquiryCount} {item.inquiryCount === 1 ? "inquiry" : "inquiries"}
                           </Text>
-                        </View>
-                      )}
-
-                      {/* Price & Action Buttons Divider */}
-                      <View style={styles.itemCardDivider} />
-
-                      {/* Price Expectation Row */}
-                      <View style={styles.priceAndActionsRow}>
-                        <View>
-                          <Text style={styles.priceLabel}>Price Expectation:</Text>
-                          <Text
-                            style={[
-                              styles.priceValue,
-                              isDark && styles.priceValueDark,
-                            ]}
-                          >
-                            ₹{Number(item.minPrice || 0).toLocaleString("en-IN")}{" "}
-                            - ₹
-                            {Number(item.maxPrice || 0).toLocaleString("en-IN")}
-                          </Text>
-                        </View>
-
-                        {/* Duplicate, Edit, View Buttons */}
-                        <View style={styles.actionsBtnGroup}>
-                          <TouchableOpacity
-                            style={styles.actionPillBtn}
-                            activeOpacity={0.7}
-                            onPress={() =>
-                              router.push({
-                                pathname: "/(tabs)/sell",
-                                params: { duplicate: item.id },
-                              } as any)
-                            }
-                          >
-                            <Copy size={12} color="#475569" />
-                            <Text style={styles.actionPillText}>Duplicate</Text>
-                          </TouchableOpacity>
-
-                          <TouchableOpacity
-                            style={styles.actionPillBtn}
-                            activeOpacity={0.7}
-                            onPress={() =>
-                              router.push({
-                                pathname: "/(tabs)/sell",
-                                params: { edit: item.id },
-                              } as any)
-                            }
-                          >
-                            <Pencil size={12} color="#475569" />
-                            <Text style={styles.actionPillText}>Edit</Text>
-                          </TouchableOpacity>
-
-                          <TouchableOpacity
-                            style={styles.actionPillBtnPrimary}
-                            activeOpacity={0.7}
-                            onPress={() =>
-                              router.push(`/listing/${item.id}` as any)
-                            }
-                          >
-                            <Text style={styles.actionPillPrimaryText}>View</Text>
-                            <ExternalLink size={11} color="#033a7d" />
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-
-                      {/* Inline Machine Status Toggle Row */}
-                      <View style={styles.statusToggleRow}>
-                        <Text style={styles.statusToggleLabel}>
-                          Machine Status:
-                        </Text>
-                        <TouchableOpacity
-                          style={[
-                            styles.statusPickerTrigger,
-                            isAvailable
-                              ? styles.statusPickerTriggerAvailable
-                              : styles.statusPickerTriggerSold,
-                          ]}
-                          activeOpacity={0.8}
-                          onPress={() =>
-                            setStatusPickerItem({
-                              id: item.id,
-                              type: "listing",
-                              currentStatus: item.status,
-                            })
-                          }
-                          disabled={updatingId === item.id}
-                        >
-                          {updatingId === item.id ? (
-                            <ActivityIndicator size="small" color="#033a7d" />
-                          ) : (
-                            <>
-                              <View
-                                style={[
-                                  styles.statusDot,
-                                  {
-                                    backgroundColor: isAvailable
-                                      ? "#16a34a"
-                                      : "#dc2626",
-                                  },
-                                ]}
-                              />
-                              <Text
-                                style={[
-                                  styles.statusPickerText,
-                                  isAvailable
-                                    ? styles.statusPickerTextAvailable
-                                    : styles.statusPickerTextSold,
-                                ]}
-                              >
-                                {item.status}
-                              </Text>
-                              <ChevronDown
-                                size={12}
-                                color={isAvailable ? "#166534" : "#475569"}
-                              />
-                            </>
-                          )}
-                        </TouchableOpacity>
+                        ) : null}
                       </View>
                     </View>
-                  );
-                })}
-              </View>
+
+                    {/* Chevron */}
+                    <ChevronRight size={18} color="#94a3b8" />
+                  </TouchableOpacity>
+                );
+              })
             )}
           </View>
         )}
 
         {/* ==================================================== */}
-        {/* TAB 2: MY MACHINE REQUESTS                           */}
+        {/* TAB 2: REQUESTS                                      */}
         {/* ==================================================== */}
         {activeTab === "requests" && (
-          <View style={styles.tabContentContainer}>
+          <View style={styles.feedContainer}>
             {isLoadingItems ? (
-              <View style={styles.tabLoadingCard}>
+              <View style={styles.loadingContainer}>
                 <ActivityIndicator size="small" color="#033a7d" />
-                <Text style={styles.tabLoadingText}>Loading your requests...</Text>
+                <Text style={styles.loadingText}>Loading requests...</Text>
               </View>
             ) : isItemsError ? (
-              <LoadErrorState message="Couldn't load your requests. Please try again." onRetry={() => refetchMyItems()} />
+              <LoadErrorState message="Could not load your requests." onRetry={() => refetchMyItems()} />
             ) : requirements.length === 0 ? (
-              <View style={[styles.emptyCard, isDark && styles.emptyCardDark]}>
-                <FileQuestion size={36} color="#94a3b8" />
+              <View style={[styles.emptyBox, isDark && styles.emptyBoxDark]}>
+                <FileQuestion size={34} color="#94a3b8" />
                 <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>
-                  No equipment requests posted yet
+                  No buyer requests posted
                 </Text>
-                <Text style={styles.emptySubtitle}>
-                  Looking for a specific testing machine? Post your requirement
-                  and verified suppliers will respond with matching inventory.
+                <Text style={styles.emptyDesc}>
+                  Looking for a specific instrument or spare part? Post your requirement to broadcast to suppliers.
                 </Text>
                 <TouchableOpacity
-                  style={styles.emptyActionBtn}
-                  activeOpacity={0.85}
-                  onPress={() => router.push("/(tabs)/requests" as any)}
+                  style={styles.emptyAddBtn}
+                  onPress={() => router.push("/(tabs)/requests?openPost=true" as any)}
                 >
-                  <Plus size={15} color="#011936" />
-                  <Text style={styles.emptyActionBtnText}>
-                    Post First Requirement
-                  </Text>
+                  <Plus size={15} color="#002555" />
+                  <Text style={styles.emptyAddBtnText}>Post Requirement</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.cardsList}>
-                {requirements.map((req: any) => {
-                  const isOpen = req.status === "OPEN";
-                  return (
-                    <View
-                      key={req.id}
-                      style={[styles.itemCard, isDark && styles.itemCardDark]}
-                    >
-                      {/* Top Badges */}
-                      <View style={styles.itemCardTopBadges}>
-                        <View style={styles.itemBadgesLeft}>
-                          <View style={styles.categoryBadge}>
-                            <Text style={styles.categoryBadgeText}>
-                              {req.category}
-                            </Text>
-                          </View>
-                          {req.itemType === "SPARE_PART" && (
-                            <View style={styles.sparePartBadge}>
-                              <Text style={styles.sparePartText}>
-                                ⚙️ Spare Part
-                              </Text>
-                            </View>
-                          )}
-                          <Text style={styles.postedDateText}>
-                            • Posted{" "}
-                            {new Date(req.createdAt).toLocaleDateString()}
-                          </Text>
-                        </View>
+              requirements.map((req: any) => {
+                const isFulfilled = req.status === "FULFILLED";
+                const isSpare = req.itemType === "SPARE_PART";
 
-                        {/* Approval status */}
-                        {req.isApproved ? (
-                          <View style={styles.approvedBadge}>
-                            <CheckCircle2 size={11} color="#15803d" />
-                            <Text style={styles.approvedText}>
-                              Approved & Live
-                            </Text>
-                          </View>
-                        ) : (
-                          <View style={styles.pendingBadge}>
-                            <Clock size={11} color="#b45309" />
-                            <Text style={styles.pendingText}>
-                              Pending Review
-                            </Text>
-                          </View>
-                        )}
-                      </View>
+                return (
+                  <TouchableOpacity
+                    key={req.id}
+                    style={[styles.listingRow, isDark && styles.listingRowDark]}
+                    activeOpacity={0.75}
+                    onPress={() => setManageRequest(req)}
+                  >
+                    <View style={styles.requestIconBox}>
+                      <FileQuestion size={20} color="#033a7d" />
+                    </View>
 
-                      {/* Title & Desc */}
+                    <View style={styles.listingContentCol}>
                       <Text
-                        style={[styles.itemTitle, isDark && styles.itemTitleDark]}
-                        numberOfLines={2}
+                        style={[styles.listingTitle, isDark && styles.listingTitleDark]}
+                        numberOfLines={1}
                       >
                         {req.title}
                       </Text>
-                      {req.description ? (
-                        <Text style={styles.itemDescription} numberOfLines={2}>
-                          {req.description}
+
+                      <View style={styles.listingMetaRow}>
+                        <Text
+                          style={[
+                            styles.statusDotText,
+                            { color: isFulfilled ? "#64748b" : "#15803d" },
+                          ]}
+                        >
+                          {isFulfilled ? "● Fulfilled" : "● Open"}
                         </Text>
-                      ) : null}
-
-                      {!req.isApproved && (
-                        <View style={styles.pendingReviewNotice}>
-                          <Clock size={13} color="#b45309" style={{ marginTop: 1 }} />
-                          <Text style={styles.pendingReviewNoticeText}>
-                            Under review. Once approved, it will be visible for
-                            matching suppliers.
-                          </Text>
-                        </View>
-                      )}
-
-                      <View style={styles.itemCardDivider} />
-
-                      {/* Request Status & Actions */}
-                      <View style={styles.priceAndActionsRow}>
-                        <View style={styles.statusToggleRowInline}>
-                          <Text style={styles.statusToggleLabel}>Status:</Text>
-                          <TouchableOpacity
-                            style={[
-                              styles.statusPickerTrigger,
-                              isOpen
-                                ? styles.statusPickerTriggerAvailable
-                                : styles.statusPickerTriggerSold,
-                            ]}
-                            activeOpacity={0.8}
-                            onPress={() =>
-                              setStatusPickerItem({
-                                id: req.id,
-                                type: "requirement",
-                                currentStatus: req.status,
-                              })
-                            }
-                            disabled={updatingId === req.id}
-                          >
-                            <View
-                              style={[
-                                styles.statusDot,
-                                {
-                                  backgroundColor: isOpen
-                                    ? "#16a34a"
-                                    : "#2563eb",
-                                },
-                              ]}
-                            />
-                            <Text
-                              style={[
-                                styles.statusPickerText,
-                                isOpen
-                                  ? styles.statusPickerTextAvailable
-                                  : styles.statusPickerTextSold,
-                              ]}
-                            >
-                              {req.status === "OPEN"
-                                ? "OPEN (Looking)"
-                                : "FULFILLED"}
-                            </Text>
-                            <ChevronDown size={12} color="#475569" />
-                          </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.actionsBtnGroup}>
-                          <TouchableOpacity
-                            style={styles.actionPillBtn}
-                            activeOpacity={0.7}
-                            onPress={() =>
-                              router.push({
-                                pathname: "/(tabs)/requests",
-                                params: { edit: req.id },
-                              } as any)
-                            }
-                          >
-                            <Pencil size={12} color="#475569" />
-                            <Text style={styles.actionPillText}>Edit</Text>
-                          </TouchableOpacity>
-
-                          <TouchableOpacity
-                            style={styles.actionPillBtnPrimary}
-                            activeOpacity={0.7}
-                            onPress={() =>
-                              router.push(`/requests/${req.id}` as any)
-                            }
-                          >
-                            <Text style={styles.actionPillPrimaryText}>View</Text>
-                            <ExternalLink size={11} color="#033a7d" />
-                          </TouchableOpacity>
-                        </View>
+                        <Text style={styles.inquiryBadgeText}>
+                          · {isSpare ? "Spare part" : req.category} · {formatRelativeTime(req.createdAt)}
+                        </Text>
                       </View>
                     </View>
-                  );
-                })}
-              </View>
+
+                    <ChevronRight size={18} color="#94a3b8" />
+                  </TouchableOpacity>
+                );
+              })
             )}
           </View>
         )}
 
         {/* ==================================================== */}
-        {/* TAB 4: ACCOUNT SETTINGS                              */}
+        {/* TAB 3: SAVED                                         */}
         {/* ==================================================== */}
-        {activeTab === "settings" && (
-          <View style={styles.tabContentContainer}>
-            {/* Account Profile Card */}
-            <View
-              style={[
-                styles.settingsCard,
-                isDark && styles.settingsCardDark,
-              ]}
-            >
-              <View style={styles.settingsCardHeader}>
-                <View style={styles.settingsIconCircle}>
-                  <UserIcon size={18} color="#033a7d" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[
-                      styles.settingsCardTitle,
-                      isDark && styles.settingsCardTitleDark,
-                    ]}
-                  >
-                    Account Profile
-                  </Text>
-                  <Text style={styles.settingsCardSub}>
-                    Your verified marketplace credentials
-                  </Text>
-                </View>
-                {!isEditingProfile && (
-                  <TouchableOpacity
-                    style={styles.actionPillBtn}
-                    activeOpacity={0.7}
-                    onPress={startEditingProfile}
-                  >
-                    <Pencil size={12} color="#475569" />
-                    <Text style={styles.actionPillText}>Edit</Text>
-                  </TouchableOpacity>
-                )}
+        {activeTab === "saved" && (
+          <View style={styles.feedContainer}>
+            {isLoadingSaved ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#033a7d" />
+                <Text style={styles.loadingText}>Loading saved instruments...</Text>
               </View>
-
-              {isEditingProfile ? (
-                <View style={styles.profileEditForm}>
-                  <Text style={styles.profileGridLabel}>Full Name</Text>
-                  <TextInput
-                    value={editName}
-                    onChangeText={setEditName}
-                    maxLength={100}
-                    placeholder="Your name"
-                    placeholderTextColor="#94a3b8"
-                    style={[styles.profileEditInput, isDark && styles.profileEditInputDark]}
-                  />
-
-                  <Text style={styles.profileGridLabel}>Email Address</Text>
-                  <TextInput
-                    value={user.email}
-                    editable={false}
-                    style={[styles.profileEditInput, styles.profileEditInputDisabled]}
-                  />
-
-                  <Text style={styles.profileGridLabel}>Phone / Mobile</Text>
-                  <TextInput
-                    value={editPhone}
-                    onChangeText={setEditPhone}
-                    maxLength={20}
-                    keyboardType="phone-pad"
-                    placeholder="+91-XXXXXXXXXX"
-                    placeholderTextColor="#94a3b8"
-                    style={[styles.profileEditInput, isDark && styles.profileEditInputDark]}
-                  />
-
-                  <Text style={styles.profileGridLabel}>Company / Lab</Text>
-                  <TextInput
-                    value={editCompany}
-                    onChangeText={setEditCompany}
-                    maxLength={100}
-                    placeholder="Laboratory or organization"
-                    placeholderTextColor="#94a3b8"
-                    style={[styles.profileEditInput, isDark && styles.profileEditInputDark]}
-                  />
-
-                  <View style={styles.deleteModalActions}>
-                    <TouchableOpacity
-                      style={styles.cancelDeleteBtn}
-                      onPress={() => setIsEditingProfile(false)}
-                      disabled={isSavingProfile}
-                    >
-                      <Text style={styles.cancelDeleteBtnText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.profileSaveBtn, isSavingProfile && { opacity: 0.6 }]}
-                      onPress={handleSaveProfile}
-                      disabled={isSavingProfile}
-                    >
-                      {isSavingProfile ? (
-                        <ActivityIndicator size="small" color="#ffffff" />
-                      ) : (
-                        <Text style={styles.profileSaveBtnText}>Save Changes</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
-              <View style={styles.profileGrid}>
-                <View
-                  style={[
-                    styles.profileGridTile,
-                    isDark && styles.profileGridTileDark,
-                  ]}
-                >
-                  <Text style={styles.profileGridLabel}>Full Name</Text>
-                  <Text
-                    style={[
-                      styles.profileGridValue,
-                      isDark && styles.profileGridValueDark,
-                    ]}
-                  >
-                    {user.name || "Not provided"}
-                  </Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.profileGridTile,
-                    isDark && styles.profileGridTileDark,
-                  ]}
-                >
-                  <Text style={styles.profileGridLabel}>Email Address</Text>
-                  <Text
-                    style={[
-                      styles.profileGridValue,
-                      isDark && styles.profileGridValueDark,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {user.email}
-                  </Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.profileGridTile,
-                    isDark && styles.profileGridTileDark,
-                  ]}
-                >
-                  <Text style={styles.profileGridLabel}>Phone / Mobile</Text>
-                  <Text
-                    style={[
-                      styles.profileGridValue,
-                      isDark && styles.profileGridValueDark,
-                    ]}
-                  >
-                    {user.phoneNumber || "Not provided"}
-                  </Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.profileGridTile,
-                    isDark && styles.profileGridTileDark,
-                  ]}
-                >
-                  <Text style={styles.profileGridLabel}>Company / Lab</Text>
-                  <Text
-                    style={[
-                      styles.profileGridValue,
-                      isDark && styles.profileGridValueDark,
-                    ]}
-                  >
-                    {user.companyName || "Not provided"}
-                  </Text>
-                </View>
-              </View>
-              )}
-
-            </View>
-
-            {/* Sign Out Action Button */}
-            <TouchableOpacity
-              style={styles.signOutBtn}
-              activeOpacity={0.8}
-              onPress={handleLogout}
-            >
-              <LogOut size={16} color="#ba1a1a" />
-              <Text style={styles.signOutBtnText}>Sign Out from LabMatrix</Text>
-            </TouchableOpacity>
-
-            {/* Danger Zone: Account Deletion */}
-            <View style={styles.dangerZoneCard}>
-              <View style={styles.dangerZoneHeader}>
-                <Trash2 size={18} color="#dc2626" />
-                <View style={{ marginLeft: 8 }}>
-                  <Text style={styles.dangerZoneTitle}>Danger Zone</Text>
-                  <Text style={styles.dangerZoneSubtitle}>
-                    Permanent account deactivation & data archival
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.dangerZoneDesc}>
-                Deactivating your account will immediately remove all your
-                listed equipment and machine requests from the public
-                marketplace. Your phone number and profile info will be cleared.
-              </Text>
-
-              <TouchableOpacity
-                style={styles.deactivateBtn}
-                activeOpacity={0.8}
-                onPress={() => setIsDeleteModalVisible(true)}
-              >
-                <Trash2 size={14} color="#ffffff" />
-                <Text style={styles.deactivateBtnText}>
-                  Deactivate & Delete My Account
+            ) : savedListings.length === 0 ? (
+              <View style={[styles.emptyBox, isDark && styles.emptyBoxDark]}>
+                <Heart size={34} color="#94a3b8" />
+                <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>
+                  No saved instruments yet
                 </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* App Version Stamp */}
-        <Text style={styles.appVersionText}>
-          LabMatrix Market v1.0.0
-        </Text>
-      </ScrollView>
-
-      {/* ==================================================== */}
-      {/* STATUS PICKER MODAL (AVAILABLE / SOLD / FULFILLED)    */}
-      {/* ==================================================== */}
-      <Modal
-        visible={!!statusPickerItem}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setStatusPickerItem(null)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setStatusPickerItem(null)}
-        >
-          <View
-            style={[styles.statusPickerCard, isDark && styles.statusPickerCardDark]}
-          >
-            <View style={styles.statusPickerHeader}>
-              <Text
-                style={[
-                  styles.statusPickerHeaderTitle,
-                  isDark && styles.statusPickerHeaderTitleDark,
-                ]}
-              >
-                Update Item Status
-              </Text>
-              <TouchableOpacity
-                onPress={() => setStatusPickerItem(null)}
-                style={styles.closeModalBtn}
-              >
-                <X size={18} color="#64748b" />
-              </TouchableOpacity>
-            </View>
-
-            {statusPickerItem?.type === "listing" ? (
-              <View style={styles.statusOptionsList}>
+                <Text style={styles.emptyDesc}>
+                  Tap the heart icon on any listing in the marketplace to shortlist equipment for review.
+                </Text>
                 <TouchableOpacity
-                  style={[
-                    styles.statusOptionItem,
-                    statusPickerItem.currentStatus === "AVAILABLE" &&
-                      styles.statusOptionItemActive,
-                  ]}
-                  onPress={() =>
-                    handleUpdateListingStatus(statusPickerItem.id, "AVAILABLE")
-                  }
+                  style={styles.emptyAddBtn}
+                  onPress={() => router.push("/(tabs)/" as any)}
                 >
-                  <View
-                    style={[
-                      styles.statusDotLarge,
-                      { backgroundColor: "#16a34a" },
-                    ]}
-                  />
-                  <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={styles.statusOptionHeading}>AVAILABLE</Text>
-                    <Text style={styles.statusOptionSub}>
-                      Item is ready for inquiries and sale
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.statusOptionItem,
-                    statusPickerItem.currentStatus === "SOLD" &&
-                      styles.statusOptionItemActive,
-                  ]}
-                  onPress={() =>
-                    handleUpdateListingStatus(statusPickerItem.id, "SOLD")
-                  }
-                >
-                  <View
-                    style={[
-                      styles.statusDotLarge,
-                      { backgroundColor: "#dc2626" },
-                    ]}
-                  />
-                  <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={styles.statusOptionHeading}>SOLD</Text>
-                    <Text style={styles.statusOptionSub}>
-                      Machine has been purchased or handed over
-                    </Text>
-                  </View>
+                  <Text style={styles.emptyAddBtnText}>Browse Marketplace</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.statusOptionsList}>
-                <TouchableOpacity
-                  style={[
-                    styles.statusOptionItem,
-                    statusPickerItem?.currentStatus === "OPEN" &&
-                      styles.statusOptionItemActive,
-                  ]}
-                  onPress={() =>
-                    handleUpdateRequirementStatus(statusPickerItem!.id, "OPEN")
-                  }
-                >
-                  <View
-                    style={[
-                      styles.statusDotLarge,
-                      { backgroundColor: "#16a34a" },
-                    ]}
-                  />
-                  <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={styles.statusOptionHeading}>OPEN (Looking)</Text>
-                    <Text style={styles.statusOptionSub}>
-                      Actively seeking quotes from suppliers
-                    </Text>
-                  </View>
-                </TouchableOpacity>
+              savedListings.map((item: any) => {
+                const thumb = getListingThumbnail(item);
+                const priceFormatted = item.minPrice
+                  ? `₹${Number(item.minPrice).toLocaleString("en-IN")}`
+                  : "Price on request";
 
-                <TouchableOpacity
-                  style={[
-                    styles.statusOptionItem,
-                    statusPickerItem?.currentStatus === "FULFILLED" &&
-                      styles.statusOptionItemActive,
-                  ]}
-                  onPress={() =>
-                    handleUpdateRequirementStatus(
-                      statusPickerItem!.id,
-                      "FULFILLED"
-                    )
-                  }
-                >
+                return (
                   <View
-                    style={[
-                      styles.statusDotLarge,
-                      { backgroundColor: "#2563eb" },
-                    ]}
-                  />
-                  <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={styles.statusOptionHeading}>
-                      FULFILLED (Purchased)
-                    </Text>
-                    <Text style={styles.statusOptionSub}>
-                      Instrument requirement satisfied
-                    </Text>
+                    key={item.id}
+                    style={[styles.listingRow, isDark && styles.listingRowDark]}
+                  >
+                    <TouchableOpacity
+                      style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}
+                      activeOpacity={0.75}
+                      onPress={() => router.push(`/listing/${item.id}` as any)}
+                    >
+                      {thumb ? (
+                        <Image source={{ uri: thumb }} style={styles.listingThumb} resizeMode="cover" />
+                      ) : (
+                        <View style={styles.listingThumbPlaceholder}>
+                          <Package size={20} color="#94a3b8" />
+                        </View>
+                      )}
+
+                      <View style={styles.listingContentCol}>
+                        <Text
+                          style={[styles.listingTitle, isDark && styles.listingTitleDark]}
+                          numberOfLines={1}
+                        >
+                          {item.title}
+                        </Text>
+                        <Text style={styles.savedPriceText}>{priceFormatted}</Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.unsaveBtn}
+                      activeOpacity={0.7}
+                      onPress={() => handleRemoveSaved(item.id)}
+                    >
+                      <Heart size={18} color="#dc2626" fill="#dc2626" />
+                    </TouchableOpacity>
                   </View>
-                </TouchableOpacity>
-              </View>
+                );
+              })
             )}
           </View>
-        </TouchableOpacity>
+        )}
+      </ScrollView>
+
+      {/* ==================================================== */}
+      {/* MANAGE LISTING SHEET                                 */}
+      {/* ==================================================== */}
+      <Modal
+        visible={Boolean(manageListing)}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setManageListing(null)}
+      >
+        <View style={styles.sheetOverlay}>
+          <View style={[styles.sheetContent, isDark && styles.sheetContentDark, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
+            {manageListing && (
+              <>
+                <View style={styles.sheetHeader}>
+                  <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    {getListingThumbnail(manageListing) ? (
+                      <Image
+                        source={{ uri: getListingThumbnail(manageListing)! }}
+                        style={styles.sheetThumb}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.sheetThumbPlaceholder}>
+                        <Package size={18} color="#94a3b8" />
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[styles.sheetItemTitle, isDark && styles.sheetItemTitleDark]}
+                        numberOfLines={1}
+                      >
+                        {manageListing.title}
+                      </Text>
+                      <Text style={styles.sheetItemCategory}>
+                        {manageListing.category} · Status: {manageListing.status}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity onPress={() => setManageListing(null)} style={{ padding: 6 }}>
+                    <X size={20} color="#64748b" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Actions */}
+                <View style={styles.sheetActionList}>
+                  {/* Edit */}
+                  <TouchableOpacity
+                    style={styles.sheetActionRow}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      const id = manageListing.id;
+                      setManageListing(null);
+                      router.push({
+                        pathname: "/(tabs)/sell",
+                        params: { edit: id },
+                      } as any);
+                    }}
+                  >
+                    <Pencil size={18} color="#033a7d" />
+                    <Text style={styles.sheetActionText}>Edit Listing Details</Text>
+                  </TouchableOpacity>
+
+                  {/* Duplicate */}
+                  <TouchableOpacity
+                    style={styles.sheetActionRow}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      const id = manageListing.id;
+                      setManageListing(null);
+                      router.push({
+                        pathname: "/(tabs)/sell",
+                        params: { duplicate: id },
+                      } as any);
+                    }}
+                  >
+                    <Copy size={18} color="#033a7d" />
+                    <Text style={styles.sheetActionText}>Duplicate Listing</Text>
+                  </TouchableOpacity>
+
+                  {/* Mark as Sold / Available */}
+                  <TouchableOpacity
+                    style={styles.sheetActionRow}
+                    activeOpacity={0.7}
+                    disabled={updatingId === manageListing.id}
+                    onPress={() =>
+                      handleUpdateListingStatus(
+                        manageListing.id,
+                        manageListing.status === "AVAILABLE" ? "SOLD" : "AVAILABLE"
+                      )
+                    }
+                  >
+                    <CheckCircle2
+                      size={18}
+                      color={manageListing.status === "AVAILABLE" ? "#64748b" : "#15803d"}
+                    />
+                    <Text style={styles.sheetActionText}>
+                      {manageListing.status === "AVAILABLE" ? "Mark as Sold Out" : "Mark as Available"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* View in Marketplace */}
+                  <TouchableOpacity
+                    style={styles.sheetActionRow}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      const id = manageListing.id;
+                      setManageListing(null);
+                      router.push(`/listing/${id}` as any);
+                    }}
+                  >
+                    <ExternalLink size={18} color="#033a7d" />
+                    <Text style={styles.sheetActionText}>View in Marketplace</Text>
+                  </TouchableOpacity>
+
+                  {/* Delete */}
+                  <TouchableOpacity
+                    style={[styles.sheetActionRow, { borderBottomWidth: 0 }]}
+                    activeOpacity={0.7}
+                    disabled={updatingId === manageListing.id}
+                    onPress={() => handleDeleteListing(manageListing.id)}
+                  >
+                    <Trash2 size={18} color="#dc2626" />
+                    <Text style={[styles.sheetActionText, { color: "#dc2626" }]}>Delete Listing</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
       </Modal>
 
       {/* ==================================================== */}
-      {/* ACCOUNT DELETION CONFIRMATION MODAL                  */}
+      {/* MANAGE REQUEST SHEET                                 */}
       {/* ==================================================== */}
       <Modal
-        visible={isDeleteModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setIsDeleteModalVisible(false);
-          setDeletePassword("");
-        }}
+        visible={Boolean(manageRequest)}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setManageRequest(null)}
       >
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.deleteModalCard,
-              isDark && styles.deleteModalCardDark,
-            ]}
-          >
-            <View style={styles.deleteModalHeader}>
-              <View style={styles.deleteWarningIcon}>
-                <AlertTriangle size={24} color="#ba1a1a" />
-              </View>
-              <TouchableOpacity
-                onPress={() => {
-                  setIsDeleteModalVisible(false);
-                  setDeletePassword("");
-                }}
-                style={styles.closeModalBtn}
-              >
+        <View style={styles.sheetOverlay}>
+          <View style={[styles.sheetContent, isDark && styles.sheetContentDark, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
+            {manageRequest && (
+              <>
+                <View style={styles.sheetHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[styles.sheetItemTitle, isDark && styles.sheetItemTitleDark]}
+                      numberOfLines={1}
+                    >
+                      {manageRequest.title}
+                    </Text>
+                    <Text style={styles.sheetItemCategory}>
+                      {manageRequest.category} · Status: {manageRequest.status}
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity onPress={() => setManageRequest(null)} style={{ padding: 6 }}>
+                    <X size={20} color="#64748b" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.sheetActionList}>
+                  {/* Edit */}
+                  <TouchableOpacity
+                    style={styles.sheetActionRow}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      const id = manageRequest.id;
+                      setManageRequest(null);
+                      router.push({
+                        pathname: "/(tabs)/requests",
+                        params: { edit: id },
+                      } as any);
+                    }}
+                  >
+                    <Pencil size={18} color="#033a7d" />
+                    <Text style={styles.sheetActionText}>Edit Sourcing Request</Text>
+                  </TouchableOpacity>
+
+                  {/* Mark as Fulfilled / Open */}
+                  <TouchableOpacity
+                    style={styles.sheetActionRow}
+                    activeOpacity={0.7}
+                    disabled={updatingId === manageRequest.id}
+                    onPress={() =>
+                      handleUpdateRequirementStatus(
+                        manageRequest.id,
+                        manageRequest.status === "OPEN" ? "FULFILLED" : "OPEN"
+                      )
+                    }
+                  >
+                    <CheckCircle2
+                      size={18}
+                      color={manageRequest.status === "OPEN" ? "#64748b" : "#15803d"}
+                    />
+                    <Text style={styles.sheetActionText}>
+                      {manageRequest.status === "OPEN" ? "Mark as Fulfilled" : "Reopen Request"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* View Details */}
+                  <TouchableOpacity
+                    style={styles.sheetActionRow}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      const id = manageRequest.id;
+                      setManageRequest(null);
+                      router.push(`/requests/${id}` as any);
+                    }}
+                  >
+                    <ExternalLink size={18} color="#033a7d" />
+                    <Text style={styles.sheetActionText}>View Public Sourcing Card</Text>
+                  </TouchableOpacity>
+
+                  {/* Delete */}
+                  <TouchableOpacity
+                    style={[styles.sheetActionRow, { borderBottomWidth: 0 }]}
+                    activeOpacity={0.7}
+                    disabled={updatingId === manageRequest.id}
+                    onPress={() => handleDeleteRequirement(manageRequest.id)}
+                  >
+                    <Trash2 size={18} color="#dc2626" />
+                    <Text style={[styles.sheetActionText, { color: "#dc2626" }]}>Delete Sourcing Request</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ==================================================== */}
+      {/* SETTINGS MODAL (TRIGGERED BY ⚙ ICON)                 */}
+      {/* ==================================================== */}
+      <Modal
+        visible={settingsModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setSettingsModalVisible(false)}
+      >
+        <View style={[styles.sheetOverlay, { paddingTop: insets.top }]}>
+          <View style={[styles.settingsSheet, isDark && styles.settingsSheetDark, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
+            <View style={styles.settingsHeader}>
+              <Text style={[styles.settingsTitle, isDark && styles.settingsTitleDark]}>
+                Account Settings
+              </Text>
+              <TouchableOpacity onPress={() => setSettingsModalVisible(false)} style={{ padding: 6 }}>
                 <X size={20} color="#64748b" />
               </TouchableOpacity>
             </View>
 
-            <Text
-              style={[
-                styles.deleteModalTitle,
-                isDark && styles.deleteModalTitleDark,
-              ]}
-            >
-              Confirm Account Deactivation
+            <ScrollView style={{ paddingHorizontal: 18 }} showsVerticalScrollIndicator={false}>
+              {/* Personal & Company Details Section */}
+              <Text style={styles.sectionHeading}>Personal & Facility Details</Text>
+
+              <Text style={styles.inputLabel}>Representative Full Name</Text>
+              <TextInput
+                style={[styles.input, isDark && styles.inputDark]}
+                placeholder="Full name"
+                placeholderTextColor="#94a3b8"
+                value={editName}
+                onChangeText={setEditName}
+              />
+
+              <Text style={styles.inputLabel}>Direct Mobile / WhatsApp</Text>
+              <TextInput
+                style={[styles.input, isDark && styles.inputDark]}
+                placeholder="+91-XXXXXXXXXX"
+                placeholderTextColor="#94a3b8"
+                keyboardType="phone-pad"
+                value={editPhone}
+                onChangeText={setEditPhone}
+              />
+
+              <Text style={styles.inputLabel}>Company / Institution Name</Text>
+              <TextInput
+                style={[styles.input, isDark && styles.inputDark]}
+                placeholder="Laboratory Name"
+                placeholderTextColor="#94a3b8"
+                value={editCompany}
+                onChangeText={setEditCompany}
+              />
+
+              <Text style={styles.inputLabel}>Account Email (Registered)</Text>
+              <TextInput
+                style={[styles.input, styles.inputDisabled, isDark && styles.inputDark]}
+                value={user.email}
+                editable={false}
+              />
+
+              <TouchableOpacity
+                style={[styles.saveProfileBtn, isSavingProfile && { opacity: 0.7 }]}
+                activeOpacity={0.85}
+                onPress={handleSaveProfile}
+                disabled={isSavingProfile}
+              >
+                {isSavingProfile ? (
+                  <ActivityIndicator size="small" color="#002555" />
+                ) : (
+                  <Text style={styles.saveProfileBtnText}>Save Account Changes</Text>
+                )}
+              </TouchableOpacity>
+
+              {/* Help & Escrow */}
+              <Text style={styles.sectionHeading}>Support & Verification</Text>
+
+              <TouchableOpacity
+                style={styles.settingsMenuRow}
+                activeOpacity={0.7}
+                onPress={handleCallSupport}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <Phone size={18} color="#033a7d" />
+                  <Text style={[styles.settingsMenuText, isDark && styles.settingsMenuTextDark]}>
+                    Engineering Help Desk (+91 73030 40804)
+                  </Text>
+                </View>
+                <ChevronRight size={18} color="#94a3b8" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.settingsMenuRow}
+                activeOpacity={0.7}
+                onPress={() => setEscrowModalVisible(true)}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <ShieldCheck size={18} color="#033a7d" />
+                  <Text style={[styles.settingsMenuText, isDark && styles.settingsMenuTextDark]}>
+                    LabMatrix Escrow Guarantee Policy
+                  </Text>
+                </View>
+                <ChevronRight size={18} color="#94a3b8" />
+              </TouchableOpacity>
+
+              {user.role === "ADMIN" && (
+                <TouchableOpacity
+                  style={styles.settingsMenuRow}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setSettingsModalVisible(false);
+                    router.push("/admin" as any);
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    <ShieldCheck size={18} color="#fbc634" />
+                    <Text style={[styles.settingsMenuText, isDark && styles.settingsMenuTextDark]}>
+                      Admin Moderation Console
+                    </Text>
+                  </View>
+                  <ChevronRight size={18} color="#94a3b8" />
+                </TouchableOpacity>
+              )}
+
+              {/* Sign Out & Deactivate Section */}
+              <Text style={styles.sectionHeading}>Session & Account</Text>
+
+              <TouchableOpacity
+                style={styles.signOutBtn}
+                activeOpacity={0.8}
+                onPress={handleLogout}
+              >
+                <LogOut size={16} color="#dc2626" />
+                <Text style={styles.signOutBtnText}>Sign Out of Session</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.deleteAccountBtn}
+                activeOpacity={0.8}
+                onPress={() => setIsDeleteModalVisible(true)}
+              >
+                <Trash2 size={15} color="#64748b" />
+                <Text style={styles.deleteAccountBtnText}>Permanently Deactivate Account</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.versionNote}>LabMatrix Mobile v1.0.6 · OTA Production</Text>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Account Deletion Confirmation Modal */}
+      <Modal
+        visible={isDeleteModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setIsDeleteModalVisible(false)}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={[styles.confirmCard, isDark && styles.confirmCardDark]}>
+            <Text style={[styles.confirmTitle, isDark && styles.confirmTitleDark]}>
+              Deactivate Account
             </Text>
-            <Text style={styles.deleteModalDesc}>
-              This action is permanent. All your listed equipment (
-              {listings.length}) and sourcing requests ({requirements.length})
-              will be deactivated and removed from public view.
+            <Text style={styles.confirmDesc}>
+              This will unlist all your equipment and revoke your account access. Type "DELETE" to confirm.
             </Text>
 
-            <View style={styles.deleteInputWrapper}>
-              <Text style={styles.deleteInputLabel}>
-                Type <Text style={{ fontWeight: "700", color: "#ba1a1a" }}>DELETE</Text> to confirm:
-              </Text>
-              <TextInput
-                value={deleteConfirmation}
-                onChangeText={setDeleteConfirmation}
-                placeholder="DELETE"
-                autoCapitalize="characters"
-                autoCorrect={false}
-                style={[
-                  styles.deleteTextInput,
-                  isDark && styles.deleteTextInputDark,
-                ]}
-              />
-            </View>
+            <TextInput
+              style={[styles.input, isDark && styles.inputDark]}
+              placeholder='Type "DELETE"'
+              placeholderTextColor="#94a3b8"
+              value={deleteConfirmation}
+              onChangeText={setDeleteConfirmation}
+              autoCapitalize="characters"
+            />
 
             {requiresPassword && (
-              <View style={styles.deleteInputWrapper}>
-                <Text style={styles.deleteInputLabel}>Enter your account password:</Text>
-                <TextInput
-                  value={deletePassword}
-                  onChangeText={setDeletePassword}
-                  placeholder="Password"
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  style={[
-                    styles.deleteTextInput,
-                    isDark && styles.deleteTextInputDark,
-                  ]}
-                />
-              </View>
+              <TextInput
+                style={[styles.input, isDark && styles.inputDark]}
+                placeholder="Account password"
+                placeholderTextColor="#94a3b8"
+                secureTextEntry
+                value={deletePassword}
+                onChangeText={setDeletePassword}
+              />
             )}
 
-            <View style={styles.deleteModalActions}>
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
               <TouchableOpacity
-                style={styles.cancelDeleteBtn}
+                style={[styles.confirmBtn, { backgroundColor: "#f1f5f9" }]}
                 onPress={() => {
                   setIsDeleteModalVisible(false);
                   setDeleteConfirmation("");
                   setDeletePassword("");
                 }}
               >
-                <Text style={styles.cancelDeleteBtnText}>Cancel</Text>
+                <Text style={{ fontWeight: "700", color: "#475569" }}>Cancel</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[
-                  styles.confirmDeleteBtn,
-                  (deleteConfirmation.trim().toUpperCase() !== "DELETE" ||
-                    (requiresPassword && !deletePassword)) && {
-                    opacity: 0.5,
-                  },
-                ]}
-                disabled={
-                  isDeleting ||
-                  deleteConfirmation.trim().toUpperCase() !== "DELETE" ||
-                  (requiresPassword && !deletePassword)
-                }
+                style={[styles.confirmBtn, { backgroundColor: "#dc2626" }]}
                 onPress={handleDeleteAccount}
+                disabled={isDeleting}
               >
                 {isDeleting ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
+                  <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <>
-                    <Trash2 size={14} color="#ffffff" />
-                    <Text style={styles.confirmDeleteBtnText}>
-                      Permanently Deactivate
-                    </Text>
-                  </>
+                  <Text style={{ fontWeight: "700", color: "#fff" }}>Confirm</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1670,17 +1398,7 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* Global Quick Profile Menu Sheet */}
-      <ProfileQuickMenuModal
-        visible={profileMenuVisible}
-        onClose={() => setProfileMenuVisible(false)}
-        onOpenEscrow={() => {
-          setProfileMenuVisible(false);
-          setEscrowModalVisible(true);
-        }}
-      />
-
-      {/* Global Escrow & Verification Protocol Modal */}
+      {/* Escrow Modal */}
       <EscrowPolicyModal
         visible={escrowModalVisible}
         onClose={() => setEscrowModalVisible(false)}
@@ -1692,1055 +1410,595 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#ffffff",
   },
   safeAreaDark: {
-    backgroundColor: "#0b1320",
+    backgroundColor: "#0b1220",
   },
-
-  // Top Bar matching mockup
   topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    height: 52,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     backgroundColor: "#ffffff",
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
+    borderColor: "#f1f5f9",
   },
   topBarDark: {
-    backgroundColor: "#0f172a",
-    borderBottomColor: "#1e293b",
+    backgroundColor: "#0b1220",
+    borderColor: "#1e293b",
   },
-  logoRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#0f172a",
+    letterSpacing: -0.3,
   },
-  logoImg: {
-    width: 130,
-    height: 32,
+  headerTitleDark: {
+    color: "#f8fafc",
   },
-  topRightIcons: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  headerIconBtn: {
+  settingsIconBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  headerNotificationDot: {
-    position: "absolute",
-    top: 7,
-    right: 8,
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: "#ef4444",
-  },
-  headerAvatarPill: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#011936",
+    backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
   },
-  headerAvatarText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#ffffff",
-  },
-
   scrollContent: {
-    padding: 16,
     paddingBottom: 40,
   },
-
-  // 1. Profile Hero Card
-  profileHeroCard: {
+  heroCard: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 16,
     backgroundColor: "#ffffff",
-    borderRadius: 18,
-    borderWidth: 1,
+    borderBottomWidth: 1,
     borderColor: "#e2e8f0",
-    padding: 18,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
+    gap: 14,
   },
-  profileHeroCardDark: {
-    backgroundColor: "#131d2e",
+  heroCardDark: {
+    backgroundColor: "#0b1220",
     borderColor: "#1e293b",
   },
-  profileTopRow: {
+  heroRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
+    gap: 12,
   },
-  heroInitialsAvatar: {
-    width: 58,
-    height: 58,
-    borderRadius: 16,
-    backgroundColor: "#011936",
+  avatarSquircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: "#002555",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#011936",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 3,
   },
-  heroInitialsText: {
-    fontSize: 22,
+  avatarText: {
+    fontSize: 17,
     fontWeight: "900",
     color: "#ffffff",
-    letterSpacing: 0.5,
   },
   heroTextCol: {
     flex: 1,
-    marginLeft: 14,
-  },
-  heroNameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 6,
-    marginBottom: 4,
-  },
-  heroName: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  heroNameDark: {
-    color: "#f8fafc",
-  },
-  heroSignOutPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "#fef2f2",
-    borderWidth: 1,
-    borderColor: "#fecaca",
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  heroSignOutText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#dc2626",
-  },
-  labmatrixVerifiedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#eff5fb",
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    paddingHorizontal: 7,
-    paddingVertical: 2.5,
-    borderRadius: 10,
     gap: 3,
   },
-  labmatrixVerifiedText: {
+  userName: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  userNameDark: {
+    color: "#f8fafc",
+  },
+  verifiedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#eff6ff",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  verifiedText: {
     fontSize: 10,
     fontWeight: "800",
     color: "#033a7d",
   },
-  heroMetaLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 2,
-  },
-  heroMetaText: {
-    fontSize: 12,
+  userCompany: {
+    fontSize: 12.5,
     color: "#64748b",
-    fontWeight: "500",
   },
-
-  // 3 Quick Action Buttons
-  heroActionsRow: {
+  statsRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 16,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: "#f1f5f9",
+    gap: 6,
   },
-  heroBtnGold: {
+  statTile: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#fbc634",
-    paddingVertical: 9,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    gap: 4,
-    shadowColor: "#fbc634",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  heroBtnGoldText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#011936",
-  },
-  heroBtnWhite: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    paddingVertical: 9,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    gap: 4,
-  },
-  heroBtnWhiteText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: "#0f172a",
-  },
-  heroBtnNavy: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#033a7d",
-    paddingVertical: 9,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    gap: 4,
-  },
-  heroBtnNavyText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-
-  // Admin Shortcut Button
-  adminConsoleShortcut: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#011936",
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 14,
-    borderWidth: 1,
-    borderColor: "#fbc634",
-  },
-  adminConsoleLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  adminConsoleTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#ffffff",
-  },
-  adminConsoleSub: {
-    fontSize: 10.5,
-    color: "#cbd5e1",
-    marginTop: 1,
-  },
-
-  // Full Privacy Banner
-  privacyBanner: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: "#01142f",
-    borderRadius: 14,
-    padding: 14,
-    marginTop: 12,
-    gap: 10,
-  },
-  privacyIconCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "rgba(251, 198, 52, 0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 1,
-  },
-  privacyHeader: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#fbc634",
-    letterSpacing: 0.5,
-  },
-  privacyDesc: {
-    fontSize: 11,
-    color: "#cbd5e1",
-    lineHeight: 16,
-    marginTop: 2,
-  },
-
-  // Tabs Horizontal Scroll
-  tabsScrollRow: {
-    flexDirection: "row",
-    gap: 8,
-    paddingVertical: 14,
-  },
-  tabPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#e2e8f0",
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    alignItems: "center",
   },
-  tabPillActive: {
-    backgroundColor: "#033a7d",
+  statTileActive: {
+    backgroundColor: "#eff6ff",
     borderColor: "#033a7d",
   },
-  tabPillText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#475569",
+  statValue: {
+    fontSize: 18,
+    fontWeight: "900",
   },
-  tabPillTextActive: {
-    color: "#ffffff",
-  },
-
-  tabContentContainer: {
+  statLabel: {
+    fontSize: 11,
+    color: "#64748b",
+    fontWeight: "600",
     marginTop: 2,
   },
-  tabLoadingCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 30,
+  actionsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  listEquipBtn: {
+    flex: 1,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: "#fbc634",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
   },
-  tabLoadingText: {
-    fontSize: 12,
-    color: "#64748b",
-    fontWeight: "500",
-  },
-
-  // Cards List
-  cardsList: {
-    gap: 12,
-  },
-  itemCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  itemCardDark: {
-    backgroundColor: "#131d2e",
-    borderColor: "#1e293b",
-  },
-  itemCardTopBadges: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: 6,
-    marginBottom: 8,
-  },
-  itemBadgesLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  categoryBadge: {
-    backgroundColor: "#eff5fb",
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  categoryBadgeText: {
-    fontSize: 10.5,
+  listEquipBtnText: {
+    fontSize: 13,
     fontWeight: "800",
-    color: "#033a7d",
+    color: "#002555",
   },
-  newInstrumentBadge: {
-    backgroundColor: "#ecfdf5",
-    borderWidth: 1,
-    borderColor: "#a7f3d0",
-    paddingHorizontal: 6,
-    paddingVertical: 2.5,
-    borderRadius: 6,
-  },
-  newInstrumentText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#065f46",
-  },
-  sparePartBadge: {
-    backgroundColor: "#fffbeb",
-    borderWidth: 1,
-    borderColor: "#fde68a",
-    paddingHorizontal: 6,
-    paddingVertical: 2.5,
-    borderRadius: 6,
-  },
-  sparePartText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#92400e",
-  },
-  qtyBadge: {
-    backgroundColor: "#fef3c7",
-    borderWidth: 1,
-    borderColor: "#fde68a",
-    paddingHorizontal: 6,
-    paddingVertical: 2.5,
-    borderRadius: 6,
-  },
-  qtyBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#92400e",
-  },
-  approvedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#ecfdf5",
-    borderWidth: 1,
-    borderColor: "#bbf7d0",
-    paddingHorizontal: 7,
-    paddingVertical: 2.5,
-    borderRadius: 6,
-    gap: 4,
-  },
-  approvedText: {
-    fontSize: 10.5,
-    fontWeight: "700",
-    color: "#15803d",
-  },
-  pendingBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fffbeb",
-    borderWidth: 1,
-    borderColor: "#fde68a",
-    paddingHorizontal: 7,
-    paddingVertical: 2.5,
-    borderRadius: 6,
-    gap: 4,
-  },
-  pendingText: {
-    fontSize: 10.5,
-    fontWeight: "700",
-    color: "#b45309",
-  },
-  postedDateText: {
-    fontSize: 11,
-    color: "#94a3b8",
-  },
-
-  itemTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#0f172a",
-    lineHeight: 20,
-    marginBottom: 4,
-  },
-  itemTitleDark: {
-    color: "#f8fafc",
-  },
-  itemDescription: {
-    fontSize: 12,
-    color: "#64748b",
-    lineHeight: 17,
-  },
-  pendingReviewNotice: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: "#fffbeb",
-    borderWidth: 1,
-    borderColor: "#fef3c7",
-    padding: 8,
-    borderRadius: 8,
-    marginTop: 8,
-    gap: 6,
-  },
-  pendingReviewNoticeText: {
-    fontSize: 11,
-    color: "#92400e",
+  postReqBtn: {
     flex: 1,
-    lineHeight: 15,
-  },
-
-  itemCardDivider: {
-    height: 1,
-    backgroundColor: "#f1f5f9",
-    marginVertical: 12,
-  },
-  priceAndActionsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  priceLabel: {
-    fontSize: 10,
-    color: "#94a3b8",
-    fontWeight: "600",
-    textTransform: "uppercase",
-  },
-  priceValue: {
-    fontSize: 13.5,
-    fontWeight: "900",
-    color: "#0f172a",
-    marginTop: 1,
-  },
-  priceValueDark: {
-    color: "#f8fafc",
-  },
-  actionsBtnGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  actionPillBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f1f5f9",
+    height: 42,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-    gap: 4,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  actionPillText: {
-    fontSize: 11,
+  postReqBtnText: {
+    fontSize: 13,
     fontWeight: "700",
-    color: "#475569",
+    color: "#0f172a",
   },
-  actionPillBtnPrimary: {
+  segmentBar: {
     flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#eff5fb",
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-    gap: 4,
+    borderBottomWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 16,
+    gap: 20,
   },
-  actionPillPrimaryText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#033a7d",
+  segmentTab: {
+    paddingVertical: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
   },
-
-  statusToggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#f8fafc",
+  segmentTabActive: {
+    borderBottomColor: "#033a7d",
   },
-  statusToggleRowInline: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  statusToggleLabel: {
-    fontSize: 11.5,
+  segmentTabText: {
+    fontSize: 13,
     fontWeight: "700",
     color: "#64748b",
   },
-  statusPickerTrigger: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 9,
-    paddingVertical: 4.5,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 5,
-  },
-  statusPickerTriggerAvailable: {
-    backgroundColor: "#ecfdf5",
-    borderColor: "#a7f3d0",
-  },
-  statusPickerTriggerSold: {
-    backgroundColor: "#f1f5f9",
-    borderColor: "#e2e8f0",
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  statusPickerText: {
-    fontSize: 11,
+  segmentTabTextActive: {
+    color: "#033a7d",
     fontWeight: "800",
   },
-  statusPickerTextAvailable: {
-    color: "#166534",
+  activeFilterPillRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "#eff6ff",
   },
-  statusPickerTextSold: {
-    color: "#475569",
+  activeFilterPillText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#033a7d",
   },
-
-  // Empty State Card
-  emptyCard: {
+  resetFilterText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  feedContainer: {
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    gap: 8,
+  },
+  listingRow: {
     backgroundColor: "#ffffff",
-    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    padding: 28,
+    borderRadius: 12,
+    padding: 10,
+    flexDirection: "row",
     alignItems: "center",
-    textAlign: "center",
+    gap: 10,
   },
-  emptyCardDark: {
-    backgroundColor: "#131d2e",
-    borderColor: "#1e293b",
+  listingRowDark: {
+    backgroundColor: "#1e293b",
+    borderColor: "#334155",
+  },
+  listingThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
+  },
+  listingThumbPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  requestIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  listingContentCol: {
+    flex: 1,
+    gap: 3,
+  },
+  listingTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 16,
+    color: "#0f172a",
+  },
+  listingTitleDark: {
+    color: "#f8fafc",
+  },
+  listingMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+  statusDotText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  inquiryBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#033a7d",
+  },
+  savedPriceText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#002555",
+  },
+  unsaveBtn: {
+    padding: 8,
+  },
+  loadingContainer: {
+    paddingVertical: 40,
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 8,
+    fontSize: 12.5,
+    color: "#64748b",
+  },
+  emptyBox: {
+    paddingVertical: 36,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    marginTop: 8,
+  },
+  emptyBoxDark: {
+    backgroundColor: "#1e293b",
+    borderColor: "#334155",
   },
   emptyTitle: {
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "700",
     color: "#0f172a",
-    marginTop: 12,
+    marginTop: 10,
+    marginBottom: 4,
     textAlign: "center",
   },
   emptyTitleDark: {
     color: "#f8fafc",
   },
-  emptySubtitle: {
-    fontSize: 12,
+  emptyDesc: {
+    fontSize: 12.5,
     color: "#64748b",
-    marginTop: 6,
     textAlign: "center",
-    lineHeight: 18,
-  },
-  emptyActionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fbc634",
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: 10,
-    marginTop: 16,
-    gap: 5,
-  },
-  emptyActionBtnText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#011936",
-  },
-
-  // Inquiries Tab Styles
-
-
-
-
-  // Notification Cards
-
-  // Settings Tab Styles
-  settingsCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  settingsCardDark: {
-    backgroundColor: "#131d2e",
-    borderColor: "#1e293b",
-  },
-  settingsCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
+    lineHeight: 17,
     marginBottom: 14,
   },
-  settingsIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: "#eff5fb",
+  emptyAddBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#fbc634",
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  emptyAddBtnText: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: "#002555",
+  },
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
+    justifyContent: "flex-end",
+  },
+  sheetContent: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 16,
+    paddingHorizontal: 16,
+  },
+  sheetContentDark: {
+    backgroundColor: "#0f172a",
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  sheetThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
+  },
+  sheetThumbPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
   },
-  settingsCardTitle: {
-    fontSize: 15,
+  sheetItemTitle: {
+    fontSize: 14,
     fontWeight: "800",
     color: "#0f172a",
   },
-  settingsCardTitleDark: {
+  sheetItemTitleDark: {
     color: "#f8fafc",
   },
-  settingsCardSub: {
-    fontSize: 11,
+  sheetItemCategory: {
+    fontSize: 11.5,
     color: "#64748b",
-    marginTop: 1,
+    marginTop: 2,
   },
-  profileGrid: {
+  sheetActionList: {
+    paddingVertical: 8,
+  },
+  sheetActionRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  profileGridTile: {
-    width: "48%",
-    backgroundColor: "#f8fafc",
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
     borderColor: "#f1f5f9",
   },
-  profileGridTileDark: {
-    backgroundColor: "#0b1320",
-    borderColor: "#1e293b",
-  },
-  profileGridLabel: {
-    fontSize: 10,
-    color: "#64748b",
+  sheetActionText: {
+    fontSize: 14,
     fontWeight: "700",
-    textTransform: "uppercase",
+    color: "#334155",
   },
-  profileGridValue: {
-    fontSize: 13,
+  settingsSheet: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "90%",
+  },
+  settingsSheetDark: {
+    backgroundColor: "#0f172a",
+  },
+  settingsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  settingsTitle: {
+    fontSize: 17,
     fontWeight: "800",
     color: "#0f172a",
-    marginTop: 4,
   },
-  profileGridValueDark: {
+  settingsTitleDark: {
     color: "#f8fafc",
   },
-
-
+  sectionHeading: {
+    fontSize: 11.5,
+    fontWeight: "800",
+    color: "#033a7d",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#475569",
+    marginBottom: 4,
+  },
+  input: {
+    height: 42,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 13.5,
+    color: "#0f172a",
+    backgroundColor: "#ffffff",
+    marginBottom: 10,
+  },
+  inputDark: {
+    backgroundColor: "#1e293b",
+    borderColor: "#334155",
+    color: "#f8fafc",
+  },
+  inputDisabled: {
+    backgroundColor: "#f8fafc",
+    color: "#64748b",
+  },
+  saveProfileBtn: {
+    backgroundColor: "#fbc634",
+    paddingVertical: 11,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  saveProfileBtnText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#002555",
+  },
+  settingsMenuRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor: "#f1f5f9",
+  },
+  settingsMenuText: {
+    fontSize: 13.5,
+    fontWeight: "600",
+    color: "#334155",
+  },
+  settingsMenuTextDark: {
+    color: "#f8fafc",
+  },
   signOutBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: "#fecaca",
-    borderRadius: 14,
-    paddingVertical: 12,
-    marginTop: 14,
-    gap: 6,
+    backgroundColor: "#fef2f2",
+    marginTop: 6,
   },
   signOutBtnText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#ba1a1a",
-  },
-
-  dangerZoneCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: "#fecaca",
-    padding: 16,
-    marginTop: 14,
-  },
-  dangerZoneHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  dangerZoneTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#991b1b",
-  },
-  dangerZoneSubtitle: {
-    fontSize: 11,
     color: "#dc2626",
-    marginTop: 1,
   },
-  dangerZoneDesc: {
-    fontSize: 11,
-    color: "#64748b",
-    lineHeight: 16,
-    marginTop: 8,
-    marginBottom: 12,
-  },
-  deactivateBtn: {
+  deleteAccountBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#dc2626",
-    borderRadius: 10,
-    paddingVertical: 10,
     gap: 6,
+    paddingVertical: 10,
+    marginTop: 6,
   },
-  deactivateBtnText: {
+  deleteAccountBtnText: {
     fontSize: 12,
-    fontWeight: "800",
-    color: "#ffffff",
+    fontWeight: "600",
+    color: "#94a3b8",
   },
-
-  appVersionText: {
-    textAlign: "center",
+  versionNote: {
     fontSize: 11,
     color: "#94a3b8",
-    marginTop: 24,
+    textAlign: "center",
+    marginTop: 12,
+    marginBottom: 20,
   },
-
-  // Modal Overlays
-  modalOverlay: {
+  confirmOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.6)",
+    backgroundColor: "rgba(15, 23, 42, 0.7)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: 24,
   },
-  statusPickerCard: {
-    width: "100%",
-    maxWidth: 360,
+  confirmCard: {
     backgroundColor: "#ffffff",
-    borderRadius: 20,
+    borderRadius: 14,
     padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  statusPickerCardDark: {
-    backgroundColor: "#1e293b",
-  },
-  statusPickerHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 14,
-  },
-  statusPickerHeaderTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  statusPickerHeaderTitleDark: {
-    color: "#f8fafc",
-  },
-  closeModalBtn: {
-    padding: 4,
-  },
-  statusOptionsList: {
-    gap: 10,
-  },
-  statusOptionItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: "#f8fafc",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  statusOptionItemActive: {
-    borderColor: "#033a7d",
-    backgroundColor: "#eff5fb",
-  },
-  statusDotLarge: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  statusOptionHeading: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  statusOptionSub: {
-    fontSize: 10.5,
-    color: "#64748b",
-    marginTop: 1,
-  },
-
-  // Delete Modal
-  deleteModalCard: {
     width: "100%",
-    maxWidth: 380,
-    backgroundColor: "#ffffff",
-    borderRadius: 20,
-    padding: 22,
+    maxWidth: 340,
   },
-  deleteModalCardDark: {
-    backgroundColor: "#1e293b",
+  confirmCardDark: {
+    backgroundColor: "#0f172a",
   },
-  deleteModalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 12,
-  },
-  deleteWarningIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#fee2e2",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  deleteModalTitle: {
+  confirmTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#0f172a",
+    color: "#dc2626",
     marginBottom: 6,
   },
-  deleteModalTitleDark: {
-    color: "#f8fafc",
+  confirmTitleDark: {
+    color: "#f87171",
   },
-  deleteModalDesc: {
-    fontSize: 12,
+  confirmDesc: {
+    fontSize: 12.5,
     color: "#64748b",
+    marginBottom: 12,
     lineHeight: 17,
-    marginBottom: 14,
   },
-  deleteInputWrapper: {
-    marginBottom: 16,
-  },
-  deleteInputLabel: {
-    fontSize: 11.5,
-    fontWeight: "600",
-    color: "#475569",
-    marginBottom: 6,
-  },
-  profileEditForm: {
-    gap: 6,
-    marginTop: 14,
-  },
-  profileEditInput: {
-    backgroundColor: "#f8fafc",
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    fontSize: 14,
-    color: "#0f172a",
-    marginBottom: 8,
-  },
-  profileEditInputDark: {
-    backgroundColor: "#0b1320",
-    borderColor: "#334155",
-    color: "#f8fafc",
-  },
-  profileEditInputDisabled: {
-    color: "#64748b",
-    backgroundColor: "#f1f5f9",
-  },
-  profileSaveBtn: {
-    backgroundColor: "#033a7d",
-    paddingHorizontal: 16,
+  confirmBtn: {
+    flex: 1,
     paddingVertical: 10,
-    borderRadius: 10,
-    minWidth: 120,
+    borderRadius: 8,
     alignItems: "center",
-    justifyContent: "center",
   },
-  profileSaveBtnText: {
-    color: "#ffffff",
-    fontSize: 13,
-    fontWeight: "700",
+  logoImg: {
+    width: 140,
+    height: 34,
   },
-  deleteTextInput: {
-    backgroundColor: "#f8fafc",
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    fontSize: 13,
-    fontFamily: "monospace",
-    color: "#0f172a",
-  },
-  deleteTextInputDark: {
-    backgroundColor: "#0b1320",
-    borderColor: "#334155",
-    color: "#f8fafc",
-  },
-  deleteModalActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 10,
-  },
-  cancelDeleteBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 10,
-    backgroundColor: "#f1f5f9",
-  },
-  cancelDeleteBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#475569",
-  },
-  confirmDeleteBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 10,
-    backgroundColor: "#dc2626",
-    gap: 5,
-  },
-  confirmDeleteBtnText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#ffffff",
-  },
-
-  // Logged-out Screen Styles
   loggedOutScroll: {
-    padding: 20,
-    paddingBottom: 40,
+    padding: 24,
   },
   loggedOutHero: {
     alignItems: "center",
-    marginVertical: 24,
+    marginVertical: 20,
   },
   loggedOutIconCircle: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: "#eff5fb",
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "#eff6ff",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
+    marginBottom: 14,
   },
   loggedOutTitle: {
-    fontSize: 20,
-    fontWeight: "900",
+    fontSize: 18,
+    fontWeight: "800",
     color: "#0f172a",
     textAlign: "center",
     marginBottom: 8,
@@ -2752,32 +2010,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#64748b",
     textAlign: "center",
-    lineHeight: 19,
-    paddingHorizontal: 10,
+    lineHeight: 18,
   },
   benefitsCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 18,
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    gap: 16,
+    borderRadius: 12,
+    padding: 16,
+    gap: 14,
     marginBottom: 24,
   },
   benefitsCardDark: {
-    backgroundColor: "#131d2e",
-    borderColor: "#1e293b",
+    backgroundColor: "#1e293b",
+    borderColor: "#334155",
   },
   benefitRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
     gap: 10,
   },
   benefitHeading: {
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "700",
     color: "#0f172a",
-    marginBottom: 2,
   },
   benefitHeadingDark: {
     color: "#f8fafc",
@@ -2786,6 +2041,7 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     color: "#64748b",
     lineHeight: 16,
+    marginTop: 2,
   },
   loggedOutActions: {
     gap: 10,
@@ -2794,15 +2050,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#033a7d",
-    paddingVertical: 14,
-    borderRadius: 14,
     gap: 8,
-    shadowColor: "#033a7d",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 3,
+    backgroundColor: "#033a7d",
+    paddingVertical: 13,
+    borderRadius: 10,
   },
   primaryLoginBtnText: {
     fontSize: 14,
@@ -2813,25 +2064,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff",
-    borderWidth: 1.5,
-    borderColor: "#033a7d",
+    gap: 8,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
     paddingVertical: 13,
-    borderRadius: 14,
-    gap: 6,
+    borderRadius: 10,
   },
   secondaryRegisterBtnText: {
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "700",
     color: "#033a7d",
   },
   supportFooter: {
-    marginTop: 26,
+    marginTop: 28,
     alignItems: "center",
   },
   supportFooterText: {
-    fontSize: 11.5,
+    fontSize: 12,
     color: "#64748b",
-    textAlign: "center",
   },
 });

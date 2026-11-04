@@ -5,7 +5,6 @@ import {
   TextInput,
   FlatList,
   TouchableOpacity,
-  Image,
   RefreshControl,
   ActivityIndicator,
   StyleSheet,
@@ -20,18 +19,11 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import Search from "lucide-react-native/icons/search";
-import Clock from "lucide-react-native/icons/clock";
-import ShieldCheck from "lucide-react-native/icons/shield-check";
-import FileQuestion from "lucide-react-native/icons/file-question-mark";
-import PlusCircle from "lucide-react-native/icons/circle-plus";
-import FileText from "lucide-react-native/icons/file-text";
 import X from "lucide-react-native/icons/x";
 import Bell from "lucide-react-native/icons/bell";
-import User from "lucide-react-native/icons/user";
-import ArrowRight from "lucide-react-native/icons/arrow-right";
-import Wrench from "lucide-react-native/icons/wrench";
 import Check from "lucide-react-native/icons/check";
-import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
+import FileQuestion from "lucide-react-native/icons/file-question-mark";
+import PlusCircle from "lucide-react-native/icons/circle-plus";
 import { api } from "@/lib/api";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { Requirement } from "@/types/api";
@@ -41,7 +33,6 @@ import { EscrowPolicyModal } from "@/components/EscrowPolicyModal";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 
-// Same categories and order as the website's buyer requests page
 const CATEGORIES = [
   "ALL",
   "HPLC & UHPLC",
@@ -60,6 +51,40 @@ const CATEGORIES = [
 ];
 
 const PAGE_SIZE = 30;
+
+function formatRelativeTime(dateString: string): string {
+  try {
+    const diffMs = Date.now() - new Date(dateString).getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    if (diffMins < 60) return "Just now";
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 30) return `${diffDays} days ago`;
+    const diffMonths = Math.floor(diffDays / 30);
+    if (diffMonths === 1) return "1 month ago";
+    return `${diffMonths} months ago`;
+  } catch {
+    return "Recently";
+  }
+}
+
+function getTargetBudget(item: Requirement): string | null {
+  const anyItem = item as any;
+  if (typeof anyItem.targetBudget === "string" && anyItem.targetBudget.trim().length > 0) {
+    return anyItem.targetBudget.trim();
+  }
+  if (typeof anyItem.budget === "string" && anyItem.budget.trim().length > 0) {
+    return anyItem.budget.trim();
+  }
+  const desc = item.description || "";
+  const match = desc.match(/(?:budget|target budget|expected price|price range)[\s:–-]+(?:₹|inr|rs\.?)\s*([0-9.,]+(?:\s*(?:lakh|lakhs|l|cr|k|crore))?(?:\s*(?:–|-|to)\s*[0-9.,]+(?:\s*(?:lakh|lakhs|l|cr|k|crore))?)?)/i);
+  if (match && match[1]) {
+    return `₹${match[1].trim()}`;
+  }
+  return null;
+}
 
 export default function RequestsScreen() {
   const insets = useSafeAreaInsets();
@@ -86,24 +111,10 @@ export default function RequestsScreen() {
   });
   const unreadCount = notificationsData?.unreadCount || 0;
 
-  const userInitials = useMemo(() => {
-    if (!user) return "LM";
-    if (user.name && user.name.trim().length > 0) {
-      const parts = user.name.trim().split(/\s+/);
-      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-      return user.name.slice(0, 2).toUpperCase();
-    }
-    if (user.email && user.email.trim().length > 0) {
-      return user.email.slice(0, 2).toUpperCase();
-    }
-    return "LM";
-  }, [user]);
-
   // Filter States
   const [searchQuery, setSearchQuery] = useState("");
-  // Loaded rows are filtered locally as you type; the server is queried once typing pauses
   const debouncedSearch = useDebouncedValue(searchQuery.trim());
-  const [selectedTypeFilter, setSelectedTypeFilter] = useState<"ALL" | "URGENT" | "SPARE_PART">("ALL");
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<"ALL" | "MACHINE" | "SPARE_PART">("ALL");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
   const [categorySheetVisible, setCategorySheetVisible] = useState(false);
 
@@ -118,9 +129,21 @@ export default function RequestsScreen() {
   const [postPhone, setPostPhone] = useState(user?.phoneNumber || "");
   const [postCompany, setPostCompany] = useState(user?.companyName || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // Set when the form is editing an existing request (opened via ?edit=<id>)
   const [editingId, setEditingId] = useState<string | null>(null);
-  const { edit } = useLocalSearchParams<{ edit?: string }>();
+
+  const { edit, openPost } = useLocalSearchParams<{ edit?: string; openPost?: string }>();
+
+  // If redirected with ?openPost=true from Profile
+  useEffect(() => {
+    if (openPost === "true") {
+      if (!isAuthenticated) {
+        router.push("/(auth)/login" as any);
+        return;
+      }
+      setPostModalVisible(true);
+      router.setParams({ openPost: undefined } as any);
+    }
+  }, [openPost, isAuthenticated, router]);
 
   // Fetch Requirements from Backend
   const {
@@ -139,6 +162,7 @@ export default function RequestsScreen() {
       if (selectedCategory !== "ALL") params.category = selectedCategory;
       if (debouncedSearch) params.query = debouncedSearch;
       if (selectedTypeFilter === "SPARE_PART") params.itemType = "SPARE_PART";
+      if (selectedTypeFilter === "MACHINE") params.itemType = "MACHINE";
 
       const res = await api.get("/api/requirements", { params });
       return {
@@ -151,10 +175,9 @@ export default function RequestsScreen() {
     getNextPageParam: (lastPage) =>
       lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
   });
-  // Spinner only for refreshes the user pulled for; background refreshes stay silent
+
   const pullToRefresh = usePullToRefresh(refetch);
 
-  // Flatten loaded pages; skip duplicates if new items shifted page boundaries
   const data = useMemo(() => {
     if (!pagedData) return undefined;
     const seen = new Set<string>();
@@ -168,7 +191,6 @@ export default function RequestsScreen() {
     if (!data) return [];
     let list = data;
 
-    // Client-side search refinement for instantaneous matching
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       list = list.filter(
@@ -181,25 +203,18 @@ export default function RequestsScreen() {
       );
     }
 
-    if (selectedTypeFilter === "URGENT") {
-      // Urgent sourcing: requests whose buyer marked them urgent
-      return list.filter(
-        (r) =>
-          r.description.toLowerCase().includes("urgent") ||
-          r.title.toLowerCase().includes("urgent")
-      );
+    if (selectedTypeFilter === "SPARE_PART") {
+      list = list.filter((r) => r.itemType === "SPARE_PART");
+    } else if (selectedTypeFilter === "MACHINE") {
+      list = list.filter((r) => r.itemType !== "SPARE_PART");
     }
-    return list;
-  }, [data, searchQuery, selectedTypeFilter]);
 
-  const urgentCount = useMemo(() => {
-    if (!data) return 0;
-    return data.filter(
-      (r) =>
-        r.description.toLowerCase().includes("urgent") ||
-        r.title.toLowerCase().includes("urgent")
-    ).length;
-  }, [data]);
+    if (selectedCategory !== "ALL") {
+      list = list.filter((r) => r.category === selectedCategory);
+    }
+
+    return list;
+  }, [data, searchQuery, selectedTypeFilter, selectedCategory]);
 
   useEffect(() => {
     if (!edit || !isAuthenticated) return;
@@ -227,7 +242,6 @@ export default function RequestsScreen() {
           Alert.alert("Unable to Load", err.response?.data?.error || "Could not load this request for editing.");
         }
       } finally {
-        // Clear the param so the form doesn't reopen when returning to this tab
         router.setParams({ edit: undefined } as any);
       }
     })();
@@ -248,7 +262,6 @@ export default function RequestsScreen() {
     }
   };
 
-  // Save changes to an existing request (same fields as the website's edit page)
   const handleSaveEdit = async () => {
     if (!editingId) return;
     const title = postTitle.trim();
@@ -292,18 +305,9 @@ export default function RequestsScreen() {
     }
   };
 
-  // Handle Post Wanted Submission
   const handlePostWanted = async () => {
     if (!postTitle.trim() || !postDescription.trim()) {
       Alert.alert("Validation Error", "Please provide a title and detailed specifications.");
-      return;
-    }
-    if (postDescription.trim().length < 10) {
-      Alert.alert("Validation Error", "Specifications description must be at least 10 characters.");
-      return;
-    }
-    if (!postPhone.trim()) {
-      Alert.alert("Contact Required", "Please enter a valid mobile number for administrator verification.");
       return;
     }
 
@@ -311,145 +315,123 @@ export default function RequestsScreen() {
     try {
       await api.post("/api/requirements", {
         title: postTitle.trim(),
-        description: postDescription.trim(),
         category: postCategory,
         itemType: postItemType,
-        partNumber: postItemType === "SPARE_PART" ? postPartNumber.trim() : undefined,
-        compatibleWith: postItemType === "SPARE_PART" ? postCompatibleWith.trim() : undefined,
-        phoneNumber: postPhone.trim(),
-        companyName: postCompany.trim() || undefined,
+        partNumber: postItemType === "SPARE_PART" ? postPartNumber.trim() || null : null,
+        compatibleWith: postItemType === "SPARE_PART" ? postCompatibleWith.trim() || null : null,
+        description: postDescription.trim(),
+        phoneNumber: postPhone.trim() || null,
+        companyName: postCompany.trim() || null,
       });
 
-      setPostModalVisible(false);
+      closePostModal();
       setPostTitle("");
       setPostDescription("");
       setPostPartNumber("");
       setPostCompatibleWith("");
       queryClient.invalidateQueries({ queryKey: ["requirements"] });
+      queryClient.invalidateQueries({ queryKey: ["myItems"] });
 
       Alert.alert(
-        "Requirement Submitted",
-        "Your procurement request has been submitted for administrator review. Once verified, it will be broadcasted to certified laboratories."
+        "Requirement Broadcasted",
+        "Your requirement has been submitted. Our engineering desk will match verified suppliers."
       );
     } catch (err: any) {
-      Alert.alert("Submission Failed", err.response?.data?.error || "Could not submit requirement.");
+      Alert.alert(
+        "Submission Failed",
+        err.response?.data?.error || "Could not submit your request. Please try again."
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Budget the buyer wrote in the description (e.g. "₹4,00,000 - ₹6,00,000"); never guessed
-  const getTargetBudget = (item: Requirement) => {
-    const desc = item.description;
-    const match = desc.match(/₹[\d,]+(\s*-\s*₹[\d,]+)?/i) || desc.match(/budget:?\s*₹?[\d,]+/i);
-    return match ? match[0] : null;
-  };
-
-  const getPreferredOEM = (item: Requirement) => {
-    const desc = item.description.toLowerCase();
-    const title = item.title.toLowerCase();
-    const combined = `${title} ${desc}`;
-
-    const brands: string[] = [];
-    if (combined.includes("perkinelmer") || combined.includes("perkin elmer")) brands.push("PerkinElmer");
-    if (combined.includes("agilent")) brands.push("Agilent");
-    if (combined.includes("waters")) brands.push("Waters");
-    if (combined.includes("shimadzu")) brands.push("Shimadzu");
-    if (combined.includes("thermo")) brands.push("Thermo Fisher");
-    if (combined.includes("metrohm")) brands.push("Metrohm");
-
-    return brands.length > 0 ? brands.join(", ") : null;
-  };
-
   const renderRequirementCard = ({ item }: { item: Requirement }) => {
     const isFulfilled = item.status === "FULFILLED";
+    const isSpare = item.itemType === "SPARE_PART";
     const targetBudget = getTargetBudget(item);
-    const preferredOEM = getPreferredOEM(item);
+    const timeAgo = formatRelativeTime(item.createdAt);
 
     return (
       <TouchableOpacity
-        style={[styles.card, isDark && styles.cardDark, isFulfilled && { opacity: 0.75 }]}
-        activeOpacity={0.92}
+        style={[
+          styles.compactCard,
+          isDark && styles.compactCardDark,
+          isFulfilled && (isDark ? styles.fulfilledCardDark : styles.fulfilledCard),
+        ]}
+        activeOpacity={0.85}
         onPress={() => router.push(`/requests/${item.id}`)}
       >
-        {/* Row 1: Badges */}
-        <View style={styles.cardBadgeRow}>
-          <View style={styles.categoryBadge}>
-            <Text style={styles.categoryBadgeText}>{item.category}</Text>
-          </View>
-        </View>
-
-        {/* Row 2: Status Pill */}
-        <View style={styles.statusPillRow}>
-          {isFulfilled ? (
-            <View style={styles.fulfilledPill}>
-              <View style={styles.fulfilledDot} />
-              <Text style={styles.fulfilledPillText}>FULFILLED</Text>
-            </View>
-          ) : (
-            <View style={styles.openPill}>
-              <View style={styles.openDot} />
-              <Text style={styles.openPillText}>OPEN FOR PROPOSALS</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Row 3: Timestamp */}
-        <View style={styles.metaRow}>
-          <Clock size={12} color="#64748b" />
-          <Text style={styles.metaDate}>
-            Posted on {new Date(item.createdAt).toLocaleDateString("en-GB")}
+        {/* Row 1: Category on left, timestamp / FULFILLED on right */}
+        <View style={styles.cardHeaderRow}>
+          <Text
+            style={[
+              styles.cardCategoryText,
+              isSpare && styles.cardSpareCategoryText,
+              isFulfilled && styles.cardFulfilledText,
+            ]}
+            numberOfLines={1}
+          >
+            {isSpare ? "Spare part" : item.category}
+          </Text>
+          <Text
+            style={[
+              styles.cardTimeText,
+              isFulfilled && styles.cardFulfilledBadgeText,
+            ]}
+          >
+            {isFulfilled ? "FULFILLED" : timeAgo}
           </Text>
         </View>
 
-        {/* Row 4: Title */}
-        <Text style={[styles.cardTitle, isDark && styles.cardTitleDark]} numberOfLines={2}>
+        {/* Row 2: Title */}
+        <Text
+          style={[
+            styles.cardTitleText,
+            isDark && styles.cardTitleTextDark,
+            isFulfilled && styles.cardFulfilledText,
+          ]}
+          numberOfLines={2}
+        >
           {item.title}
         </Text>
 
-        {/* Row 5: Description */}
-        <Text
-          style={[styles.cardDescription, isDark && styles.cardDescriptionDark]}
-          numberOfLines={3}
-        >
-          {item.description}
-        </Text>
-
-        {/* Row 6: Structured Specs Grid (only if real budget or OEM provided) */}
-        {(preferredOEM || targetBudget) ? (
-          <View style={[styles.specsBox, isDark && styles.specsBoxDark]}>
-            <View style={styles.specsGrid}>
-              {preferredOEM ? (
-                <View style={styles.specsCol}>
-                  <Text style={styles.specsLabel}>PREFERRED OEM</Text>
-                  <Text style={[styles.specsValue, isDark && styles.specsValueDark]} numberOfLines={1}>
-                    {preferredOEM}
-                  </Text>
-                </View>
-              ) : null}
-
-              {targetBudget ? (
-                <View style={styles.specsCol}>
-                  <Text style={styles.specsLabel}>TARGET BUDGET</Text>
-                  <Text style={styles.specsBudgetValue} numberOfLines={1}>
-                    {targetBudget}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          </View>
+        {/* Spare part part number / compatible model in clean monospace */}
+        {isSpare && (item.partNumber || item.compatibleWith) ? (
+          <Text style={styles.cardPartNumText} numberOfLines={1}>
+            {[item.partNumber, item.compatibleWith ? `For ${item.compatibleWith}` : null]
+              .filter(Boolean)
+              .join(" · ")}
+          </Text>
         ) : null}
 
-        {/* Row 7: Action CTA - only for open requests */}
+        {/* Row 3: Description (2 lines clamp) */}
+        {!isFulfilled && item.description ? (
+          <Text
+            style={[styles.cardDescText, isDark && styles.cardDescTextDark]}
+            numberOfLines={2}
+          >
+            {item.description}
+          </Text>
+        ) : null}
+
+        {/* Row 4: Budget on left (only if provided!), Propose › on right */}
         {!isFulfilled ? (
-          <View style={styles.cardFooter}>
+          <View style={styles.cardFooterRow}>
+            {targetBudget ? (
+              <Text style={[styles.cardBudgetText, isDark && styles.cardBudgetTextDark]}>
+                Budget {targetBudget}
+              </Text>
+            ) : (
+              <View style={{ flex: 1 }} />
+            )}
+
             <TouchableOpacity
-              style={styles.fulfillBtn}
-              activeOpacity={0.85}
+              style={styles.proposeBtn}
+              activeOpacity={0.7}
               onPress={() => router.push(`/requests/${item.id}`)}
             >
-              <Text style={styles.fulfillBtnText}>Propose quote</Text>
-              <ArrowRight size={14} color="#ffffff" />
+              <Text style={styles.proposeBtnText}>Propose ›</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -461,13 +443,13 @@ export default function RequestsScreen() {
     <SafeAreaView edges={["top"]} style={[styles.safeArea, isDark && styles.safeAreaDark]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-      {/* 1. Top Focused Header Bar */}
+      {/* Direction A Header: Single-line Title + + Post button */}
       <View style={[styles.topBar, isDark && styles.topBarDark]}>
         <Text style={[styles.screenHeaderTitle, isDark && styles.screenHeaderTitleDark]}>
-          Buyer Requests
+          Buyer requests
         </Text>
 
-        <View style={styles.topRightIcons}>
+        <View style={styles.topRightRow}>
           <TouchableOpacity
             style={styles.headerPostBtn}
             activeOpacity={0.85}
@@ -486,16 +468,7 @@ export default function RequestsScreen() {
               setPostModalVisible(true);
             }}
           >
-            <PlusCircle size={14} color="#002555" />
-            <Text style={styles.headerPostBtnText}>Post</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.iconBtn}
-            activeOpacity={0.7}
-            onPress={() => searchInputRef.current?.focus()}
-          >
-            <Search size={20} color={isDark ? "#f8fafc" : "#0f172a"} />
+            <Text style={styles.headerPostBtnText}>+ Post</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -508,6 +481,103 @@ export default function RequestsScreen() {
             {unreadCount > 0 && <View style={styles.redDot} />}
           </TouchableOpacity>
         </View>
+      </View>
+
+      {/* Controls Bar: Search & Category Chips */}
+      <View style={[styles.controlsBar, isDark && styles.controlsBarDark]}>
+        {/* Search input: ⌕ What are labs looking for? */}
+        <View style={[styles.searchBox, isDark && styles.searchBoxDark]}>
+          <Search size={16} color="#94a3b8" style={{ marginRight: 8 }} />
+          <TextInput
+            ref={searchInputRef}
+            style={[styles.searchInput, isDark && styles.searchInputDark]}
+            placeholder="What are labs looking for?"
+            placeholderTextColor="#94a3b8"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery("")} style={styles.clearSearchBtn}>
+              <X size={15} color="#94a3b8" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Filter Chips: All · Count, Machines, Spare parts, Category Picker */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterChipsRow}
+        >
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              selectedTypeFilter === "ALL" && styles.filterChipActive,
+            ]}
+            onPress={() => setSelectedTypeFilter("ALL")}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                selectedTypeFilter === "ALL" && styles.filterChipTextActive,
+              ]}
+            >
+              All · {totalCount}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              selectedTypeFilter === "MACHINE" && styles.filterChipActive,
+            ]}
+            onPress={() => setSelectedTypeFilter(selectedTypeFilter === "MACHINE" ? "ALL" : "MACHINE")}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                selectedTypeFilter === "MACHINE" && styles.filterChipTextActive,
+              ]}
+            >
+              Machines
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              selectedTypeFilter === "SPARE_PART" && styles.filterChipActive,
+            ]}
+            onPress={() => setSelectedTypeFilter(selectedTypeFilter === "SPARE_PART" ? "ALL" : "SPARE_PART")}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                selectedTypeFilter === "SPARE_PART" && styles.filterChipTextActive,
+              ]}
+            >
+              Spare parts
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              selectedCategory !== "ALL" && styles.filterChipActive,
+            ]}
+            onPress={() => setCategorySheetVisible(true)}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                selectedCategory !== "ALL" && styles.filterChipTextActive,
+              ]}
+            >
+              {selectedCategory === "ALL" ? "Category ▾" : `${selectedCategory} ✕`}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
       </View>
 
       <FlatList
@@ -532,167 +602,11 @@ export default function RequestsScreen() {
             tintColor={colors.primaryContainer}
           />
         }
-        ListHeaderComponent={
-          <View style={styles.headerContainer}>
-            {/* Active Procurement Header Badge */}
-            <View style={styles.procurementBadge}>
-              <ShieldCheck size={13} color="#033a7d" />
-              <Text style={styles.procurementBadgeText}>
-                ACTIVE LABORATORY PROCUREMENT REQUESTS
-              </Text>
-            </View>
-
-            {/* Title & Subtitle */}
-            <Text style={[styles.headerTitle, isDark && styles.headerTitleDark]}>
-              Buyer Equipment Requirements
-            </Text>
-            <Text style={[styles.headerSubtitle, isDark && styles.headerSubtitleDark]}>
-              Laboratories actively looking for analytical instruments. Have a matching unit? Submit
-              your quotation proposal directly.
-            </Text>
-
-            {/* "Need equipment or spares?" Callout Card */}
-            <View style={[styles.postCalloutCard, isDark && styles.postCalloutCardDark]}>
-              <View style={styles.postCalloutLeft}>
-                <View style={styles.memoIconCircle}>
-                  <FileText size={20} color="#b45309" />
-                </View>
-                <View style={styles.postCalloutTextCol}>
-                  <Text style={[styles.postCalloutTitle, isDark && styles.postCalloutTitleDark]}>
-                    Need equipment or spares?
-                  </Text>
-                  <Text style={styles.postCalloutSub}>
-                    Post requirements to verified labs
-                  </Text>
-                </View>
-              </View>
-
-              <TouchableOpacity
-                style={styles.postWantedBtn}
-                activeOpacity={0.85}
-                onPress={() => {
-                  if (!isAuthenticated) {
-                    Alert.alert(
-                      "Sign In Required",
-                      "Please sign in to post your laboratory equipment requirement.",
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        { text: "Sign In", onPress: () => router.push("/(auth)/login" as any) },
-                      ]
-                    );
-                    return;
-                  }
-                  setPostModalVisible(true);
-                }}
-              >
-                <PlusCircle size={15} color="#0f172a" />
-                <Text style={styles.postWantedBtnText}>+ Post requirement</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Search Input + Category Filter */}
-            <View style={styles.searchRow}>
-            <View style={[styles.searchInputWrapper, isDark && styles.searchInputWrapperDark, { flex: 1, marginBottom: 0 }]}>
-              <Search size={16} color={isDark ? "#94a3b8" : colors.textMuted} />
-              <TextInput
-                ref={searchInputRef}
-                style={[styles.searchInput, isDark && styles.searchInputDark]}
-                placeholder="Search desired instruments (HPLC, GC-M..."
-                placeholderTextColor={isDark ? "#64748b" : "#94a3b8"}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                returnKeyType="search"
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery("")} style={styles.clearSearchBtn}>
-                  <X size={15} color={colors.textMuted} />
-                </TouchableOpacity>
-              )}
-            </View>
-            <TouchableOpacity
-              style={styles.filterTriggerBtn}
-              activeOpacity={0.7}
-              onPress={() => setCategorySheetVisible(true)}
-            >
-              <SlidersHorizontal size={17} color={colors.primaryContainer} />
-              {selectedCategory !== "ALL" && (
-                <View style={styles.filterCountBadge}>
-                  <Text style={styles.filterCountText}>1</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            </View>
-
-            {/* Filter Chips Row 1 (scrolls sideways when the chips don't fit) */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.typeChipsScroll}
-              contentContainerStyle={styles.typeChipsRow}
-            >
-              <TouchableOpacity
-                style={[
-                  styles.typeChip,
-                  selectedTypeFilter === "ALL" && styles.typeChipActive,
-                ]}
-                onPress={() => setSelectedTypeFilter("ALL")}
-              >
-                <Text
-                  style={[
-                    styles.typeChipText,
-                    selectedTypeFilter === "ALL" && styles.typeChipTextActive,
-                  ]}
-                >
-                  All Requests ({totalCount})
-                </Text>
-              </TouchableOpacity>
-
-              {(urgentCount > 0 || selectedTypeFilter === "URGENT") && (
-                <TouchableOpacity
-                  style={[
-                    styles.typeChip,
-                    selectedTypeFilter === "URGENT" && styles.typeChipActive,
-                  ]}
-                  onPress={() => setSelectedTypeFilter("URGENT")}
-                >
-                  <View style={styles.urgentDot} />
-                  <Text
-                    style={[
-                      styles.typeChipText,
-                      selectedTypeFilter === "URGENT" && styles.typeChipTextActive,
-                    ]}
-                  >
-                    Urgent Sourcing ({urgentCount})
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                style={[
-                  styles.typeChip,
-                  selectedTypeFilter === "SPARE_PART" && styles.typeChipActive,
-                ]}
-                onPress={() => setSelectedTypeFilter("SPARE_PART")}
-              >
-                <Wrench size={13} color={selectedTypeFilter === "SPARE_PART" ? "#ffffff" : "#64748b"} />
-                <Text
-                  style={[
-                    styles.typeChipText,
-                    selectedTypeFilter === "SPARE_PART" && styles.typeChipTextActive,
-                  ]}
-                >
-                  Spare Parts
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-
-          </View>
-        }
         ListEmptyComponent={
           isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#002555" />
-              <Text style={styles.loadingText}>Loading procurement requirements...</Text>
+              <Text style={styles.loadingText}>Loading requests...</Text>
             </View>
           ) : isError ? (
             <LoadErrorState message="Couldn't load buyer requests. Please try again." onRetry={() => refetch()} />
@@ -702,10 +616,10 @@ export default function RequestsScreen() {
                 <FileQuestion size={34} color="#94a3b8" />
               </View>
               <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>
-                No equipment requirements found
+                No buyer requests found
               </Text>
               <Text style={styles.emptySubtitle}>
-                No active buyer requests matched your filters. Be the first to broadcast an equipment need!
+                No active buyer requests match your filters. Be the first to broadcast an equipment need!
               </Text>
               <TouchableOpacity
                 style={styles.emptyPostBtn}
@@ -720,7 +634,7 @@ export default function RequestsScreen() {
                   setPostModalVisible(true);
                 }}
               >
-                <PlusCircle size={15} color="#0f172a" />
+                <PlusCircle size={15} color="#002555" />
                 <Text style={styles.emptyPostBtnText}>Post First Requirement</Text>
               </TouchableOpacity>
             </View>
@@ -916,7 +830,7 @@ export default function RequestsScreen() {
                 numberOfLines={4}
               />
 
-              {/* Contact Info (collected when posting; not part of an edit) */}
+              {/* Contact Info */}
               {!editingId && (
                 <>
                   <Text style={styles.inputLabel}>Mobile / WhatsApp (Admin Verification) *</Text>
@@ -948,14 +862,11 @@ export default function RequestsScreen() {
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (
-                  <ActivityIndicator color="#0f172a" />
+                  <ActivityIndicator size="small" color="#002555" />
                 ) : (
-                  <>
-                    <PlusCircle size={16} color="#0f172a" />
-                    <Text style={styles.modalSubmitBtnText}>
-                      {editingId ? "Save changes" : "Post requirement"}
-                    </Text>
-                  </>
+                  <Text style={styles.modalSubmitBtnText}>
+                    {editingId ? "Save Changes" : "Broadcast Sourcing Request"}
+                  </Text>
                 )}
               </TouchableOpacity>
             </ScrollView>
@@ -963,7 +874,7 @@ export default function RequestsScreen() {
         </View>
       </Modal>
 
-      {/* Global Escrow & Verification Protocol Modal */}
+      {/* Escrow Modal */}
       <EscrowPolicyModal
         visible={escrowModalVisible}
         onClose={() => setEscrowModalVisible(false)}
@@ -978,253 +889,99 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   safeAreaDark: {
-    backgroundColor: LabMatrixTokens.colors.brandBlue950,
+    backgroundColor: "#0b1220",
   },
   topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    height: 52,
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === "android" ? 10 : 4,
-    paddingBottom: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     backgroundColor: "#ffffff",
   },
   topBarDark: {
-    backgroundColor: "#0b1329",
+    backgroundColor: "#0b1220",
   },
   screenHeaderTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "800",
-    color: "#033a7d",
+    color: "#0f172a",
     letterSpacing: -0.3,
   },
   screenHeaderTitleDark: {
     color: "#f8fafc",
   },
-  headerPostBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "#fbc634",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-  },
-  headerPostBtnText: {
-    color: "#002555",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  topRightIcons: {
+  topRightRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
+  headerPostBtn: {
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: "#fbc634",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  headerPostBtnText: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: "#002555",
+  },
   iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    position: "relative",
   },
   redDot: {
     position: "absolute",
-    top: 7,
-    right: 8,
+    top: 6,
+    right: 6,
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: "#f43f5e",
+    backgroundColor: "#dc2626",
   },
-  headerContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 6,
+  controlsBar: {
+    paddingHorizontal: 14,
+    paddingTop: 4,
+    paddingBottom: 10,
     backgroundColor: "#ffffff",
-  },
-  procurementBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    gap: 6,
-    backgroundColor: "#eff5fb",
-    borderWidth: 1,
-    borderColor: "#dbeaf7",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 9999,
-    marginBottom: 10,
-  },
-  procurementBadgeText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#033a7d",
-    letterSpacing: 0.4,
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: "#0f172a",
-    letterSpacing: -0.4,
-    marginBottom: 6,
-  },
-  headerTitleDark: {
-    color: "#f8fafc",
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: "#475569",
-    lineHeight: 19,
-    marginBottom: 16,
-  },
-  headerSubtitleDark: {
-    color: "#94a3b8",
-  },
-  postCalloutCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#ffffff",
-    borderRadius: 14,
-    borderWidth: 1,
+    borderBottomWidth: 1,
     borderColor: "#e2e8f0",
-    padding: 12,
-    marginBottom: 16,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
+    gap: 8,
   },
-  postCalloutCardDark: {
-    backgroundColor: "#0f172a",
+  controlsBarDark: {
+    backgroundColor: "#0b1220",
     borderColor: "#1e293b",
   },
-  postCalloutLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-    paddingRight: 8,
-  },
-  memoIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: "#fef3c7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  postCalloutTextCol: {
-    flex: 1,
-  },
-  postCalloutTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#0f172a",
-    marginBottom: 2,
-  },
-  postCalloutTitleDark: {
-    color: "#f8fafc",
-  },
-  postCalloutSub: {
-    fontSize: 11,
-    color: "#64748b",
-  },
-  postWantedBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "#fbc634",
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 10,
-  },
-  postWantedBtnText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  searchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 14,
-  },
-  filterTriggerBtn: {
-    width: 44,
-    height: 44,
+  searchBox: {
+    height: 40,
     borderRadius: 12,
-    backgroundColor: "#eff5fb",
-    borderWidth: 1,
-    borderColor: "#dbeaf7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  filterCountBadge: {
-    position: "absolute",
-    top: 4,
-    right: 4,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    paddingHorizontal: 4,
-    backgroundColor: "#fbc634",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  filterCountText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  categorySheetList: {
-    flexShrink: 1,
-  },
-  categorySheetListContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-  },
-  categorySheetRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
-  categorySheetRowActive: {
-    backgroundColor: "#eff5fb",
-  },
-  categorySheetText: {
-    fontSize: 15,
-    color: "#0f172a",
-  },
-  categorySheetTextActive: {
-    color: "#033a7d",
-    fontWeight: "700",
-  },
-  searchInputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: "#f8fafc",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
   },
-  searchInputWrapperDark: {
-    backgroundColor: "#16203a",
-    borderColor: "#1e293b",
+  searchBoxDark: {
+    backgroundColor: "#1e293b",
+    borderColor: "#334155",
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
     fontSize: 13,
     color: "#0f172a",
+    paddingVertical: 0,
   },
   searchInputDark: {
     color: "#f8fafc",
@@ -1232,259 +989,166 @@ const styles = StyleSheet.create({
   clearSearchBtn: {
     padding: 4,
   },
-  typeChipsScroll: {
-    marginBottom: 12,
-    flexGrow: 0,
-  },
-  typeChipsRow: {
+  filterChipsRow: {
     flexDirection: "row",
-    gap: 8,
-  },
-  typeChip: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: "#ffffff",
+    alignItems: "center",
+  },
+  filterChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
   },
-  typeChipActive: {
+  filterChipActive: {
     backgroundColor: "#002555",
     borderColor: "#002555",
   },
-  typeChipText: {
+  filterChipText: {
     fontSize: 12,
     fontWeight: "700",
     color: "#475569",
   },
-  typeChipTextActive: {
+  filterChipTextActive: {
     color: "#ffffff",
   },
-  urgentDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#ef4444",
-  },
   listContent: {
-    paddingBottom: 24,
-    backgroundColor: "#f8fafc",
+    paddingTop: 10,
+    paddingBottom: 28,
   },
-  card: {
+  compactCard: {
     backgroundColor: "#ffffff",
-    marginHorizontal: 16,
-    marginTop: 14,
-    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    padding: 16,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  cardDark: {
-    backgroundColor: "#0b1329",
-    borderColor: "#1e293b",
-  },
-  cardBadgeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    borderRadius: 14,
+    padding: 12,
+    marginHorizontal: 12,
     marginBottom: 8,
+    gap: 6,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  categoryBadge: {
-    backgroundColor: "#eff5fb",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+  compactCardDark: {
+    backgroundColor: "#1e293b",
+    borderColor: "#334155",
   },
-  categoryBadgeText: {
-    fontSize: 11,
+  fulfilledCard: {
+    backgroundColor: "#f8fafc",
+    borderColor: "#e2e8f0",
+    opacity: 0.75,
+  },
+  fulfilledCardDark: {
+    backgroundColor: "#0f172a",
+    borderColor: "#1e293b",
+    opacity: 0.7,
+  },
+  cardHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  cardCategoryText: {
+    fontSize: 11.5,
     fontWeight: "800",
     color: "#033a7d",
+    textTransform: "uppercase",
     letterSpacing: 0.3,
   },
-  statusPillRow: {
-    flexDirection: "row",
-    marginBottom: 8,
-  },
-  openPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "#dcfce7",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 9999,
-  },
-  openDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#15803d",
-  },
-  openPillText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#15803d",
-    letterSpacing: 0.4,
-  },
-  fulfilledPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "#f1f5f9",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 9999,
-  },
-  fulfilledDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#64748b",
-  },
-  fulfilledPillText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#64748b",
-    letterSpacing: 0.4,
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 8,
-  },
-  metaDate: {
-    fontSize: 11,
-    color: "#64748b",
-  },
-  metaDot: {
-    fontSize: 11,
-    color: "#cbd5e1",
-  },
-  reqCodeText: {
-    fontSize: 11,
-    fontWeight: "800",
+  cardSpareCategoryText: {
     color: "#b45309",
-    fontFamily: Platform.select({ ios: "Courier", android: "monospace" }),
   },
-  cardTitle: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: "#0f172a",
-    lineHeight: 23,
-    marginBottom: 8,
+  cardFulfilledText: {
+    color: "#64748b",
   },
-  cardTitleDark: {
-    color: "#f8fafc",
+  cardTimeText: {
+    fontSize: 11.5,
+    color: "#64748b",
   },
-  cardDescription: {
-    fontSize: 13,
-    color: "#475569",
-    lineHeight: 19,
-    marginBottom: 14,
-  },
-  cardDescriptionDark: {
-    color: "#94a3b8",
-  },
-  specsBox: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 12,
-    marginBottom: 14,
-  },
-  specsBoxDark: {
-    backgroundColor: "#16203a",
-    borderColor: "#1e293b",
-  },
-  specsGrid: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    paddingBottom: 8,
-    marginBottom: 8,
-  },
-  specsCol: {
-    flex: 1,
-  },
-  specsLabel: {
-    fontSize: 11,
+  cardFulfilledBadgeText: {
+    fontSize: 11.5,
     fontWeight: "800",
     color: "#64748b",
     letterSpacing: 0.5,
-    marginBottom: 3,
   },
-  specsValue: {
-    fontSize: 13,
-    fontWeight: "700",
+  cardTitleText: {
+    fontSize: 14.5,
+    fontWeight: "800",
+    lineHeight: 19,
     color: "#0f172a",
   },
-  specsValueDark: {
+  cardTitleTextDark: {
     color: "#f8fafc",
   },
-  specsBudgetValue: {
-    fontSize: 13,
-    fontWeight: "900",
+  cardPartNumText: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    fontFamily: Platform.select({ ios: "Menlo", android: "monospace", default: "monospace" }),
+    color: "#64748b",
+  },
+  cardDescText: {
+    fontSize: 12.5,
+    color: "#475569",
+    lineHeight: 17,
+  },
+  cardDescTextDark: {
+    color: "#94a3b8",
+  },
+  cardFooterRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 4,
+  },
+  cardBudgetText: {
+    fontSize: 12.5,
+    fontWeight: "800",
     color: "#002555",
   },
-  cardFooter: {
-    paddingTop: 2,
+  cardBudgetTextDark: {
+    color: "#fbc634",
   },
-  fulfillBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    backgroundColor: "#033a7d",
-    paddingVertical: 10,
-    borderRadius: 10,
+  proposeBtn: {
+    paddingVertical: 2,
+    paddingHorizontal: 4,
   },
-  fulfillBtnText: {
+  proposeBtnText: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#ffffff",
+    color: "#033a7d",
   },
   loadingContainer: {
+    paddingVertical: 60,
     alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 60,
-    gap: 12,
   },
   loadingText: {
-    fontSize: 14,
+    marginTop: 12,
+    fontSize: 13,
     color: "#64748b",
   },
   emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 50,
+    paddingVertical: 60,
     paddingHorizontal: 24,
-    gap: 10,
+    alignItems: "center",
   },
   emptyIconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#ffffff",
-    alignItems: "center",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#f1f5f9",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
+    alignItems: "center",
+    marginBottom: 14,
   },
   emptyTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "700",
     color: "#0f172a",
+    marginBottom: 6,
     textAlign: "center",
   },
   emptyTitleDark: {
@@ -1495,51 +1159,51 @@ const styles = StyleSheet.create({
     color: "#64748b",
     textAlign: "center",
     lineHeight: 18,
+    marginBottom: 18,
   },
   emptyPostBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     backgroundColor: "#fbc634",
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
     borderRadius: 10,
-    marginTop: 8,
   },
   emptyPostBtnText: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#0f172a",
+    color: "#002555",
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    backgroundColor: "rgba(15, 23, 42, 0.6)",
     justifyContent: "flex-end",
   },
   modalSheet: {
     backgroundColor: "#ffffff",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingTop: 16,
-    paddingBottom: Platform.OS === "ios" ? 34 : 20,
     maxHeight: "90%",
   },
   modalSheetDark: {
-    backgroundColor: "#0b1329",
+    backgroundColor: "#0f172a",
   },
   modalHeader: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
+    alignItems: "center",
+    paddingHorizontal: 18,
+    paddingTop: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
+    borderColor: "#e2e8f0",
   },
   modalSubHeader: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "700",
     color: "#033a7d",
+    textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   modalTitle: {
@@ -1551,62 +1215,118 @@ const styles = StyleSheet.create({
     color: "#f8fafc",
   },
   closeModalBtn: {
-    padding: 4,
+    padding: 6,
+  },
+  categorySheetList: {
+    maxHeight: 400,
+  },
+  categorySheetListContent: {
+    paddingVertical: 8,
+  },
+  categorySheetRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderBottomWidth: 1,
+    borderColor: "#f1f5f9",
+  },
+  categorySheetRowActive: {
+    backgroundColor: "#eff6ff",
+  },
+  categorySheetText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#334155",
+  },
+  categorySheetTextActive: {
+    color: "#033a7d",
+    fontWeight: "800",
   },
   modalForm: {
-    flexShrink: 1,
+    paddingHorizontal: 18,
   },
   modalFormContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingVertical: 16,
   },
   inputLabel: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: "700",
     color: "#334155",
-    marginBottom: 5,
-    marginTop: 10,
+    marginBottom: 6,
   },
   typeSelectorRow: {
     flexDirection: "row",
     gap: 8,
-    marginBottom: 8,
+    marginBottom: 14,
   },
   typeSelectorBtn: {
     flex: 1,
-    paddingVertical: 9,
-    paddingHorizontal: 8,
+    paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: "#f1f5f9",
     borderWidth: 1,
     borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
     alignItems: "center",
-    justifyContent: "center",
   },
   typeSelectorBtnActive: {
     backgroundColor: "#002555",
     borderColor: "#002555",
   },
   typeSelectorBtnText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     color: "#475569",
-    textAlign: "center",
   },
   typeSelectorBtnTextActive: {
     color: "#ffffff",
   },
-  catOptionPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-    backgroundColor: "#f1f5f9",
+  input: {
+    height: 44,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: "#0f172a",
+    backgroundColor: "#ffffff",
+    marginBottom: 14,
+  },
+  inputDark: {
+    backgroundColor: "#1e293b",
+    borderColor: "#334155",
+    color: "#f8fafc",
+  },
+  textArea: {
+    minHeight: 88,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: "#0f172a",
+    backgroundColor: "#ffffff",
+    marginBottom: 14,
+    textAlignVertical: "top",
+  },
+  textAreaDark: {
+    backgroundColor: "#1e293b",
+    borderColor: "#334155",
+    color: "#f8fafc",
+  },
+  catOptionPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#f8fafc",
   },
   catOptionPillActive: {
-    backgroundColor: "#033a7d",
-    borderColor: "#033a7d",
+    backgroundColor: "#002555",
+    borderColor: "#002555",
   },
   catOptionPillText: {
     fontSize: 12,
@@ -1615,57 +1335,21 @@ const styles = StyleSheet.create({
   },
   catOptionPillTextActive: {
     color: "#ffffff",
-    fontWeight: "700",
-  },
-  input: {
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: "#f8fafc",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    paddingHorizontal: 12,
-    fontSize: 14,
-    color: "#0f172a",
-  },
-  inputDark: {
-    backgroundColor: "#16203a",
-    borderColor: "#1e293b",
-    color: "#f8fafc",
-  },
-  textArea: {
-    height: 90,
-    borderRadius: 10,
-    backgroundColor: "#f8fafc",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: "#0f172a",
-    textAlignVertical: "top",
-  },
-  textAreaDark: {
-    backgroundColor: "#16203a",
-    borderColor: "#1e293b",
-    color: "#f8fafc",
   },
   modalSubmitBtn: {
     backgroundColor: "#fbc634",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
+    paddingVertical: 13,
     borderRadius: 10,
-    gap: 8,
-    marginTop: 20,
+    alignItems: "center",
+    marginTop: 8,
     marginBottom: 24,
   },
   modalSubmitBtnDisabled: {
     opacity: 0.6,
   },
   modalSubmitBtnText: {
-    color: "#0f172a",
     fontSize: 14,
     fontWeight: "800",
+    color: "#002555",
   },
 });
