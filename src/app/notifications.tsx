@@ -1,3 +1,4 @@
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import React, { useState } from "react";
 import {
   View,
@@ -7,7 +8,6 @@ import {
   RefreshControl,
   ActivityIndicator,
   StyleSheet,
-  useColorScheme,
   StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";

@@ -1,3 +1,4 @@
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -7,7 +8,6 @@ import {
   Image,
   Modal,
   StyleSheet,
-  useColorScheme,
   StatusBar,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

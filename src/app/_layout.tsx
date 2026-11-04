@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import {
-  DarkTheme,
   DefaultTheme,
   ThemeProvider,
   Stack,
@@ -8,7 +7,7 @@ import {
   useSegments,
 } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useColorScheme, View, Image, ActivityIndicator, StyleSheet, AppState } from "react-native";
+import { View, Image, ActivityIndicator, StyleSheet, AppState } from "react-native";
 import { QueryClient, useIsRestoring } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -49,8 +48,6 @@ const queryClient = new QueryClient({
 });
 
 function RootNavigation() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   // Wait for data saved on the device too, so screens never flash an empty state before it arrives
   const isRestoring = useIsRestoring();
@@ -97,7 +94,7 @@ function RootNavigation() {
   // Branded splash while restoring secure session (normally hidden behind the native splash)
   if (isLoading) {
     return (
-      <View style={[styles.loadingContainer, isDark && styles.loadingContainerDark]}>
+      <View style={styles.loadingContainer}>
         <Image
           source={require("@/assets/images/logo.png")}
           style={styles.loadingLogo}
@@ -109,7 +106,7 @@ function RootNavigation() {
   }
 
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={DefaultTheme}>
       <View style={{ flex: 1 }}>
         <Stack screenOptions={{ headerShown: false }}>
           {/* Auth Group: full screen entry gate */}
@@ -163,9 +160,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
-  },
-  loadingContainerDark: {
-    backgroundColor: "#011936",
   },
   loadingLogo: {
     width: 200,

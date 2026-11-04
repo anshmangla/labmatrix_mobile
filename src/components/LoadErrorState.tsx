@@ -1,5 +1,6 @@
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import CloudOff from "lucide-react-native/icons/cloud-off";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 

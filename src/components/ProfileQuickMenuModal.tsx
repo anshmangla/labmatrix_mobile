@@ -1,3 +1,4 @@
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import React from "react";
 import {
   View,
@@ -6,7 +7,6 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   StyleSheet,
-  useColorScheme,
   Linking,
   Alert,
   ScrollView,
