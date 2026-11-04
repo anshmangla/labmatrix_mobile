@@ -45,7 +45,8 @@
       "expo-web-browser",
       "@react-native-google-signin/google-signin",
       "expo-image",
-      "expo-sqlite"
+      "expo-sqlite",
+      "./plugins/with-android-http-client"
     ],
     "experiments": {
       "typedRoutes": true
