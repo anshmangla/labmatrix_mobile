@@ -307,10 +307,17 @@ export default function ListingDetailScreen() {
     })),
     ...documents.map((docUrl: string, idx: number) => {
       const rawName = docUrl.split("/").pop()?.split("?")[0] || `Document_${idx + 1}.pdf`;
+      const rawDecoded = decodeURIComponent(rawName);
+      const isHashWithoutExt = !rawDecoded.includes(".");
+      const cleanName = isHashWithoutExt
+        ? `${data.title} Datasheet.pdf`
+        : rawDecoded.toLowerCase().endsWith(".pdf")
+        ? rawDecoded
+        : `${rawDecoded}.pdf`;
       return {
         type: "document" as const,
         url: docUrl,
-        name: decodeURIComponent(rawName),
+        name: cleanName,
         id: `doc-${idx}`,
       };
     }),
@@ -647,7 +654,13 @@ export default function ListingDetailScreen() {
             <View style={{ gap: 8, marginTop: 4 }}>
               {data.documents.map((docUrl: string, idx: number) => {
                 const rawName = docUrl.split("/").pop()?.split("?")[0] || `Document_${idx + 1}.pdf`;
-                const displayName = decodeURIComponent(rawName);
+                const rawDecoded = decodeURIComponent(rawName);
+                const isHashWithoutExt = !rawDecoded.includes(".");
+                const displayName = isHashWithoutExt
+                  ? `${data.title} Datasheet.pdf`
+                  : rawDecoded.toLowerCase().endsWith(".pdf")
+                  ? rawDecoded
+                  : `${rawDecoded}.pdf`;
                 return (
                   <TouchableOpacity
                     key={idx}
