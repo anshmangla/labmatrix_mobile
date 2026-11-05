@@ -22,6 +22,7 @@ import {
 } from "@/lib/query-persistence";
 import { wakeServer } from "@/lib/wake-server";
 import { OTAUpdateBanner } from "@/components/OTAUpdateBanner";
+import { AppVersionBanner } from "@/components/AppVersionBanner";
 
 // After this long in the background, connections may have died and data may be out of date
 const RESUME_REFRESH_AFTER_MS = 30_000;
@@ -124,6 +125,7 @@ function RootNavigation() {
           <Stack.Screen name="contact" options={{ headerShown: false }} />
         </Stack>
         <OTAUpdateBanner />
+        <AppVersionBanner />
       </View>
     </ThemeProvider>
   );

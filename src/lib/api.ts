@@ -32,7 +32,7 @@ export const setAuthHeader = (token: string | null) => {
 
 // Public feeds that never read the session. Sending a token with them makes the CDN skip
 // its cache, so signed-in users would always wait for the server and database.
-const PUBLIC_GET_PATHS = new Set(["/api/listings", "/api/requirements", "/api/health"]);
+const PUBLIC_GET_PATHS = new Set(["/api/listings", "/api/requirements", "/api/health", "/api/app-version"]);
 
 // Reads give up sooner so a request stuck on a dead connection fails fast and is retried;
 // writes (sign-in, posting, photo uploads) get longer. A timeout set on a request is kept.
