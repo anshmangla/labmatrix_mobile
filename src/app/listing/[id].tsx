@@ -37,6 +37,7 @@ import CheckCircle2 from "lucide-react-native/icons/circle-check";
 import Truck from "lucide-react-native/icons/truck";
 import FileText from "lucide-react-native/icons/file-text";
 import ExternalLink from "lucide-react-native/icons/external-link";
+import Eye from "lucide-react-native/icons/eye";
 import ChevronLeft from "lucide-react-native/icons/chevron-left";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import Building2 from "lucide-react-native/icons/building-complex";
@@ -115,6 +116,29 @@ export default function ListingDetailScreen() {
       setInquiryModalVisible(true);
     }
   }, [openInquiry, isAuthenticated]);
+
+  const handleOpenPdf = async (docUrl: string, title?: string) => {
+    try {
+      // Use Google Docs Viewer to ensure complete multi-page rendering inside the app on Android and iOS
+      const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(docUrl)}`;
+      await WebBrowser.openBrowserAsync(viewerUrl, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+        toolbarColor: "#033a7d",
+        controlsColor: "#ffffff",
+      });
+    } catch (err) {
+      console.error("Failed to open browser viewer:", err);
+      Linking.openURL(docUrl).catch(() => {
+        Alert.alert("Unable to open document", "Could not open document viewer.");
+      });
+    }
+  };
+
+  const handleExternalPdf = (docUrl: string) => {
+    Linking.openURL(docUrl).catch(() => {
+      Alert.alert("Unable to open", "Could not open document in external application.");
+    });
+  };
 
   const handleToggleSave = async () => {
     if (!id) return;
@@ -269,6 +293,28 @@ export default function ListingDetailScreen() {
     : "Contact for Pricing";
 
   const photos = data.photos || [];
+  const documents = data.documents || [];
+
+  type MediaSlide =
+    | { type: "photo"; url: string; id: string }
+    | { type: "document"; url: string; name: string; id: string };
+
+  const mediaSlides: MediaSlide[] = [
+    ...photos.map((photo, idx) => ({
+      type: "photo" as const,
+      url: photo,
+      id: `photo-${idx}`,
+    })),
+    ...documents.map((docUrl: string, idx: number) => {
+      const rawName = docUrl.split("/").pop()?.split("?")[0] || `Document_${idx + 1}.pdf`;
+      return {
+        type: "document" as const,
+        url: docUrl,
+        name: decodeURIComponent(rawName),
+        id: `doc-${idx}`,
+      };
+    }),
+  ];
 
   return (
     <View style={[styles.container, isDark && styles.containerDark]}>
@@ -311,7 +357,7 @@ export default function ListingDetailScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Photo Gallery Carousel */}
         <View style={styles.carouselContainer}>
-          {photos.length > 0 ? (
+          {mediaSlides.length > 0 ? (
             <>
               <ScrollView
                 ref={carouselScrollRef}
@@ -323,36 +369,91 @@ export default function ListingDetailScreen() {
                   setActiveImageIndex(newIndex);
                 }}
               >
-                {photos.map((photo, idx) => (
-                  <TouchableOpacity
-                    key={idx}
-                    activeOpacity={0.92}
-                    onPress={() => openMagnifier(idx)}
-                    style={{ width, height: CAROUSEL_HEIGHT }}
-                  >
-                    <ExpoImage
-                      source={{ uri: getOptimizedImageUrl(photo, IMAGE_PRESETS.HERO) }}
-                      placeholder={{ uri: getOptimizedImageUrl(photo, IMAGE_PRESETS.CARD) }}
-                      placeholderContentFit="cover"
-                      style={styles.carouselImage}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
-                    />
-                  </TouchableOpacity>
-                ))}
+                {mediaSlides.map((slide, idx) => {
+                  if (slide.type === "photo") {
+                    return (
+                      <TouchableOpacity
+                        key={slide.id}
+                        activeOpacity={0.92}
+                        onPress={() => openMagnifier(idx)}
+                        style={{ width, height: CAROUSEL_HEIGHT }}
+                      >
+                        <ExpoImage
+                          source={{ uri: getOptimizedImageUrl(slide.url, IMAGE_PRESETS.HERO) }}
+                          placeholder={{ uri: getOptimizedImageUrl(slide.url, IMAGE_PRESETS.CARD) }}
+                          placeholderContentFit="cover"
+                          style={styles.carouselImage}
+                          contentFit="cover"
+                          cachePolicy="memory-disk"
+                        />
+                      </TouchableOpacity>
+                    );
+                  }
+
+                  // Document Hero Slide
+                  return (
+                    <TouchableOpacity
+                      key={slide.id}
+                      activeOpacity={0.92}
+                      onPress={() => handleOpenPdf(slide.url, slide.name)}
+                      style={[styles.docSlideContainer, isDark && styles.docSlideContainerDark]}
+                    >
+                      <View style={styles.docSlideInner}>
+                        <View style={styles.docSlideIconWrap}>
+                          <FileText size={36} color="#e11d48" />
+                        </View>
+                        <View style={styles.docSlideBadge}>
+                          <Text style={styles.docSlideBadgeText}>PDF SPECIFICATION</Text>
+                        </View>
+                        <Text
+                          style={styles.docSlideTitle}
+                          numberOfLines={2}
+                        >
+                          {slide.name}
+                        </Text>
+                        <Text style={styles.docSlideHint}>Tap card to preview document</Text>
+
+                        <View style={styles.docSlideActionsRow}>
+                          <View style={styles.docSlidePrimaryAction}>
+                            <Eye size={14} color="#ffffff" style={{ marginRight: 6 }} />
+                            <Text style={styles.docSlidePrimaryActionText}>View PDF</Text>
+                          </View>
+                          <TouchableOpacity
+                            activeOpacity={0.8}
+                            onPress={() => handleExternalPdf(slide.url)}
+                            style={styles.docSlideSecondaryAction}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <ExternalLink size={13} color="#ffffff" style={{ marginRight: 4 }} />
+                            <Text style={styles.docSlideSecondaryActionText}>External</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
 
-              {/* Photo Count Pill */}
+              {/* Media Count Pill */}
               <View style={styles.photoCountPill}>
-                <Text style={styles.photoCountText}>
-                  {activeImageIndex + 1} / {photos.length}
-                </Text>
+                {mediaSlides[activeImageIndex]?.type === "document" ? (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <FileText size={11} color="#fca5a5" />
+                    <Text style={styles.photoCountText}>
+                      PDF {activeImageIndex + 1} / {mediaSlides.length}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={styles.photoCountText}>
+                    {activeImageIndex + 1} / {mediaSlides.length}
+                  </Text>
+                )}
               </View>
             </>
           ) : (
             <View style={[styles.noImageContainer, isDark && styles.noImageContainerDark]}>
               <Tag size={44} color="#94a3b8" />
-              <Text style={styles.noImageText}>No photos yet</Text>
+              <Text style={styles.noImageText}>No photos or documents yet</Text>
             </View>
           )}
 
@@ -552,13 +653,7 @@ export default function ListingDetailScreen() {
                     key={idx}
                     style={styles.docItemCard}
                     activeOpacity={0.8}
-                    onPress={async () => {
-                      try {
-                        await WebBrowser.openBrowserAsync(docUrl);
-                      } catch {
-                        Linking.openURL(docUrl);
-                      }
-                    }}
+                    onPress={() => handleOpenPdf(docUrl, displayName)}
                   >
                     <View style={styles.docIconPill}>
                       <FileText size={18} color="#dc2626" />
@@ -2028,6 +2123,106 @@ const styles = StyleSheet.create({
   magnifyThumbImg: {
     width: "100%",
     height: "100%",
+  },
+    docSlideContainer: {
+    width,
+    height: CAROUSEL_HEIGHT,
+    backgroundColor: "#0f172a",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  docSlideContainerDark: {
+    backgroundColor: "#020617",
+  },
+  docSlideInner: {
+    width: "100%",
+    maxWidth: 320,
+    backgroundColor: "rgba(30, 41, 59, 0.9)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.12)",
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  docSlideIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: "rgba(225, 29, 72, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(225, 29, 72, 0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  docSlideBadge: {
+    backgroundColor: "rgba(225, 29, 72, 0.2)",
+    borderColor: "rgba(225, 29, 72, 0.4)",
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginBottom: 6,
+  },
+  docSlideBadgeText: {
+    color: "#fca5a5",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  docSlideTitle: {
+    color: "#f8fafc",
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  docSlideHint: {
+    color: "#94a3b8",
+    fontSize: 11,
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  docSlideActionsRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  docSlidePrimaryAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#033a7d",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  docSlidePrimaryActionText: {
+    color: "#ffffff",
+    fontSize: 12.5,
+    fontWeight: "700",
+  },
+  docSlideSecondaryAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  docSlideSecondaryActionText: {
+    color: "#e2e8f0",
+    fontSize: 12.5,
+    fontWeight: "600",
   },
   docItemCard: {
     flexDirection: "row",

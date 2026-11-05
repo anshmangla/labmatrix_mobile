@@ -12,6 +12,7 @@ import {
   StyleSheet,
   Platform,
   StatusBar,
+  Linking,
   Modal,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -33,6 +34,8 @@ import Lock from "lucide-react-native/icons/lock";
 import Phone from "lucide-react-native/icons/phone";
 import Building2 from "lucide-react-native/icons/building-complex";
 import ArrowRight from "lucide-react-native/icons/arrow-right";
+import Eye from "lucide-react-native/icons/eye";
+import * as WebBrowser from "expo-web-browser";
 import ArrowLeft from "lucide-react-native/icons/arrow-left";
 import Clock from "lucide-react-native/icons/clock";
 import CheckCircle2 from "lucide-react-native/icons/circle-check";
@@ -1165,13 +1168,30 @@ export default function SellScreen() {
                       <Text style={styles.docRowTitle} numberOfLines={1}>
                         {displayName}
                       </Text>
-                      <TouchableOpacity
-                        style={styles.docRemoveBtn}
-                        onPress={() => removeDocument(index)}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <X size={15} color="#64748b" />
-                      </TouchableOpacity>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                        <TouchableOpacity
+                          style={{ padding: 6 }}
+                          onPress={async () => {
+                            try {
+                              const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(docUrl)}`;
+                              await WebBrowser.openBrowserAsync(viewerUrl);
+                            } catch {
+                              Linking.openURL(docUrl);
+                            }
+                          }}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityLabel="Preview document"
+                        >
+                          <Eye size={16} color="#033a7d" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.docRemoveBtn}
+                          onPress={() => removeDocument(index)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <X size={15} color="#64748b" />
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   );
                 })}

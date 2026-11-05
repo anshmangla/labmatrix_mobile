@@ -22,6 +22,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import Search from "lucide-react-native/icons/search";
 import MapPin from "lucide-react-native/icons/map-pin";
 import Tag from "lucide-react-native/icons/tag";
+import FileText from "lucide-react-native/icons/file-text";
 import AlertCircle from "lucide-react-native/icons/circle-alert";
 import RefreshCw from "lucide-react-native/icons/refresh-cw";
 import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
@@ -174,6 +175,11 @@ const ListingCard = memo(function ListingCard({
             cachePolicy="memory-disk"
             recyclingKey={item.id}
           />
+        ) : item.documents && item.documents.length > 0 ? (
+          <View style={[styles.compactThumbPlaceholder, { backgroundColor: isDark ? "#1e293b" : "#fef2f2" }]}>
+            <FileText size={22} color="#dc2626" />
+            <Text style={{ fontSize: 9, fontWeight: "800", color: "#dc2626", marginTop: 2 }}>PDF</Text>
+          </View>
         ) : (
           <View style={[styles.compactThumbPlaceholder, isDark && styles.compactThumbPlaceholderDark]}>
             <Tag size={20} color={isDark ? "#64748b" : "#94a3b8"} />
@@ -189,6 +195,12 @@ const ListingCard = memo(function ListingCard({
               {tagText}
             </Text>
           </View>
+          {item.documents && item.documents.length > 0 && (
+            <View style={{ backgroundColor: "#fef2f2", borderWidth: 1, borderColor: "#fecdd3", paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 5, flexDirection: "row", alignItems: "center", gap: 3 }}>
+              <FileText size={9} color="#dc2626" />
+              <Text style={{ fontSize: 9.5, fontWeight: "800", color: "#dc2626" }}>PDF</Text>
+            </View>
+          )}
           {isSpare && (
             <View style={styles.compactSparePill}>
               <Text style={styles.compactSparePillText}>SPARE</Text>
