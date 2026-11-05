@@ -119,8 +119,10 @@ export default function ListingDetailScreen() {
 
   const handleOpenPdf = async (docUrl: string, title?: string) => {
     try {
-      // Use Google Docs Viewer to ensure complete multi-page rendering inside the app on Android and iOS
-      const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(docUrl)}`;
+      const cleanTitle = title || "Document.pdf";
+      const safeName = cleanTitle.toLowerCase().endsWith(".pdf") ? cleanTitle : `${cleanTitle}.pdf`;
+      const serveUrl = `https://surplus.labmatrixindia.com/api/documents/serve?url=${encodeURIComponent(docUrl)}&title=${encodeURIComponent(safeName)}`;
+      const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(serveUrl)}`;
       await WebBrowser.openBrowserAsync(viewerUrl, {
         presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
         toolbarColor: "#033a7d",
@@ -128,14 +130,20 @@ export default function ListingDetailScreen() {
       });
     } catch (err) {
       console.error("Failed to open browser viewer:", err);
-      Linking.openURL(docUrl).catch(() => {
+      const cleanTitle = title || "Document.pdf";
+      const safeName = cleanTitle.toLowerCase().endsWith(".pdf") ? cleanTitle : `${cleanTitle}.pdf`;
+      const fallbackUrl = `https://surplus.labmatrixindia.com/api/documents/serve?url=${encodeURIComponent(docUrl)}&title=${encodeURIComponent(safeName)}`;
+      Linking.openURL(fallbackUrl).catch(() => {
         Alert.alert("Unable to open document", "Could not open document viewer.");
       });
     }
   };
 
-  const handleExternalPdf = (docUrl: string) => {
-    Linking.openURL(docUrl).catch(() => {
+  const handleExternalPdf = (docUrl: string, title?: string) => {
+    const cleanTitle = title || "Document.pdf";
+    const safeName = cleanTitle.toLowerCase().endsWith(".pdf") ? cleanTitle : `${cleanTitle}.pdf`;
+    const downloadUrl = `https://surplus.labmatrixindia.com/api/documents/serve?url=${encodeURIComponent(docUrl)}&title=${encodeURIComponent(safeName)}&download=1`;
+    Linking.openURL(downloadUrl).catch(() => {
       Alert.alert("Unable to open", "Could not open document in external application.");
     });
   };
@@ -427,7 +435,7 @@ export default function ListingDetailScreen() {
                           </View>
                           <TouchableOpacity
                             activeOpacity={0.8}
-                            onPress={() => handleExternalPdf(slide.url)}
+                            onPress={() => handleExternalPdf(slide.url, slide.name)}
                             style={styles.docSlideSecondaryAction}
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                           >

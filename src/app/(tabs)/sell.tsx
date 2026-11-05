@@ -1173,7 +1173,9 @@ export default function SellScreen() {
                           style={{ padding: 6 }}
                           onPress={async () => {
                             try {
-                              const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(docUrl)}`;
+                              const safeName = displayName.toLowerCase().endsWith(".pdf") ? displayName : `${displayName}.pdf`;
+                              const serveUrl = `https://surplus.labmatrixindia.com/api/documents/serve?url=${encodeURIComponent(docUrl)}&title=${encodeURIComponent(safeName)}`;
+                              const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(serveUrl)}`;
                               await WebBrowser.openBrowserAsync(viewerUrl);
                             } catch {
                               Linking.openURL(docUrl);
